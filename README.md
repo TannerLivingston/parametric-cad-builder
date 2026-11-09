@@ -345,6 +345,41 @@ Shift registers on a board of your own, like the Desk Synth's perfboard, go in `
 the dials' phases, and 2 for the bus to the screen, encoder boards and converters. Running out of pins, I2C addresses or analog
 inputs is a warning, since a design can be wired other ways.
 
+### Wires
+
+Each part says where its wires leave it in `wires`, and the validator keeps room there, routes them across the floor to the board
+they go to, and lists their lengths on the Print tab. **Wires** in the view shows both: the room as orange boxes, and the routes
+as lines. The library's are estimates of typical plugs, not measurements, so all of this only ever warns, and unticking **Warn
+about room for wires** in the Wiring section, or `"wiring": { "checks": false }`, turns the warnings off while still showing it.
+
+```json
+"wires": [{ "side": "down", "at": [-31, 0], "width": 4, "height": 20, "room": 14 }]
+```
+
+| Field | What it is |
+| --- | --- |
+| `side` | `down` under a panel part, `up` from a board's top, `back` from a wall part's inner end, or `left`, `right`, `front` or `rear` of its body, before it's turned |
+| `at` | On `down` and `up`, across the face from its middle. On a side, along the edge, then how far below the panel's underside, or above the floor, the plug's middle is |
+| `width`, `height` | The plug or bundle across, along the edge first |
+| `room` | How far it runs straight out before it can bend: about 14 mm for Dupont plugs on header pins, 10 for a STEMMA QT plug, 8 for soldered wires. 0 where the body takes in its plugs already, like the arcade button's, which leaves only somewhere for the route to start |
+
+A part with `"wiresFrom": "any"`, like a board with a STEMMA QT plug at each end, only needs one of them to have room. The
+perfboard has none, since it's wired wherever you like.
+
+Routes run along the floor, round anything that comes within 6 mm of it: boards, bosses, cradles, supports, weight pockets, a
+seam's tabs, and bodies that hang that low. They're found on a 2 mm grid, shortest first, keeping a 6 mm bundle clear, then with
+less, which warns that it's tight. A switch goes to a shift register board if there is one, an analog part to an analog board if
+there is one, and everything else to the microcontroller, from whichever of its ways out is nearest. Without a microcontroller on
+the floor there are no routes. A route's length runs down from the part, across, and up to the board, to the next 10 mm. Wires
+that cross a seam warn once, since the halves only come apart when they're unplugged.
+
+**Add cable tie bridges along the wires** puts a bridge every 60 mm along each route, one for routes within 15 mm of each other,
+turned so its tie wraps them, and keeps those the plate has room for. Bridges don't turn routes aside, since wires run over them.
+
+On the Desk Synth, the routes come to 15 runs, between 50 and 260 mm. It warns about the screen's and the RP2040-Plus's plugs, whose
+header room is a guess, about buttons 2 and 3's routes squeezing past what's on the floor, and about the right encoder board's wires
+crossing the seam.
+
 ### Parts
 
 [src/library.ts](src/library.ts) holds the parts. Each records its `source` (`measured`, `datasheet` or
@@ -472,6 +507,9 @@ produce wrong geometry with no error.
 | `SMALL_HOLE`, `UNVERIFIED_PART` | Warnings: a hole that may print badly, a part that hasn't been measured |
 | `PINS_SHORT` | Warning: the microcontroller runs out of pins, I2C addresses or analog inputs. See Pins |
 | `ERGONOMICS` | Warning: controls too close for fingers, 2 mm between buttons and 5 mm beside a knob or fader, or a screen lying flatter than about 15 degrees, or facing away |
+| `WIRE_ROOM` | Warning: something's in the way of the room a part's wires need where they leave it. See Wires |
+| `WIRE_ROUTE` | Warning: no way across the floor for a part's wires to its board, or only a tight one |
+| `WIRE_SEAM` | Warning: wires cross the seam, so they have to be unplugged to take the halves apart |
 
 Material limits in [src/library.ts](src/library.ts) are starting points for a 0.4 mm nozzle, not test
 results. `fabrication.minWall`, `minWeb` and `minSkin` override them.

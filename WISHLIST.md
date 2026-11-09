@@ -11,10 +11,6 @@ proven the numbers. Move an item to the done list once it's built.
 
 - [ ] Button caps. Knobs are done.
 
-## Electronics
-
-- [ ] Wiring room and cable routing.
-
 ## Shape
 
 - [ ] Curved outlines, more than one seam, and more than one panel thickness.
@@ -27,6 +23,9 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Done
 
+- [x] **Room for wires, their routes, and cable ties along them.** Each part keeps room where its wires leave it, they're routed
+  across the floor to their board with lengths on the Print tab, and a button lays cable tie bridges along the routes. All of it
+  only warns, and one tick turns it off. The library's plugs are estimates.
 - [x] **Nothing left to support** on any part of the Desk Synth or the Dial deck, by the app's own check. Upright plate bosses
   rise from their wall at 45 degrees over a wedge on the plate. Upright top tabs take flat heads in countersinks, with
   teardrop bores, and go where their gusset fits where they can. Seam bolts' head bores are teardrops too, and a fin carries

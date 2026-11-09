@@ -5,7 +5,7 @@
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { surfacePoint, type Surface } from "../profile.js";
-import type { FastenerEdge, PlannedFastener } from "../validate.js";
+import type { FastenerEdge, PlannedFastener, WiringPlan } from "../validate.js";
 import type { BedView, PartKind, PartMesh } from "./engineClient.js";
 import { explodeOffset, sectionPlane, surfaceCoordinates, type Box2, type Section, type SceneComponent, type SceneModel } from "./sceneModel.js";
 
@@ -28,6 +28,7 @@ export interface SceneColors {
   shellAlt: string;
   edge: string;
   marker: string;
+  wire: string;
   selected: string;
   invalid: string;
   changed: string;
@@ -105,6 +106,7 @@ export class Scene3D {
   private preview: THREE.Group | null = null;
   private reference: THREE.Group | null = null;
   private highlight: THREE.Group | null = null;
+  private wires: THREE.Group | null = null;
   private measuring = false;
   private measurePoints: [number, number, number][] = [];
   private measureMarks: THREE.Group | null = null;
@@ -375,6 +377,57 @@ export class Scene3D {
       group.add(fill, outline);
       group.position.set((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2);
       this.highlight = group;
+      this.scene.add(group);
+    }
+    this.requestFrame();
+  }
+
+  // Where each part's wires leave it, as see-through boxes, and their ways across the floor, as lines,
+  // all seen through whatever's in front of them.
+  setWires(view: (WiringPlan & { floor: number }) | null) {
+    if (this.wires) {
+      this.wires.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
+      this.scene.remove(this.wires);
+      this.wires = null;
+    }
+    if (view) {
+      const group = new THREE.Group();
+      const color = this.colors.wire;
+      const fill = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.25, depthTest: false, depthWrite: false, side: THREE.DoubleSide });
+      const line = new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true });
+      for (const room of view.rooms) {
+        if (room.length === 0) continue;
+        // The outline across x, at each end, joined up.
+        const { xLow, xHigh, section } = room.prism;
+        const corners = [...section.map(([y, z]) => [xLow, y, z]), ...section.map(([y, z]) => [xHigh, y, z])].flat();
+        const n = section.length;
+        const faces: number[] = [];
+        for (let i = 1; i < n - 1; i++) faces.push(0, i, i + 1, n, n + i + 1, n + i);
+        for (let i = 0; i < n; i++) {
+          const j = (i + 1) % n;
+          faces.push(i, j, n + j, i, n + j, n + i);
+        }
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute("position", new THREE.Float32BufferAttribute(corners, 3));
+        geometry.setIndex(faces);
+        const mesh = new THREE.Mesh(geometry, fill);
+        mesh.renderOrder = 3;
+        const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), line);
+        edges.renderOrder = 3;
+        group.add(mesh, edges);
+      }
+      const lying = view.floor + 3;
+      for (const route of view.routes) {
+        const room = view.rooms.find((r) => r.componentId === route.from && r.end[0] === route.points[0]![0] && r.end[1] === route.points[0]![1]);
+        const points = [
+          ...(room ? [new THREE.Vector3(...room.end)] : []),
+          ...route.points.map(([x, y]) => new THREE.Vector3(x, y, lying)),
+        ];
+        const path = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), line);
+        path.renderOrder = 3;
+        group.add(path);
+      }
+      this.wires = group;
       this.scene.add(group);
     }
     this.requestFrame();

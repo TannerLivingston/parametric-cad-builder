@@ -19,6 +19,7 @@
   --shell-alt: #b9bdc4;
   --edge: #3a3e45;
   --marker: #5b6470;
+  --wire: #d4661b;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font: 13px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
@@ -44,6 +45,7 @@
     --shell-alt: #7d828b;
     --edge: #16181b;
     --marker: #c7ccd3;
+    --wire: #ffa657;
   }
 }
 

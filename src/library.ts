@@ -479,8 +479,65 @@ raw["rp2350-plus"] = {
   source: "datasheet",
 };
 
+// Where each part's wires leave it, for keeping room there and routing them: see wireExitSchema.
+// These are estimates from typical parts, not measurements, so the checks on them only warn.
+// Dupont plugs on header pins stand about 14 mm, a microswitch's quick-connect tabs and their
+// plugs about 12, soldered wires about 8 before they can bend, and a STEMMA QT plug about 10.
+const headerRows = (width: number, depth: number) => [
+  { side: "up", at: [0, depth / 2 - 1.3], width, height: 2.6, room: 14 },
+  { side: "up", at: [0, -depth / 2 + 1.3], width, height: 2.6, room: 14 },
+];
+const WIRES: Record<string, object[]> = {
+  // Its depth is all the room the Desk Synth leaves under its deck, 0.3 mm short of the plate, so it
+  // takes in the switch's plugs already, and the wires bend as they leave them.
+  "arcade-24mm": [{ side: "down", width: 20, height: 12, room: 0 }],
+  "ec11-dial-30mm": [{ side: "down", width: 12.5, height: 7, room: 10 }],
+  "ec11-dial-19mm": [{ side: "down", width: 12.5, height: 7, room: 10 }],
+  "ec11-encoder": [{ side: "down", width: 12.5, height: 7, room: 10 }],
+  "encoder-board-5752": [
+    { side: "left", at: [0, 4], width: 6, height: 4, room: 10 },
+    { side: "right", at: [0, 4], width: 6, height: 4, room: 10 },
+  ],
+  "oled-242-ssd1309": [{ side: "down", at: [-31, 0], width: 4, height: 20, room: 14 }],
+  "oled-ssd1306": [{ side: "down", at: [0, 11.5], width: 11, height: 3, room: 14 }],
+  "latch-button": [{ side: "down", width: 16, height: 16, room: 10 }],
+  "pot-9mm": [{ side: "down", at: [0, -6], width: 10, height: 3, room: 8 }],
+  ttp223: [{ side: "down", at: [0, -5], width: 8, height: 3, room: 14 }],
+  "led-3mm": [{ side: "down", width: 5, height: 3, room: 8 }],
+  "led-5mm": [{ side: "down", width: 7, height: 3, room: 8 }],
+  "fader-60mm": [
+    { side: "down", at: [0, -40], width: 8, height: 4, room: 8 },
+    { side: "down", at: [0, 40], width: 8, height: 4, room: 8 },
+  ],
+  "rp2040-plus": headerRows(51, 21),
+  "pico-rp2350": [
+    { side: "up", at: [9.2, 0], width: 2.6, height: 51, room: 14 },
+    { side: "up", at: [-9.2, 0], width: 2.6, height: 51, room: 14 },
+  ],
+  "pi-zero": [{ side: "up", at: [0, 11.5], width: 51, height: 5.2, room: 14 }],
+  "arduino-uno": headerRows(60, 50),
+  "teensy-40": headerRows(35.56, 17.78),
+  "teensy-41": headerRows(60.96, 17.78),
+  "arduino-nano": headerRows(45, 18),
+  "seeed-xiao": headerRows(21, 17.8),
+  ads7830: [
+    { side: "front", at: [0, 5], width: 6, height: 4, room: 10 },
+    { side: "rear", at: [0, 5], width: 6, height: 4, room: 10 },
+  ],
+  "shift-74hc165": [{ side: "up", at: [0, 13.7], width: 18, height: 2.6, room: 14 }],
+  "midi-din-5": [{ side: "back", width: 16, height: 12, room: 12 }],
+  "trs-35-panel": [{ side: "back", width: 10, height: 10, room: 10 }],
+  "trs-635-panel": [{ side: "back", width: 14, height: 14, room: 12 }],
+  "usb-c-panel": [{ side: "back", width: 12, height: 6, room: 25 }],
+  "dc-barrel-panel": [{ side: "back", width: 10, height: 10, room: 10 }],
+};
+WIRES["rp2350-plus"] = WIRES["rp2040-plus"]!;
+
+// A plug at each end, of which one will do.
+const EITHER_END = new Set(["encoder-board-5752", "ads7830"]);
+
 export const library: Record<string, Part> = Object.fromEntries(
-  Object.entries(raw).map(([id, part]) => [id, partSchema.parse(part)]),
+  Object.entries(raw).map(([id, part]) => [id, partSchema.parse(WIRES[id] ? { ...(part as object), wires: WIRES[id], ...(EITHER_END.has(id) ? { wiresFrom: "any" } : {}) } : part)]),
 );
 
 // Starting points for a 0.4 mm nozzle, not test results. A fit-test print should

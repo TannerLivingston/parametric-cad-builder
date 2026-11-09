@@ -8,6 +8,8 @@ import {
   addCableTie,
   addFoot,
   setShiftRegisters,
+  setWiringChecks,
+  tiesAlongWires,
   addWeight,
   addSupport,
   feetAtCorners,
@@ -437,6 +439,14 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
         <p className="hint">For the pin count on the Print tab. Shift registers that read switches, on a board of your own rather than parts of their own, like the Desk Synth's perfboard.</p>
         <div className="fields">
           <NumberField label="Shift registers" value={config.wiring?.shiftRegisters ?? 0} step={1} onCommit={number((count) => setShiftRegisters(config, count))} />
+        </div>
+        <label className="check">
+          <input type="checkbox" checked={config.wiring?.checks !== false} onChange={(event) => onChange(setWiringChecks(config, event.target.checked))} />
+          Warn about room for wires
+        </label>
+        <p className="hint">Each part keeps room where its wires leave it, and they're routed across the floor to the board they go to, shown with Wires in the view. The parts' plugs are estimates, so this only ever warns, and it's off with this unticked.</p>
+        <div className="row">
+          <button onClick={() => onChange(tiesAlongWires(config))}>Add cable tie bridges along the wires</button>
         </div>
       </section>
 

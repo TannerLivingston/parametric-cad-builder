@@ -57,11 +57,29 @@ export const pinsSchema = z.strictObject({
   analogInputs: count.optional(),
 });
 
+// Where a part's wires leave it, for keeping room there and routing them. `side` is a face of its
+// body before turning: "down" is its underside below a panel, "up" the top of a board on the floor,
+// "back" the inner end of a part in a wall. On "down" and "up", `at` is across the face from its
+// middle. On the sides, it's along the edge from its middle, then how far the plug's middle is below
+// the panel's underside, or above the floor. `width` and `height` are the plug or the bundle across,
+// along the edge first, and `room` is how far it runs straight out before it can bend, or 0 where the
+// body takes in its plugs already, which leaves it only a place for its wires to start from.
+export const wireExitSchema = z.strictObject({
+  side: z.enum(["down", "up", "back", "left", "right", "front", "rear"]),
+  at: z.tuple([offset, offset]).optional(),
+  width: length,
+  height: length,
+  room: z.number().nonnegative().default(12),
+});
+
 const partBase = {
   name: z.string().min(1),
   source: sourceSchema,
   notes: z.string().optional(),
   pins: pinsSchema.optional(),
+  wires: z.array(wireExitSchema).optional(),
+  // "any" for a part whose wires can leave from any one of them, such as a board with a plug at each end.
+  wiresFrom: z.enum(["all", "any"]).optional(),
 };
 
 // A screw post hanging from the underside. `reach` is how far below the outer face its
@@ -335,7 +353,8 @@ export const configSchema = z.strictObject({
     .default([]),
   labels: z.array(labelSchema).default([]),
   // Shift registers on a board of your own, such as the Desk Synth's perfboard, rather than parts of their own.
-  wiring: z.strictObject({ shiftRegisters: count.default(0) }).prefault({}),
+  // `checks` turns the warnings about wires off: their room and routes are rough guides, not measurements.
+  wiring: z.strictObject({ shiftRegisters: count.default(0), checks: z.boolean().default(true) }).prefault({}),
   customParts: z.record(z.string(), partSchema).default({}),
   components: z.array(componentSchema).default([]),
 });
@@ -343,6 +362,7 @@ export const configSchema = z.strictObject({
 export type Footprint = z.infer<typeof footprintSchema>;
 export type Cutout = z.infer<typeof cutoutSchema>;
 export type Part = z.infer<typeof partSchema>;
+export type WireExit = z.infer<typeof wireExitSchema>;
 export type PanelPart = z.infer<typeof panelPartSchema>;
 export type FloorPart = z.infer<typeof floorPartSchema>;
 export type WallPart = z.infer<typeof wallPartSchema>;

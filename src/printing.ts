@@ -641,6 +641,10 @@ export function planPrint(plan: BuildPlan, meshes: PartMeshData[]): PartPrintRep
 }
 
 // A text file to go with the parts.
+// Wire lengths to the next 10 mm, since they're only as close as the routes.
+export const wireLength = (length: number) => Math.ceil(length / 10) * 10;
+export const WIRE_SLACK_NOTE = "Cut each about 30 mm longer, for slack and for stripping.";
+
 export function printGuide(plan: BuildPlan, reports: PartPrintReport[]): string {
   const { x, y, z } = plan.config.fabrication.buildVolume;
   const lines = [
@@ -676,6 +680,10 @@ export function printGuide(plan: BuildPlan, reports: PartPrintReport[]): string 
   if (plan.hardware.length) {
     lines.push("", "Hardware");
     for (const item of plan.hardware) lines.push(`- ${item.count} x ${item.name}`);
+  }
+  if (plan.wiring.routes.length) {
+    lines.push("", "Wires", `Their routes across the floor, down from each part and up to its board. ${WIRE_SLACK_NOTE}`);
+    for (const route of plan.wiring.routes) lines.push(`- ${route.from} to ${route.to}: about ${wireLength(route.length)} mm.`);
   }
   if (plan.assembly.length) {
     lines.push("", "Putting it together");

@@ -7,7 +7,7 @@ import type { FitTestPlan } from "../fitTest.js";
 import { validateConfig, type Issue, type PlannedFasteners } from "../validate.js";
 import { designFromHash, designHash } from "./shareLink.js";
 import { addComponent, setKnob, formatConfig, parseConfig, partsOf, removeComponent, updateComponent, type RawConfig } from "./configEdit.js";
-import { describeEstimate, type PartPrintReport } from "../printing.js";
+import { describeEstimate, WIRE_SLACK_NOTE, wireLength, type PartPrintReport } from "../printing.js";
 import { EngineClient, type BedView, type BuildResult, type FitTestMesh } from "./engineClient.js";
 import { moveFastener, removeFastener } from "./fastenerEdit.js";
 import { loadHistory, saveHistory, type DesignHistory } from "./designHistory.js";
@@ -66,6 +66,7 @@ function readColors(): SceneColors {
     shellAlt: get("--shell-alt"),
     edge: get("--edge"),
     marker: get("--marker"),
+    wire: get("--wire"),
     selected: get("--accent"),
     invalid: get("--danger"),
     changed: get("--changed"),
@@ -91,6 +92,7 @@ export function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("layout");
   const [internals, setInternals] = useState(false);
+  const [showWires, setShowWires] = useState(false);
   const [gap, setGap] = useState(0);
   const [busy, setBusy] = useState(false);
   const [lastBuild, setLastBuild] = useState<(BuildResult & { shownMs: number }) | null>(null);
@@ -270,6 +272,13 @@ export function App() {
   useEffect(() => {
     sceneRef.current?.setFasteners(tab === "screws" ? { ...fasteners, selected: selectedFastener } : null);
   }, [tab, fasteners, selectedFastener]);
+
+  // Only for a valid design, since rooms and routes come from its plan.
+  const wiring = result?.ok ? result.plan.wiring : null;
+  const floorTop = result?.ok ? result.plan.config.enclosure.floorThickness : 0;
+  useEffect(() => {
+    sceneRef.current?.setWires(showWires && wiring ? { ...wiring, floor: floorTop } : null);
+  }, [showWires, wiring, floorTop]);
 
   useEffect(() => {
     sceneRef.current?.setPreview(fitPreview);
@@ -939,6 +948,15 @@ export function App() {
                 ) : null}
               </section>
             ) : null}
+            {result?.ok && result.plan.wiring.routes.length ? (
+              <section>
+                <h2>Wires <span className="count">{result.plan.wiring.routes.length}</span></h2>
+                <p className="hint">Along their routes across the floor, shown with Wires in the view, down from each part and up to its board. {WIRE_SLACK_NOTE}</p>
+                <ul className="hardware">
+                  {result.plan.wiring.routes.map((route) => <li key={route.from}>{route.from} to {route.to}, about {wireLength(route.length)} mm</li>)}
+                </ul>
+              </section>
+            ) : null}
             {assembly.length ? (
               <section>
                 <h2>Putting it together</h2>
@@ -1019,6 +1037,9 @@ export function App() {
           </div>
           <label className="check">
             <input type="checkbox" checked={seeThrough} disabled={tab === "screws"} onChange={(e) => setInternals(e.target.checked)} /> Show inside
+          </label>
+          <label className="check" title="Where each part's wires leave it, and their ways across the floor to the board they go to">
+            <input type="checkbox" checked={showWires} onChange={(e) => setShowWires(e.target.checked)} /> Wires
           </label>
           <button aria-pressed={measuring} className={measuring ? "selected" : ""} onClick={() => setMeasuring(!measuring)}>Measure</button>
           <label className="check">

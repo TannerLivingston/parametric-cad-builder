@@ -2,6 +2,8 @@
 // same as typing it in, so the validator stays the only judge of what's possible.
 import { configSchema, partSchema, type Config, type Footprint, type Part } from "../schema.js";
 import { partsOf, tidy, type RawConfig } from "./configEdit.js";
+import { validateConfig } from "../validate.js";
+import { cableTieSpots } from "../wiring.js";
 
 // A plain box with a separate top, which needs no supports: the shell prints upright, open at
 // the top, and the top prints face down.
@@ -388,10 +390,40 @@ export function setPlateSplit(config: RawConfig, x: number | null): RawConfig {
 }
 
 // Shift registers on a board of your own, for the pin count. None is the default, so it leaves the file.
+// Wiring's defaults leave the file, and the section with them when nothing else is in it.
+function updateWiring(config: RawConfig, patch: RawConfig): RawConfig {
+  const { wiring = {}, ...rest } = config;
+  const next = Object.fromEntries(Object.entries({ ...wiring, ...patch }).filter(([, value]) => value !== undefined));
+  return Object.keys(next).length ? { ...rest, wiring: next } : rest;
+}
+
 export function setShiftRegisters(config: RawConfig, count: number): RawConfig {
-  const { wiring: _, ...rest } = config;
   const n = Math.max(0, Math.round(count));
-  return n ? { ...rest, wiring: { shiftRegisters: n } } : rest;
+  return updateWiring(config, { shiftRegisters: n || undefined });
+}
+
+// Whether to warn about room for wires and their ways across the floor. On is the default.
+export function setWiringChecks(config: RawConfig, on: boolean): RawConfig {
+  return updateWiring(config, { checks: on ? undefined : false });
+}
+
+// Cable tie bridges along the wires' routes, as the validator lays them out, keeping only those it
+// accepts where they are, beside any already there.
+export function tiesAlongWires(config: RawConfig): RawConfig {
+  const result = validateConfig(config);
+  if (!result.ok) return config;
+  const existing: RawConfig[] = config.plate?.cableTies ?? [];
+  const spots = cableTieSpots(result.plan.wiring.routes).filter((spot) => !existing.some((tie) => Math.hypot(tie.x - spot.x, tie.y - spot.y) < 15));
+  let next = spots.length ? updatePlate(config, { cableTies: [...existing, ...spots] }) : config;
+  // Each pass drops those the validator rejects, since one can only clash with another that's already in.
+  for (let pass = 0; pass < spots.length; pass++) {
+    const check = validateConfig(next);
+    if (check.ok) break;
+    const bad = new Set(check.errors.flatMap((issue) => /^plate\.cableTies\[(\d+)\]$/.exec(issue.path)?.[1] ?? []).map(Number).filter((i: number) => i >= existing.length));
+    if (bad.size === 0) break;
+    next = updatePlate(next, { cableTies: next.plate.cableTies.filter((_: RawConfig, i: number) => !bad.has(i)) });
+  }
+  return next;
 }
 
 // A flat joint is the default, so it leaves the file.

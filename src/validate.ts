@@ -13,6 +13,7 @@ import { textOutline, unsupportedCharacters } from "./lettering.js";
 import { planPins, type PinBudget } from "./pins.js";
 import { DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
 import { BARB_REACH, holderBlocks, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
+import { panelWireRooms, floorWireRooms, wallWireRooms, wireRoomProblem, floorBlock, routeWire, WIRE_BUNDLE, type Point3, type WireObstacle, type WireRoom, type WireRoute } from "./wiring.js";
 import { BOSS_DIAMETER, bossProblem, chosenBossLift, shortBossTop, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, choosePlateJoint, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
 
 export const PART_CLEARANCE = 1; // between the bodies of neighbouring parts
@@ -79,6 +80,9 @@ export type IssueCode =
   | "UNVERIFIED_PART"
   | "PINS_SHORT"
   | "ERGONOMICS"
+  | "WIRE_ROOM"
+  | "WIRE_ROUTE"
+  | "WIRE_SEAM"
   | "KNOB_INVALID";
 
 export interface Issue {
@@ -211,7 +215,14 @@ export interface PlannedFasteners {
   edges: FastenerEdge[];
 }
 
+// Where wires leave each part, and their ways across the floor to the boards they go to: see wiring.ts.
+export interface WiringPlan {
+  rooms: WireRoom[];
+  routes: WireRoute[];
+}
+
 export interface BuildPlan {
+  wiring: WiringPlan;
   config: Config;
   profile: Profile;
   seams: PlannedSeam[];
@@ -336,9 +347,11 @@ export function validateConfig(input: unknown): ValidationResult {
   printedParts.push(...knobs.map((knob): PrintedPart => ({ index: knob.printedPart, kind: "knob", name: knob.name, color: knob.color, xMin: knob.u - knob.diameter / 2, xMax: knob.u + knob.diameter / 2, size: [knob.diameter, knob.diameter, knob.height] })));
 
   const pins = checkPins(config, placed, issues);
+  const wiring = planWiring(config, profile, placed, seams, plate, topScrews, posts, holderBlockList, issues);
   const steps = listAssembly(config, seams, plate, posts, topScrews, placed, creases, cutouts.filter((c) => !c.notch).map((c) => c.cutout), shellParts.length);
 
   return issues.result({
+    wiring,
     pins,
     knobs,
     config,
@@ -361,6 +374,150 @@ export function validateConfig(input: unknown): ValidationResult {
     steps: steps.map(({ text, kinds, parts = [] }) => ({ text, parts: printedParts.filter((part) => kinds.includes(part.kind) || parts.includes(part.index)).map((part) => part.index) })),
   });
 }
+
+// What wires have to keep out of: every part's body, and what holds the enclosure together.
+function wiringObstacles(config: Config, profile: Profile, placed: Placed[], seams: PlannedSeam[], plate: PlatePlan | null, topScrews: TopScrew[], posts: PlacedPost[], blocks: HolderBlock[]): WireObstacle[] {
+  const e = config.enclosure;
+  const t = e.panelThickness;
+  const floor = e.floorThickness;
+  const top = profile.maxHeight;
+  const column = (name: string, x: number, y: number, r: number, z0: number, z1: number): WireObstacle => ({ name, xLow: x - r, xHigh: x + r, section: [[y - r, z0], [y + r, z0], [y + r, z1], [y - r, z1]] });
+  const box = (name: string, [x0, x1]: Point2, [y0, y1]: Point2, [z0, z1]: Point2, componentId?: string): WireObstacle => ({ name, xLow: x0, xHigh: x1, section: [[y0, z0], [y1, z0], [y1, z1], [y0, z1]], ...(componentId ? { componentId } : {}) });
+  const obstacles: WireObstacle[] = [];
+  for (const item of placed) {
+    const component = config.components[item.index]!;
+    const name = `the body of "${item.id}"`;
+    if (item.part.mount === "panel" && item.surface && item.part.below.depth > 0) {
+      const shape = item.shape("below");
+      const [hu, hv] = halfExtents(shape);
+      const point = (v: number, n: number) => surfacePoint(item.surface!, v, n);
+      const far = -t - item.part.below.depth;
+      obstacles.push({ name, componentId: item.id, xLow: shape.cx - hu, xHigh: shape.cx + hu, section: [point(shape.cy - hv, -t), point(shape.cy + hv, -t), point(shape.cy + hv, far), point(shape.cy - hv, far)] });
+    } else if (item.part.mount === "floor") {
+      const shape = item.shape("below");
+      const [hx, hy] = halfExtents(shape);
+      obstacles.push(box(name, [shape.cx - hx, shape.cx + hx], [shape.cy - hy, shape.cy + hy], [floor, floor + item.part.height], item.id));
+    } else if (item.part.mount === "wall" && "wall" in component) {
+      const fit = wallFit(item, config)!;
+      const inward = { left: [e.wall, e.wall + fit.depth], right: [e.width - e.wall - fit.depth, e.width - e.wall], front: [e.wall, e.wall + fit.depth], rear: [profile.depth - e.wall - fit.depth, profile.depth - e.wall] }[component.wall] as Point2;
+      const along: Point2 = [fit.at - fit.across / 2, fit.at + fit.across / 2];
+      const zs: Point2 = [fit.z - fit.up / 2, fit.z + fit.up / 2];
+      obstacles.push(component.wall === "left" || component.wall === "right" ? box(name, inward, along, zs, item.id) : box(name, along, inward, zs, item.id));
+    }
+  }
+  if (plate) {
+    plate.screws.forEach(([x, y], i) => obstacles.push(column("a plate screw's boss", x, y, BOSS_DIAMETER / 2, floor, plate.shortBosses[i] ? shortBossTop(e, plate.lifts[i]!) : top)));
+    for (const support of plate.supports) obstacles.push(column("a support on the plate", support.x, support.y, support.diameter / 2, floor, support.top));
+    for (const weight of plate.weights) {
+      const outer = weightOutline(weight) as { cx: number; cy: number; w: number; h: number };
+      obstacles.push(box("a weight pocket", [outer.cx - outer.w / 2, outer.cx + outer.w / 2], [outer.cy - outer.h / 2, outer.cy + outer.h / 2], [floor, floor + weight.height]));
+    }
+  }
+  // Cable tie bridges aren't in the way, since wires run over them.
+  const onSide = shellPrintsOnSide(seams.length);
+  for (const screw of topScrews) {
+    obstacles.push(column("a top screw's post", screw.x, screw.y, TOP_POST_DIAMETER / 2, screw.postBottom, top));
+    const tab = topTabExtent(screw, e.wall, e.width, profile.depth - e.wall, onSide);
+    const under = onSide ? 0 : tabGussetDepth(tab, screw.wall, floor);
+    obstacles.push(box("a top screw's tab", [tab.xLow - tab.spread, tab.xHigh + tab.spread], [tab.yLow, tab.yHigh], [tab.zLow - under, tab.zHigh]));
+  }
+  for (const post of posts) {
+    const surface = profile.surfaces.find((s) => s.id === post.surface)!;
+    const r = post.diameter / 2;
+    const [y0, z0] = surfacePoint(surface, post.v, -post.reach);
+    obstacles.push(column(`a screw post for "${post.componentId}"`, post.u, y0, r, z0, top));
+  }
+  for (const seam of seams) {
+    const reach = seam.ribHalfThickness + seam.ribWidth;
+    for (const tab of seam.tabs) obstacles.push({ name: "a tab across the seam", xLow: seam.x - reach, xHigh: seam.x + reach, section: tabSection(tab) });
+  }
+  for (const block of blocks) obstacles.push(box(`the cradle for "${block.componentId}"`, [block.xLow, block.xHigh], [block.yLow, block.yHigh], [floor, floor + block.top], block.componentId));
+  for (const kept of reservedBoxes(config)) obstacles.push(box("the room kept for the opening", [kept.xMin, kept.xMax], [kept.yMin, kept.yMax], [0, kept.top]));
+  return obstacles;
+}
+
+// The room for each part's wires, and their ways across the floor: switches to a shift register board
+// if there is one, analog parts to an analog board if there is one, and everything else to the
+// microcontroller. All of it only warns, and none of it does with wiring.checks off.
+function planWiring(config: Config, profile: Profile, placed: Placed[], seams: PlannedSeam[], plate: PlatePlan | null, topScrews: TopScrew[], posts: PlacedPost[], blocks: HolderBlock[], issues: Issues): WiringPlan {
+  const e = config.enclosure;
+  const floor = e.floorThickness;
+  const warn = config.wiring.checks;
+  const rooms: WireRoom[] = [];
+  for (const item of placed) {
+    const component = config.components[item.index]!;
+    const rotation = component.rotationDeg as Rotation;
+    if (item.part.mount === "panel" && item.surface && "u" in component) rooms.push(...panelWireRooms(item.id, item.part, item.surface, component.u, component.v, rotation, e.panelThickness));
+    else if (item.part.mount === "floor" && "x" in component) rooms.push(...floorWireRooms(item.id, item.part, component.x, component.y, rotation, floor));
+    else if (item.part.mount === "wall" && "wall" in component) rooms.push(...wallWireRooms(item.id, item.part, component.wall, component.at, component.z, rotation, { wall: e.wall, width: e.width, depth: profile.depth }));
+  }
+  const obstacles = wiringObstacles(config, profile, placed, seams, plate, topScrews, posts, blocks);
+  const indexOf = (id: string) => placed.find((item) => item.id === id)!.index;
+  if (warn) {
+    const inside = { xMin: e.wall, xMax: e.width - e.wall, cavity: profile.cavity };
+    const reported = new Set<string>();
+    for (const room of rooms) {
+      const problem = wireRoomProblem(room, inside, obstacles);
+      if (!problem || reported.has(room.componentId)) continue;
+      // Where one of a part's ways out will do, any one with room is enough.
+      const item = placed.find((p) => p.id === room.componentId)!;
+      if (item.part.wiresFrom === "any" && rooms.some((other) => other.componentId === room.componentId && !wireRoomProblem(other, inside, obstacles))) continue;
+      reported.add(room.componentId);
+      const side = { down: "underside", up: "top", back: "back", left: "left side", right: "right side", front: "front side", rear: "rear side" }[room.side];
+      issues.warn("WIRE_ROOM", `"${room.componentId}"'s wires need room straight out of its ${side}, and ${problem} is in the way. Move one of them, or, since this is a rough guide, turn wiring checks off in the Wiring section.`, `components[${indexOf(room.componentId)}]`, [room.componentId]);
+    }
+  }
+
+  // Routes go to boards on the floor, so they need a microcontroller there.
+  const floorItems = placed.filter((item): item is FloorPlaced => item.part.mount === "floor");
+  const mcu = floorItems.find((item) => item.part.pins?.gpio !== undefined);
+  if (!mcu) return { rooms, routes: [] };
+  const area = { xMin: e.wall + 1, xMax: e.width - e.wall - 1, yMin: profile.plateFront + 1, yMax: profile.plateRear - 1, floor };
+  const blocksOnFloor = obstacles.flatMap((obstacle) => floorBlock(obstacle, floor) ?? []);
+  const boxOf = (item: FloorPlaced) => {
+    const shape = item.shape("below");
+    const [hx, hy] = halfExtents(shape);
+    return { xLow: shape.cx - hx, xHigh: shape.cx + hx, yLow: shape.cy - hy, yHigh: shape.cy + hy, componentId: item.id };
+  };
+  const nearest = (boards: FloorPlaced[], [x, y]: Point3) => [...boards].sort((a, b) => Math.hypot(a.shape("below").cx - x, a.shape("below").cy - y) - Math.hypot(b.shape("below").cx - x, b.shape("below").cy - y))[0];
+  const shiftBoards = floorItems.filter((item) => (item.part.pins?.shiftInputs ?? 0) > 0);
+  const analogBoards = floorItems.filter((item) => (item.part.pins?.analogInputs ?? 0) > 0);
+  const routes: WireRoute[] = [];
+  const unrouted: string[] = [];
+  for (const item of placed) {
+    if (item === mcu) continue;
+    const own = rooms.filter((room) => room.componentId === item.id);
+    if (own.length === 0) continue;
+    const pins = item.part.pins;
+    const onlySwitches = (pins?.switches ?? 0) > 0 && !pins?.direct && !pins?.analog && !pins?.i2c?.length;
+    const onlyAnalog = (pins?.analog ?? 0) > 0 && !pins?.switches && !pins?.direct && !pins?.i2c?.length;
+    const centre = own[0]!.end;
+    const target = (onlySwitches && nearest(shiftBoards.filter((b) => b !== item), centre)) || (onlyAnalog && nearest(analogBoards.filter((b) => b !== item), centre)) || mcu;
+    const box = boxOf(target);
+    const tx = (box.xLow + box.xHigh) / 2;
+    const ty = (box.yLow + box.yHigh) / 2;
+    // The nearest way out to the board, with room if one has.
+    const inside = { xMin: e.wall, xMax: e.width - e.wall, cavity: profile.cavity };
+    const open = own.filter((room) => !wireRoomProblem(room, inside, obstacles));
+    const room = [...(open.length ? open : own)].sort((a, b) => Math.hypot(a.end[0] - tx, a.end[1] - ty) - Math.hypot(b.end[0] - tx, b.end[1] - ty))[0]!;
+    const route = routeWire(area, blocksOnFloor, { id: item.id, end: room.end }, { id: target.id, box, top: floor + target.part.height }, seams.map((seam) => seam.x));
+    if (route) routes.push(route);
+    else unrouted.push(item.id);
+  }
+  if (warn) {
+    for (const id of unrouted) issues.warn("WIRE_ROUTE", `There's no way across the floor for "${id}"'s wires to reach the board they go to. Make room, or, since this is a rough guide, turn wiring checks off in the Wiring section.`, `components[${indexOf(id)}]`, [id]);
+    const tight = routes.filter((route) => route.tight).map((route) => route.from);
+    if (tight.length) issues.warn("WIRE_ROUTE", `Wires from ${quoteList(tight)} only just get past what's on the floor, with less than ${mm(WIRE_BUNDLE)} for them. Make room if you can.`, "wiring", tight);
+    const crossing = routes.filter((route) => route.seams.length).map((route) => route.from);
+    if (crossing.length) issues.warn("WIRE_SEAM", `Wires from ${quoteList(crossing)} cross the seam, so the halves only come apart once they're unplugged. Leave them slack, or put a plug in them there.`, "wiring", crossing);
+  }
+  return { rooms, routes };
+}
+
+const quoteList = (ids: string[]) => {
+  const quoted = ids.map((id) => `"${id}"`);
+  return quoted.length < 3 ? quoted.join(" and ") : `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`;
+};
 
 interface Fixtures {
   holeBoxes: { xMin: number; xMax: number; yMin: number; yMax: number; top: number }[];
