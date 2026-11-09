@@ -292,8 +292,8 @@ export const configSchema = z.strictObject({
   }),
   topPanels: z.array(topPanelSchema).default([]),
   opening: openingSchema.optional(),
-  // The engine builds one seam so far, hence the limit.
-  seams: z.array(seamSchema).max(1).default([]),
+  // Left to right or not, they're sorted.
+  seams: z.array(seamSchema).default([]),
   fabrication: z
     .strictObject({
       material: materialSchema.default("PETG"),
@@ -314,7 +314,8 @@ export const configSchema = z.strictObject({
     .strictObject({
       enabled: z.boolean().default(true),
       clearance: z.number().nonnegative().default(0.25),
-      seamX: length.optional(),
+      // One joint, or several for a plate that needs more pieces.
+      seamX: z.union([length, z.array(length).min(1)]).optional(),
       screwSpacing: length.default(110),
       screws: z.array(plateScrewSpot).optional(),
       fasteners: z.strictObject({ add: z.array(plateScrewSpot).default([]), remove: z.array(plateScrewSpot).default([]) }).prefault({}),

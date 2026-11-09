@@ -47,7 +47,7 @@ beforeAll(async () => {
 describe("the plate's rib", () => {
   it("runs between the walls inside any bottom round, with bolts along it", () => {
     const buildPlan = plan(box());
-    const rib = buildPlan.plate!.rib!;
+    const rib = buildPlan.plate!.ribs[0]!;
     const floor = buildPlan.config.enclosure.floorThickness;
     const [front, rear] = cavitySpan(buildPlan.profile.cavity, floor, floor + PLATE_RIB_HEIGHT);
     expect(rib.x).toBe(150);
@@ -58,30 +58,30 @@ describe("the plate's rib", () => {
     expect(rib.bolts.at(-1)).toBeCloseTo(rib.yHigh - PLATE_RIB_END);
     // A bottom round narrows it.
     const rounded = plan(box({ enclosure: { width: 300, frontHeight: 40, cornerRadius: 3, surfaces: [{ id: "top", y: 120, z: 40 }], rounds: { frontBottom: 15 } } }));
-    expect(rounded.plate!.rib!.yLow).toBeGreaterThan(rib.yLow + 2);
+    expect(rounded.plate!.ribs[0]!.yLow).toBeGreaterThan(rib.yLow + 2);
   });
 
   it("is only there when asked for, and where the plate splits", () => {
-    expect(plan(box({ plate: { seamX: 150 } })).plate!.rib).toBeNull();
-    expect(plan(box({ enclosure: { width: 240, frontHeight: 40, cornerRadius: 3, surfaces: [{ id: "top", y: 120, z: 40 }] }, seams: [], plate: { joint: "rib" } })).plate!.rib).toBeNull();
+    expect(plan(box({ plate: { seamX: 150 } })).plate!.ribs).toEqual([]);
+    expect(plan(box({ enclosure: { width: 240, frontHeight: 40, cornerRadius: 3, surfaces: [{ id: "top", y: 120, z: 40 }] }, seams: [], plate: { joint: "rib" } })).plate!.ribs).toEqual([]);
   });
 
   it("stops short of the shell's bosses beside the joint, and of a seam rib round the walls", () => {
     // A plate screw beside the joint, whose boss on the shell comes down to the plate.
     const buildPlan = plan(withPlate({ fasteners: { add: [{ x: 146, y: 6.55 }] } }, { seams: [{ x: 250 }] }));
     expect(buildPlan.plate!.screws).toContainEqual([146, 6.55]);
-    expect(buildPlan.plate!.rib!.yLow).toBeGreaterThanOrEqual(6.55 + 4.5);
+    expect(buildPlan.plate!.ribs[0]!.yLow).toBeGreaterThanOrEqual(6.55 + 4.5);
     const seamed = plan(box({ seams: [{ x: 158 }] }));
     const seam = seamed.seams[0]!;
     const floor = seamed.config.enclosure.floorThickness;
     const [front] = cavitySpan(seamed.profile.cavity, floor, floor + PLATE_RIB_HEIGHT);
-    expect(seamed.plate!.rib!.yLow).toBeGreaterThanOrEqual(front + seam.ribWidth + 1 - 1e-9);
+    expect(seamed.plate!.ribs[0]!.yLow).toBeGreaterThanOrEqual(front + seam.ribWidth + 1 - 1e-9);
   });
 
   it("keeps out of the rail's notch", () => {
     const opening = { xMin: 100, xMax: 200, yEnd: 50, sill: 8, rail: { depth: 20, screwX: [90, 210] } };
     const buildPlan = plan(box({ opening }));
-    expect(buildPlan.plate!.rib!.yLow).toBeGreaterThan(20);
+    expect(buildPlan.plate!.ribs[0]!.yLow).toBeGreaterThan(20);
   });
 
   it("refuses anything standing where it goes", () => {
@@ -106,14 +106,14 @@ describe("the plate's rib", () => {
   });
 
   it("moves a bolt off a board beside its boss, or the driver's way, and says so if none fit", () => {
-    const plain = plan(box()).plate!.rib!.bolts;
+    const plain = plan(box()).plate!.ribs[0]!.bolts;
     // A board left of the rib, beside a bolt's boss.
     const beside = { id: "a", type: "ads7830", x: 150 - PLATE_RIB_LEFT - 0.3 - 17.7 / 2 - 1, y: plain[1]! };
-    const moved = plan(box({ components: [beside] })).plate!.rib!.bolts;
+    const moved = plan(box({ components: [beside] })).plate!.ribs[0]!.bolts;
     expect(moved.every((y) => Math.abs(y - beside.y) > 21.25 + 4)).toBe(true);
     // A pin where the driver goes, right of a head.
     const pin = { x: 150 + PLATE_RIB_RIGHT + 10, y: plain[1]!, diameter: 3, height: 8 };
-    expect(plan(withPlate({ pins: [pin] })).plate!.rib!.bolts.every((y) => Math.abs(y - pin.y) > 4)).toBe(true);
+    expect(plan(withPlate({ pins: [pin] })).plate!.ribs[0]!.bolts.every((y) => Math.abs(y - pin.y) > 4)).toBe(true);
     // Boards both sides, all the way along.
     const wall = (id: string, y: number) => ({ id, type: "ads7830", x: 150 - PLATE_RIB_LEFT - 0.3 - 17.7 / 2 - 1, y });
     expect(messages(box({ components: [wall("a", 30), wall("b", 74), wall("c", 118)] }))).toMatch(/no room for two bolts, because its boss runs into "[abc]"/);
@@ -121,7 +121,7 @@ describe("the plate's rib", () => {
 
   it("builds into both pieces, which fit together", () => {
     const buildPlan = plan(box());
-    const rib = buildPlan.plate!.rib!;
+    const rib = buildPlan.plate!.ribs[0]!;
     const floor = buildPlan.config.enclosure.floorThickness;
     const { parts } = buildEnclosure(buildPlan);
     const [left, right] = parts.filter((p) => p.kind === "plate").map((p) => p.shape) as [Shape3D, Shape3D];
@@ -160,7 +160,7 @@ describe("the plate's rib", () => {
 
   it("adds its bolts to the hardware, and bolting it to the steps", () => {
     const buildPlan = plan(box());
-    const count = buildPlan.plate!.rib!.bolts.length;
+    const count = buildPlan.plate!.ribs[0]!.bolts.length;
     expect(buildPlan.hardware).toEqual(expect.arrayContaining([{ name: "M3 x 10 flat-head screw, for the plate's joint", count }, { name: "M3 brass heat-set insert, for the plate's joint", count }]));
     const steps = buildPlan.assembly;
     const bolting = steps.findIndex((step) => step.includes("through the rib"));
@@ -169,7 +169,7 @@ describe("the plate's rib", () => {
   });
 
   it("fits the Desk Synth split where the V2's is", () => {
-    const rib = plan(v2Plate()).plate!.rib!;
+    const rib = plan(v2Plate()).plate!.ribs[0]!;
     expect(rib.x).toBe(176);
     expect(rib.bolts.length).toBeGreaterThanOrEqual(2);
   });

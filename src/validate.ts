@@ -14,7 +14,7 @@ import { planPins, type PinBudget } from "./pins.js";
 import { capFit, DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
 import { BARB_REACH, holderBlocks, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { panelWireRooms, floorWireRooms, wallWireRooms, wireRoomProblem, floorBlock, routeWire, WIRE_BUNDLE, type Point3, type WireObstacle, type WireRoom, type WireRoute } from "./wiring.js";
-import { BOSS_DIAMETER, bossProblem, chosenBossLift, shortBossTop, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, choosePlateJoint, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
+import { BOSS_DIAMETER, bossProblem, chosenBossLift, shortBossTop, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, choosePlateJoints, samePlatePiece, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
 
 export const PART_CLEARANCE = 1; // between the bodies of neighbouring parts
 export const SMALL_HOLE = 2; // holes below this rarely print round
@@ -154,14 +154,14 @@ export type { HolderBlock, PlannedWallHole } from "./fixtures.js";
 
 export interface PlatePlan {
   clearance: number;
-  jointX: number | null;
+  joints: number[]; // where it splits, left to right
   screws: Point2[];
   shortBosses: boolean[]; // for each screw, whether its boss stops just past the insert
   lifts: number[]; // for each screw, how far up its insert is, over a sloped underside on an upright shell: see bossLift
   supports: PlannedSupport[];
   weights: PlannedWeight[];
   feet: PlannedFoot[];
-  rib: PlateRib | null;
+  ribs: PlateRib[]; // one along each joint, if the joints are ribbed
 }
 
 export interface HardwareItem {
@@ -917,7 +917,8 @@ function checkHolders(blocks: HolderBlock[], config: Config, profile: Profile, s
     const name = block.kind === "standoff" ? `A standoff for "${block.componentId}"` : `The cradle for "${block.componentId}"`;
     const top = e.floorThickness + block.top;
     if (block.xLow < inset || block.xHigh > e.width - inset || block.yLow < profile.plateFront + plate.clearance || block.yHigh > profile.plateRear - plate.clearance) fail(`${name} runs off the edge of the plate.`);
-    if (plate.jointX !== null && block.xLow < plate.jointX && block.xHigh > plate.jointX) fail(`${name} crosses the plate's joint at x = ${mm(plate.jointX)}. Move the board, or move the joint with plate.seamX.`);
+    const joint = plate.joints.find((x) => block.xLow < x && block.xHigh > x);
+    if (joint !== undefined) fail(`${name} crosses the plate's joint at x = ${mm(joint)}. Move the board, or move the joint with plate.seamX.`);
     if (notch && block.xLow < notch.xHigh && block.xHigh > notch.xLow && block.yLow < notch.yHigh) fail(`${name} is in the plate's notch for the rail.`);
     for (const hole of config.plate.countersunkHoles) {
       if (block.xLow - 3.5 < hole.x && block.xHigh + 3.5 > hole.x && block.yLow - 3.5 < hole.y && block.yHigh + 3.5 > hole.y) fail(`${name} covers a hole in the plate.`);
@@ -1541,6 +1542,10 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
   const planned: PlannedSeam[] = [];
   config.seams.forEach((seam, i) => {
     const path = `seams[${i}]`;
+    if (config.seams.findIndex((other) => other.x === seam.x) < i) {
+      issues.error("SEAM_INVALID", `There's already a seam at x = ${mm(seam.x)}.`, `${path}.x`);
+      return;
+    }
     if (seam.x < MIN_PART_WIDTH || seam.x > e.width - MIN_PART_WIDTH) {
       issues.error("SEAM_INVALID", `Seam at x = ${mm(seam.x)} would leave a part narrower than ${mm(MIN_PART_WIDTH)} in a ${mm(e.width)} wide enclosure.`, `${path}.x`);
     }
@@ -1592,8 +1597,12 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
         issues.error("SEAM_INVALID", `A lip takes half of the ${mm(thinnest)} skin, leaving ${mm(thinnest / 2 - LIP_GAP)} for the step it fits over, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(2 * (minWeb + LIP_GAP))}, or leave the joint flat.`, `${path}.lip`);
       }
     }
-    if (seam.x - seam.ribHalfThickness - SEAM_DRIVER_ROOM < e.wall) {
-      issues.error("SEAM_INVALID", `A seam at x = ${mm(seam.x)} leaves too little room in the left half to drive its bolts, which needs ${mm(SEAM_DRIVER_ROOM)} for a stubby screwdriver. Move it to the right.`, `${path}.x`);
+    // The next seam to the left, whose rib and tabs reach into the same piece.
+    const before = config.seams.filter((other) => other.x < seam.x).sort((a, b) => b.x - a.x)[0];
+    const leftEnd = before ? before.x + before.ribHalfThickness + before.ribWidth : e.wall;
+    if (seam.x - seam.ribHalfThickness - SEAM_DRIVER_ROOM < leftEnd) {
+      const where = before ? `between it and the seam at x = ${mm(before.x)}` : "in the left half";
+      issues.error("SEAM_INVALID", `A seam at x = ${mm(seam.x)} leaves too little room ${where} to drive its bolts, which needs ${mm(SEAM_DRIVER_ROOM)} for a stubby screwdriver. Move it to the right.`, `${path}.x`);
     }
     const blocks = railBlocks(config);
     for (const [y, z] of fasteners.bolts) {
@@ -1603,7 +1612,7 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
     }
     planned.push({ ...seam, ...fasteners, pinLength: seam.ribHalfThickness - PIN_ALLOWANCE });
   });
-  return planned;
+  return planned.sort((a, b) => a.x - b.x);
 }
 
 function planPrintedParts(config: Config, profile: Profile, issues: Issues): PrintedPart[] {
@@ -1615,7 +1624,7 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
     const xMin = bounds[index]!;
     const xMax = bounds[index + 1]!;
     // The part left of a seam carries the alignment pins, and any lip, which stick out past it.
-    const seam = config.seams[index];
+    const seam = [...config.seams].sort((a, b) => a.x - b.x)[index];
     const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, seam.lip) : 0;
     const size: [number, number, number] = [xMax - xMin + pins, profile.depth, profile.maxHeight];
     const name = bounds.length > 2 ? `Shell ${index + 1}` : "Shell";
@@ -1907,10 +1916,11 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
   const e = config.enclosure;
   const input = plateInput(config, profile);
   const { x: bedX, y: bedY } = config.fabrication.buildVolume;
-  const jointX = config.plate.seamX ?? choosePlateJoint(input, config.seams[0]?.x ?? null, Math.max(bedX, bedY));
-  if (jointX !== null && (jointX < MIN_PART_WIDTH || jointX > e.width - MIN_PART_WIDTH)) {
-    issues.error("PLATE_INVALID", `A plate joint at x = ${mm(jointX)} would leave a piece narrower than ${mm(MIN_PART_WIDTH)}.`, "plate.seamX");
-  }
+  const joints = config.plate.seamX === undefined ? choosePlateJoints(input, config.seams.map((seam) => seam.x), Math.max(bedX, bedY), MIN_PART_WIDTH) : [config.plate.seamX].flat().sort((a, b) => a - b);
+  [0, ...joints, e.width].forEach((x, i, all) => {
+    if (i === 0) return;
+    if (x - all[i - 1]! < MIN_PART_WIDTH) issues.error("PLATE_INVALID", `A plate joint at x = ${mm(i === all.length - 1 ? all[i - 1]! : x)} would leave a piece narrower than ${mm(MIN_PART_WIDTH)}.`, "plate.seamX");
+  });
   const t = e.panelThickness;
   const obstacles: BossObstacles = {
     ribs: seams.map((seam) => ({
@@ -1921,7 +1931,7 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
         return { yLow: Math.min(...section.map(([y]) => y)), yHigh: Math.max(...section.map(([y]) => y)), zLow: Math.min(...section.map(([, z]) => z)) };
       }),
     })),
-    jointX,
+    joints,
     onSide: shellPrintsOnSide(seams.length),
     capped: profile.surfaces.filter((surface) => topPanelFor(config, surface.id)).map((surface): [number, number] => [surface.index === 0 ? 0 : surface.y0, surface.index === profile.surfaces.length - 1 ? profile.depth : surface.y1]),
     plateNotch: plateNotchFor(config),
@@ -1984,7 +1994,7 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     }
     screws = screws.filter((screw) => !matched.includes(screw));
   });
-  const samePiece = (a: number, b: number) => jointX === null || a < jointX === b < jointX;
+  const samePiece = (a: number, b: number) => samePlatePiece(joints, a, b);
   const added: Point2[] = [];
   const addedItems: PlannedFastener[] = [];
   config.plate.fasteners.add.forEach(({ x, y }, index) => {
@@ -2017,7 +2027,7 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     }
   }
 
-  const pieces = jointX === null ? [[0, e.width]] : [[0, jointX], [jointX, e.width]];
+  const pieces = [0, ...joints].map((from, i) => [from, joints[i] ?? e.width]);
   pieces.forEach(([from, to], i) => {
     const count = screws.filter(([x]) => x > from! && x < to!).length;
     if (count < MIN_PLATE_SCREWS) {
@@ -2036,7 +2046,8 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     const overlaps = (x0: number, x1: number, y0: number, y1: number) => xLow < x1 + PART_CLEARANCE && xHigh > x0 - PART_CLEARANCE && yLow < y1 + PART_CLEARANCE && yHigh > y0 - PART_CLEARANCE;
     const inset = e.wall + config.plate.clearance;
     if (xLow < inset || xHigh > e.width - inset || yLow < profile.plateFront + config.plate.clearance || yHigh > profile.plateRear - config.plate.clearance) return fail("runs off the edge of the plate.");
-    if (jointX !== null && xLow < jointX && xHigh > jointX) return fail(`crosses the plate's joint at x = ${mm(jointX)}.`);
+    const joint = joints.find((x) => xLow < x && xHigh > x);
+    if (joint !== undefined) return fail(`crosses the plate's joint at x = ${mm(joint)}.`);
     const notch = plateNotchFor(config);
     if (notch && xLow < notch.xHigh && xHigh > notch.xLow && yLow < notch.yHigh) return fail("is in the plate's notch for the rail.");
     if (screws.some(([x, y]) => overlaps(x - BOSS_DIAMETER / 2, x + BOSS_DIAMETER / 2, y - BOSS_DIAMETER / 2, y + BOSS_DIAMETER / 2))) return fail("is on one of the plate's screws.");
@@ -2089,8 +2100,8 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     if (problem) issues.error("PLATE_INVALID", `The rubber foot at x ${mm(x)}, y ${mm(y)} can't go there, because ${problem}.`, `plate.feet[${i}]`);
     else feet.push({ x, y, diameter });
   });
-  const rib = config.plate.joint === "rib" && jointX !== null ? planPlateRib(config, profile, seams, placed, fixtures, jointX, screws, supports, weights, issues) : null;
-  return { clearance: config.plate.clearance, jointX, screws, shortBosses: screws.map(([x, y]) => isShortBoss(input, obstacles, x, y)), lifts: screws.map(([x, y]) => chosenBossLift(input, profile, obstacles, x, y)), supports, weights, feet, rib };
+  const ribs = config.plate.joint === "rib" ? joints.flatMap((x) => planPlateRib(config, profile, seams, placed, fixtures, x, screws, supports, weights, issues) ?? []) : [];
+  return { clearance: config.plate.clearance, joints, screws, shortBosses: screws.map(([x, y]) => isShortBoss(input, obstacles, x, y)), lifts: screws.map(([x, y]) => chosenBossLift(input, profile, obstacles, x, y)), supports, weights, feet, ribs };
 }
 
 // Joins each top piece to the one behind it at a crease, where its panel asks for it. The flange
@@ -2223,7 +2234,7 @@ function planPlateParts(config: Config, profile: Profile, plate: PlatePlan | nul
   const e = config.enclosure;
   const { x: bedX, y: bedY } = config.fabrication.buildVolume;
   const inset = e.wall + plate.clearance;
-  const bounds = plate.jointX === null ? [inset, e.width - inset] : [inset, plate.jointX, e.width - inset];
+  const bounds = [inset, ...plate.joints, e.width - inset];
   const depth = profile.plateRear - profile.plateFront - 2 * plate.clearance;
   const parts: PrintedPart[] = [];
   for (let i = 0; i < bounds.length - 1; i++) {
@@ -2236,12 +2247,12 @@ function planPlateParts(config: Config, profile: Profile, plate: PlatePlan | nul
       ...blocks.filter((block) => block.xLow >= xMin && block.xHigh <= xMax).map((block) => block.top),
       ...plate.supports.filter((support) => support.x > xMin && support.x < xMax).map((support) => support.top - e.floorThickness),
       ...plate.weights.filter((weight) => weight.x > xMin && weight.x < xMax).map((weight) => weight.height),
-      ...(plate.rib ? [PLATE_RIB_HEIGHT] : []),
+      ...(plate.ribs.length ? [PLATE_RIB_HEIGHT] : []),
       // Upright, the wedges under the bosses, as high as their slopes reach at a boss's far side.
       ...plate.screws.map(([x], i) => (x > xMin && x < xMax && plate.lifts[i]! > 0 ? plate.lifts[i]! - INSERT_HOLE_DIAMETER / 2 + BOSS_DIAMETER / 2 : 0)),
     );
-    // The rib's tongue sticks out past the right piece.
-    const tongue = plate.rib && i === 1 ? PLATE_RIB_TONGUE : 0;
+    // A rib's tongue sticks out past the piece right of it.
+    const tongue = plate.ribs.length && i > 0 ? PLATE_RIB_TONGUE : 0;
     const size: [number, number, number] = [xMax - xMin + tongue, depth, e.floorThickness + pinTop];
     const name = bounds.length > 2 ? `Plate ${i + 1}` : "Plate";
     parts.push({ index: firstIndex + i, kind: "plate", name, color: config.enclosure.color, xMin, xMax, size });
@@ -2267,11 +2278,13 @@ function listAssembly(config: Config, seams: PlannedSeam[], plate: PlatePlan | n
     const kinds: PrintedPart["kind"][] = [];
     if (seams.length || plate?.screws.length) kinds.push("shell");
     if (topScrews.length) kinds.push("top");
-    if (plate?.rib) kinds.push("plate");
+    if (plate?.ribs.length) kinds.push("plate");
     step("Press in the heat-set inserts.", kinds, creases.filter((crease) => crease.screws.length).map((crease) => firstTop + crease.rear));
   }
-  if (seams.length) step(`Bolt the shell halves together first, with nothing else fitted. The driver goes in from inside the left half, with ${mm(SEAM_DRIVER_ROOM)} kept clear behind each bolt, so a stubby one fits.`, ["shell"]);
-  if (plate?.rib) step("Bolt the plate's pieces together through the rib along their joint, from the right, before anything goes on the plate.", ["plate"]);
+  if (seams.length === 1) step(`Bolt the shell halves together first, with nothing else fitted. The driver goes in from inside the left half, with ${mm(SEAM_DRIVER_ROOM)} kept clear behind each bolt, so a stubby one fits.`, ["shell"]);
+  if (seams.length > 1) step(`Bolt the shell's pieces together first, left to right, with nothing else fitted. At each seam the driver goes in from inside the piece to its left, with ${mm(SEAM_DRIVER_ROOM)} kept clear behind each bolt, so a stubby one fits.`, ["shell"]);
+  if (plate?.ribs.length === 1) step("Bolt the plate's pieces together through the rib along their joint, from the right, before anything goes on the plate.", ["plate"]);
+  if (plate && plate.ribs.length > 1) step("Bolt the plate's pieces together through the ribs along their joints, from the right, before anything goes on the plate.", ["plate"]);
   const screwed = creases.filter((crease) => crease.screws.length);
   if (screwed.length) step("Lay the top pieces face down, and screw them together along each crease, from the front through the flange, before anything goes in them.", [], screwed.flatMap((crease) => [firstTop + crease.front, firstTop + crease.rear]));
   if (posts.length) step("Screw the screen to its posts, before its top piece goes on.", [], [...new Set(posts.map((post) => post.printedPart))]);
@@ -2323,9 +2336,10 @@ function listHardware(config: Config, profile: Profile, seams: PlannedSeam[], pl
       items.push({ name: `M3 x ${length} flat-head screw`, count: lengths.filter((l) => l === length).length });
     }
   }
-  if (plate?.rib) {
-    items.push({ name: "M3 brass heat-set insert, for the plate's joint", count: plate.rib.bolts.length });
-    items.push({ name: "M3 x 10 flat-head screw, for the plate's joint", count: plate.rib.bolts.length });
+  const ribBolts = plate?.ribs.reduce((sum, rib) => sum + rib.bolts.length, 0) ?? 0;
+  if (ribBolts) {
+    items.push({ name: "M3 brass heat-set insert, for the plate's joint", count: ribBolts });
+    items.push({ name: "M3 x 10 flat-head screw, for the plate's joint", count: ribBolts });
   }
   const seamBolts = seams.reduce((sum, seam) => sum + seam.bolts.length, 0);
   if (seamBolts) {

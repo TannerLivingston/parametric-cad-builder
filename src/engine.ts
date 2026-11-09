@@ -184,13 +184,19 @@ function shellInsertDiameter(plan: BuildPlan): number {
   return plan.shellOnSide ? insertHoleSideways : insertHole;
 }
 
+// Which way along x is up as a shell piece prints on its side: the left one with its left wall down,
+// the right one with its right wall down, and any between on their left end, so +x is up for all but
+// the last.
+function upAlongX(plan: BuildPlan, x: number): 1 | -1 {
+  const last = plan.seams.at(-1)?.x ?? Infinity;
+  return x < last ? 1 : -1;
+}
+
 function shellHole(plan: BuildPlan, x: number, y: number, diameter: number, length: number, zBottom: number): Shape3D {
   const r = diameter / 2;
   const hole = makeCylinder(r, length, [x, y, zBottom], [0, 0, 1]);
   if (!plan.shellOnSide) return hole;
-  // A shell in one piece prints with its left wall down, and each half with its outer wall down.
-  const seamX = plan.seams[0]?.x ?? Infinity;
-  const up = x < seamX ? 1 : -1;
+  const up = upAlongX(plan, x);
   const c = r * Math.SQRT1_2;
   const tip = draw([x + up * c, y - c])
     .lineTo([x + up * r * Math.SQRT2, y])
@@ -268,7 +274,7 @@ function topScrewTab(plan: BuildPlan, screw: TopScrew, envelope: Shape3D): Shape
       if (plan.shellOnSide) {
         // On its side, the web's corner nearest the bed would come first, as a line hanging from the
         // skin, so a fin carries on from it at 45 degrees up to the skin, for it to grow from.
-        const towardBed = screw.x < (plan.seams[0]?.x ?? Infinity) ? -1 : 1;
+        const towardBed = -upAlongX(plan, screw.x);
         const corner = towardBed > 0 ? tab.xHigh + spread : tab.xLow - spread;
         const top = plan.profile.maxHeight + 1;
         const rise = top - tab.zLow;
@@ -654,11 +660,17 @@ function plateBlanks(plan: BuildPlan): Shape3D[] {
   }
   // The validator keeps blocks apart, so they can go on together.
   if (plan.holderBlocks.length) plate = plate.fuse(compoundShapes(plan.holderBlocks.map((block) => holderSolid(block, e.floorThickness))) as Shape3D);
-  if (plan.plate.jointX === null) return [plate];
-  const { positive, negative } = plate.split("YZ", plan.plate.jointX);
-  if (!positive || !negative) throw new Error(`The plate joint at x = ${plan.plate.jointX} missed the plate.`);
-  if (plan.plate.rib) return withPlateRib(negative as Shape3D, positive as Shape3D, plan.plate.rib, e.floorThickness, fit);
-  return [negative as Shape3D, positive as Shape3D];
+  const pieces: Shape3D[] = [];
+  let remaining = plate;
+  for (const joint of plan.plate.joints) {
+    const { positive, negative } = remaining.split("YZ", joint);
+    if (!positive || !negative) throw new Error(`The plate joint at x = ${joint} missed the plate.`);
+    const rib = plan.plate.ribs.find((r) => r.x === joint);
+    const [left, right] = rib ? withPlateRib(negative as Shape3D, positive as Shape3D, rib, e.floorThickness, fit) : [negative as Shape3D, positive as Shape3D];
+    pieces.push(left);
+    remaining = right;
+  }
+  return [...pieces, remaining];
 }
 
 // The rib along the plate's joint: see PLATE_RIB_HEIGHT.
@@ -784,23 +796,41 @@ function nearestTab(seam: PlannedSeam, [y, z]: Point2): SeamTab | null {
   return best;
 }
 
-// The space inside the shell, as if its wall and top were only so thick, from x0 to x1.
-function cavityInset(plan: BuildPlan, wall: number, panel: number, x0: number, x1: number): Shape3D {
+// The outline of the space inside the shell, as if its wall and top were only so thick. Less than
+// nothing is outside it.
+function cavityOutline(plan: BuildPlan, wall: number, panel: number, x: number) {
   const e = plan.config.enclosure;
   const profile = buildProfile(plan.profile.surfaces, { wall, panelThickness: panel, floorThickness: e.floorThickness, rounds: e.rounds });
   if (!profile) throw new Error("The seam's lip has no profile to follow.");
-  return extrudedPath(profile.cavityPath, x0, x1);
+  const path = profile.cavityPath;
+  let pen = draw(path.at(-1)!.to);
+  for (const { to, via } of path) pen = via ? pen.threePointsArcTo(to, via) : pen.lineTo(to);
+  return pen.close().sketchOnPlane("YZ", x) as Sketch;
+}
+
+// The outside of the shell's skin, from `inset` deep, between `from` and `to`. Past `to`, it narrows
+// to nothing at 45 degrees, from inside out, which is how a lip ends and how the step for it starts.
+function skinBand(plan: BuildPlan, inset: [number, number], from: number, to: number): Shape3D {
+  const [depth, height] = [plan.profile.depth, plan.profile.maxHeight];
+  const [wall, panel] = inset;
+  // On to just outside the shell, so the slope runs right through the skin.
+  const run = Math.max(wall, panel) + 0.5;
+  const span = makeBox([from, -2, -3], [to + run, depth + 2, height + 2]) as Shape3D;
+  const straight = cavityOutline(plan, wall, panel, from - 1).extrude(to - from + 1) as Shape3D;
+  const slope = cavityOutline(plan, wall, panel, to).loftWith(cavityOutline(plan, wall - run, panel - run, to + run), { ruled: true });
+  return span.cut(straight.fuse(slope));
 }
 
 // A seam's lip: for its length past the seam, the left half keeps the outer half of the wall and
-// top, and the right half is stepped back round it with a gap. Each half prints with its seam
-// facing up, so the lip stands straight up from one and the step is a ledge on the other.
+// top, and the right half is stepped back round it with a gap. The lip's end and the step's slope
+// at 45 degrees, parallel, so that whichever way a piece prints, nothing hangs: an end piece prints
+// with its seam up, and one between two seams stands on its left end, on the step.
 function lipAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
   const e = plan.config.enclosure;
-  const [depth, height] = [plan.profile.depth, plan.profile.maxHeight];
-  const span = (x0: number, x1: number) => makeBox([x0, -1, -2], [x1, depth + 1, height + 1]) as Shape3D;
-  const lip = right.intersect(span(seam.x, seam.x + seam.lip)).cut(cavityInset(plan, e.wall / 2, e.panelThickness / 2, seam.x - 1, seam.x + seam.lip + 1));
-  const step = span(seam.x - 1, seam.x + seam.lip + LIP_GAP).cut(cavityInset(plan, e.wall / 2 + LIP_GAP, e.panelThickness / 2 + LIP_GAP, seam.x - 2, seam.x + seam.lip + 2));
+  const lip = right.intersect(skinBand(plan, [e.wall / 2, e.panelThickness / 2], seam.x, seam.x + seam.lip));
+  // The same gap square to the slope as along the lip.
+  const stepEnd = seam.x + seam.lip + LIP_GAP * (Math.SQRT2 - 1);
+  const step = skinBand(plan, [e.wall / 2 + LIP_GAP, e.panelThickness / 2 + LIP_GAP], seam.x - 1, stepEnd);
   return [left.fuse(lip), right.cut(step)];
 }
 

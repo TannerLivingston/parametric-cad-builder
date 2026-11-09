@@ -191,7 +191,7 @@ describe("where a top screw can't go", () => {
 describe("where a boss can't go, with its slopes", () => {
   const { profile, config } = plan(deskSynth());
   const input = { width: 351.4, depth: profile.depth, wall: 3.25, cornerRadius: 11.5, floorThickness: 3, clearance: 0.25 };
-  const none = { ribs: [], jointX: null, onSide: true, capped: [], posts: [], plateNotch: null, floorParts: [], cutouts: [], keepOut: [], bodies: [], minWeb: 1.2, partClearance: 1 };
+  const none = { ribs: [], joints: [], onSide: true, capped: [], posts: [], plateNotch: null, floorParts: [], cutouts: [], keepOut: [], bodies: [], minWeb: 1.2, partClearance: 1 };
   const panelHole = { xLow: 110, xHigh: 130, yLow: 0, yHigh: 20 };
 
   it("lets a boss under a separate top panel sit beneath that panel's cutouts", () => {

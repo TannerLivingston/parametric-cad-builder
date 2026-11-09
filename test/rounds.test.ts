@@ -122,7 +122,7 @@ describe("what the curves rule out", () => {
 describe("what a boss is allowed near, with rounds about", () => {
   const { profile } = plan(rounded({ frontBottom: 15, rearBottom: 15 }));
   const input = plateInput(plan(rounded({ frontBottom: 15, rearBottom: 15 })).config, profile);
-  const none = { ribs: [], jointX: null, onSide: true, capped: [], posts: [], plateNotch: null, floorParts: [], cutouts: [], keepOut: [], bodies: [], minWeb: 1.2, partClearance: 1 };
+  const none = { ribs: [], joints: [], onSide: true, capped: [], posts: [], plateNotch: null, floorParts: [], cutouts: [], keepOut: [], bodies: [], minWeb: 1.2, partClearance: 1 };
   const front = profile.plateFront + 0.25 + 3.4;
   const rear = profile.plateRear - 0.25 - 3.4;
 

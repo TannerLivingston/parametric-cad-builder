@@ -78,8 +78,12 @@ describe("a seam's lip, built", () => {
     expect(overlap(right, probe(t / 4, x + 1))).toBeLessThan(0.001);
     expect(overlap(left, probe((3 * t) / 4, x + 1))).toBeLessThan(0.001);
     expect(overlap(right, probe((3 * t) / 4, x + 1))).toBeGreaterThan(0.1);
-    // Past the lip and its gap, the right half has the whole skin again.
-    expect(overlap(right, probe(t / 4, x + lip + LIP_GAP + 0.1))).toBeGreaterThan(0.1);
+    // The lip's end slopes at 45 degrees, longer outside than in, and the step's start follows it.
+    expect(overlap(left, probe(t / 8, x + lip + 0.1))).toBeGreaterThan(0.05);
+    expect(overlap(right, probe(t / 8, x + lip + 0.1))).toBeLessThan(0.001);
+    expect(overlap(left, probe(t / 8, x + lip + t / 2 + 0.1))).toBeLessThan(0.001);
+    // Past it and its gap, the right half has the whole skin again.
+    expect(overlap(right, probe(t / 4, x + lip + t / 2 + 2 * LIP_GAP))).toBeGreaterThan(0.1);
     // The halves don't overlap anywhere.
     expect(overlap(left, right)).toBeLessThan(0.01);
   });

@@ -112,7 +112,7 @@ export function roundGapTo(round: Round, shape: Shape): number {
 
 export interface BossObstacles {
   ribs: { x: number; half: number; tabs?: { yLow: number; yHigh: number; zLow: number }[] }[];
-  jointX: number | null;
+  joints: number[]; // where the plate splits, left to right
   onSide: boolean; // the shell prints on its side
   capped: [number, number][]; // the y ranges with a separate top panel above them
   posts: { xLow: number; xHigh: number; yLow: number; yHigh: number; zLow?: number }[]; // room kept clear from zLow up
@@ -129,29 +129,57 @@ export interface BossObstacles {
   seamPaths?: SeamDriverPath[];
 }
 
-// Picks where the plate is split, if the bed can't take it whole. It stays off the shell's
-// seam, and each piece has to fit, which on a wide enclosure means coming closer to the seam.
-export function choosePlateJoint(input: PlatePlanInput, seamX: number | null, longestBed: number): number | null {
+// Picks where the plate is split, if the bed can't take it whole: as few joints as fit it, each
+// off one of the shell's seams so the plate ties its pieces together, and each piece has to fit,
+// which on a wide enclosure means coming closer to a seam. With no seams, it's split evenly.
+export function choosePlateJoints(input: PlatePlanInput, seamXs: number[], longestBed: number, minPiece: number): number[] {
   const plateWidth = input.width - 2 * (input.wall + input.clearance);
-  if (plateWidth <= longestBed) return null;
-  const middle = input.width / 2;
-  const candidates = [middle];
-  if (seamX !== null) {
-    candidates.length = 0;
-    for (let offset = PREFERRED_PLATE_JOINT_OFFSET; offset >= CLOSEST_PLATE_JOINT_OFFSET; offset -= PLATE_JOINT_OFFSET_STEP) {
-      candidates.push(seamX - offset, seamX + offset);
+  if (plateWidth <= longestBed) return [];
+  const seams = [...seamXs].sort((a, b) => a - b);
+  if (seams.length === 0) {
+    const pieces = Math.ceil(plateWidth / longestBed);
+    return Array.from({ length: pieces - 1 }, (_, i) => input.wall + input.clearance + (plateWidth * (i + 1)) / pieces);
+  }
+  const candidates = (seamX: number) => {
+    const list: number[] = [];
+    for (let offset = PREFERRED_PLATE_JOINT_OFFSET; offset >= CLOSEST_PLATE_JOINT_OFFSET; offset -= PLATE_JOINT_OFFSET_STEP) list.push(seamX - offset, seamX + offset);
+    return list;
+  };
+  const fits = (from: number, to: number) => to - from <= longestBed && to - from >= minPiece;
+  const end = input.width - input.wall;
+  // Left to right through the chosen seams, each joint fitting the piece it closes.
+  const search = (chosen: number[], from: number): number[] | null => {
+    if (chosen.length === 0) return fits(from, end) ? [] : null;
+    for (const x of candidates(chosen[0]!)) {
+      if (!fits(from, x)) continue;
+      const rest = search(chosen.slice(1), x);
+      if (rest) return [x, ...rest];
+    }
+    return null;
+  };
+  const subsets = (size: number, start = 0): number[][] =>
+    size === 0 ? [[]] : seams.slice(start).flatMap((seam, i) => subsets(size - 1, start + i + 1).map((rest) => [seam, ...rest]));
+  for (let size = 1; size <= seams.length; size++) {
+    for (const chosen of subsets(size)) {
+      const found = search(chosen, input.wall);
+      if (found) return found;
     }
   }
-  const fits = (x: number) => x - input.wall <= longestBed && input.width - input.wall - x <= longestBed;
-  return candidates.find(fits) ?? candidates[0]!;
+  // Nothing fits, so the closest to the seams it can be, and the validator says what's too big.
+  return seams.map((seam) => candidates(seam)[0]!);
 }
 
-function insidePlate(input: PlatePlanInput, x: number, y: number, jointX: number | null): boolean {
+// Whether two xs are on the same piece of a plate split at `joints`.
+export function samePlatePiece(joints: number[], a: number, b: number): boolean {
+  return joints.every((joint) => a < joint === b < joint);
+}
+
+function insidePlate(input: PlatePlanInput, x: number, y: number, joints: number[]): boolean {
   const inset = input.wall + input.clearance + SCREW_EDGE_MARGIN;
   const yLow = (input.plateFront ?? input.wall + input.clearance) + SCREW_EDGE_MARGIN;
   const yHigh = (input.plateRear ?? input.depth - input.wall - input.clearance) - SCREW_EDGE_MARGIN;
   if (x < inset || x > input.width - inset || y < yLow || y > yHigh) return false;
-  if (jointX !== null && Math.abs(x - jointX) < SCREW_EDGE_MARGIN) return false;
+  if (joints.some((joint) => Math.abs(x - joint) < SCREW_EDGE_MARGIN)) return false;
   if (input.cornerRadius <= 0) return true;
   // Rounded corners take a bite out of the plate.
   const radius = Math.max(input.cornerRadius - input.wall, 0.5) - input.clearance - SCREW_EDGE_MARGIN;
@@ -231,7 +259,7 @@ function bossProblemWith(input: PlatePlanInput, profile: Profile, obstacles: Bos
   const reachBetween = (low: number, high: number) => (obstacles.onSide ? bossReach(input, x, y, low, high) : r);
   const reach = reachBetween(-Infinity, Infinity);
   if (short && !touchesWall(input, x, y)) return "it would have nothing to hold it, so it has to touch a wall";
-  if (!insidePlate(input, x, y, obstacles.jointX)) return "it's too close to the edge of the plate";
+  if (!insidePlate(input, x, y, obstacles.joints)) return "it's too close to the edge of the plate";
   const notch = obstacles.plateNotch;
   if (notch && x > notch.xLow - SCREW_EDGE_MARGIN && x < notch.xHigh + SCREW_EDGE_MARGIN && y < notch.yHigh + SCREW_EDGE_MARGIN) return "it's too close to the edge of the plate";
   const ceiling = lowestHeight(profile.inner, y - r, y + r);
@@ -396,11 +424,11 @@ export const FOOT_RECESS = 0.8;
 
 // Why a rubber foot's recess can't go here, or null if it can. It's under the plate, so only
 // what's cut from below matters: screws' countersinks, the joint and the rail's notch.
-export function footProblem(input: PlatePlanInput, obstacles: Pick<BossObstacles, "jointX" | "plateNotch">, countersinks: Point2[], x: number, y: number, diameter: number): string | null {
+export function footProblem(input: PlatePlanInput, obstacles: Pick<BossObstacles, "joints" | "plateNotch">, countersinks: Point2[], x: number, y: number, diameter: number): string | null {
   const r = diameter / 2;
   const edges: Point2[] = [[x - r, y], [x + r, y], [x, y - r], [x, y + r]];
-  if (edges.some(([px, py]) => !insidePlate(input, px, py, null))) return "it's too close to the edge of the plate";
-  if (obstacles.jointX !== null && Math.abs(x - obstacles.jointX) < r + 1) return "it's on the plate's joint";
+  if (edges.some(([px, py]) => !insidePlate(input, px, py, []))) return "it's too close to the edge of the plate";
+  if (obstacles.joints.some((joint) => Math.abs(x - joint) < r + 1)) return "it's on the plate's joint";
   const notch = obstacles.plateNotch;
   if (notch && x + r > notch.xLow - 1 && x - r < notch.xHigh + 1 && y - r < notch.yHigh + 1) return "it's in the plate's notch for the rail";
   if (countersinks.some(([cx, cy]) => Math.hypot(cx - x, cy - y) < r + COUNTERSINK_DIAMETER / 2 + 1)) return "it's on a screw's countersink";
@@ -478,8 +506,8 @@ function edgeProblem(input: PlatePlanInput, obstacles: BossObstacles, shape: Sha
   const [hx, hy] = halfExtents(shape);
   const { cx: x, cy: y } = shape;
   const edges: Point2[] = shape.kind === "circle" ? [[x - hx, y], [x + hx, y], [x, y - hy], [x, y + hy]] : [[x - hx, y - hy], [x + hx, y - hy], [x - hx, y + hy], [x + hx, y + hy]];
-  if (edges.some(([px, py]) => !insidePlate(input, px, py, null))) return "it's too close to the edge of the plate";
-  if (obstacles.jointX !== null && Math.abs(x - obstacles.jointX) < hx + 1) return "it's on the plate's joint";
+  if (edges.some(([px, py]) => !insidePlate(input, px, py, []))) return "it's too close to the edge of the plate";
+  if (obstacles.joints.some((joint) => Math.abs(x - joint) < hx + 1)) return "it's on the plate's joint";
   const notch = obstacles.plateNotch;
   if (notch && x + hx > notch.xLow - 1 && x - hx < notch.xHigh + 1 && y - hy < notch.yHigh + 1) return "it's in the plate's notch for the rail";
   return null;
@@ -550,8 +578,7 @@ export function layoutPlateScrews(input: PlatePlanInput, profile: Profile, obsta
   // Screws only crowd each other on the same piece of the plate.
   const crowded = (x: number, y: number) =>
     screws.some(([sx, sy]) => {
-      const samePiece = obstacles.jointX === null || sx < obstacles.jointX === x < obstacles.jointX;
-      return samePiece && Math.hypot(sx - x, sy - y) < MIN_SCREW_SPACING;
+      return samePlatePiece(obstacles.joints, sx, x) && Math.hypot(sx - x, sy - y) < MIN_SCREW_SPACING;
     });
 
   const place = (x: number, y: number, along: "x" | "y", reach: number): boolean => {
@@ -580,10 +607,10 @@ export function layoutPlateScrews(input: PlatePlanInput, profile: Profile, obsta
     for (const end of [wall.from, wall.to]) place(...at(wall, end), wall.along, cornerReach);
   }
   // The plate's cut edges have nothing else holding them down.
-  if (obstacles.jointX !== null) {
+  for (const joint of obstacles.joints) {
     const clear = Math.max(SCREW_EDGE_MARGIN, BOSS_RADIUS) + 1;
     for (const wall of walls.slice(0, 2)) {
-      for (const side of [-1, 1]) place(...at(wall, obstacles.jointX + side * clear), "x", cornerReach);
+      for (const side of [-1, 1]) place(...at(wall, joint + side * clear), "x", cornerReach);
     }
   }
   for (const wall of walls) {

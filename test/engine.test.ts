@@ -117,7 +117,7 @@ describe("the bottom plate", () => {
 
   it("has pieces that meet along a joint away from the shell's seam", () => {
     const { buildPlan, plates } = built();
-    const { jointX } = buildPlan.plate!;
+    const [jointX] = buildPlan.plate!.joints;
     expect(Math.abs(jointX! - buildPlan.seams[0]!.x)).toBeGreaterThan(30);
     expect(overlap(plates[0]!.shape, plates[1]!.shape)).toBeLessThan(0.001);
   });

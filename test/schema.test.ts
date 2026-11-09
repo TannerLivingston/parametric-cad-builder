@@ -39,7 +39,6 @@ describe("config schema", () => {
     ["no surfaces", (c: any) => (c.enclosure.surfaces = []), "enclosure.surfaces"],
     ["an unknown material", (c: any) => (c.fabrication = { material: "ABS" }), "fabrication.material"],
     ["an unsupported schema version", (c: any) => (c.schemaVersion = 2), "schemaVersion"],
-    ["two seams", (c: any) => (c.seams = [{ x: 100 }, { x: 200 }]), "seams"],
     ["a non-quarter-turn rotation", (c: any) => (c.components = [{ id: "a", type: "ttp223", u: 50, v: 50, rotationDeg: 45 }]), "components[0]"],
     ["NaN", (c: any) => (c.enclosure.frontHeight = Number.NaN), "enclosure.frontHeight"],
   ])("rejects %s, and says where", (_name, mutate, path) => {

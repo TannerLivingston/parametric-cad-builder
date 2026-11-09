@@ -43,7 +43,7 @@ write back to the config, and editing the config text updates the view. Everythi
 - **The Print tab** lists each printed part with its colour and size, its downloads, the hardware to buy, the pins it uses,
   and the steps to put it together. Choosing a step shows just its parts in the view, separated, with the rest faded, and **Next
   step** walks through them in order.
-- **Separate parts** spreads the assembly apart: shell halves sideways, the top up, plates down, the rail forward.
+- **Separate parts** spreads the assembly apart: shell pieces sideways, the top up, plates down, the rail forward.
 - **Measure** gives the distance between two clicks on the model, pulling onto a corner when one's close. A selected part also
   shows the distance to its nearest neighbour.
 - **Clicking a problem** marks where it is in the view, as well as opening the tab that fixes it.
@@ -149,12 +149,15 @@ base down with no supports.
 **`keepOut`** lists boxes of room the contents need, each up to height `top`. Nothing else may enter one: not bosses, tabs,
 posts, boards or part bodies. It's also how the validator checks the contents fit under the surfaces past the opening.
 
-**`seams`** split the shell across its width, for a small bed, with bolted tabs and pins inside. A seam's `lip` steps the joint
-in the skin, to hide its line and line the halves up: for that many mm past the seam, the left half keeps the outer half of the
-wall, and of the top where there's no top panel, and the right half is cut back round it with 0.2 mm to spare. Each half prints
-with its seam facing up, so the lip stands straight up from one and the step is a ledge on the other, and neither needs support.
-It's 0 by default, a flat joint. It has to be at least 1 mm, stay inside the room kept clear round the seam, and leave the
-material's minimum web either side, so a 3 mm wall takes one in PETG but not in PETG-GF. **Lip past it** in the Shape tab sets it.
+**`seams`** split the shell across its width, for a small bed, with bolted tabs and pins inside. There can be as many as fit,
+in any order. Each needs a driver's 60 mm inside the piece to its left, clear of the seam before it, so seams are about 80 mm
+apart at least. The end pieces print on their outer wall, with their seam up, and a piece between two seams stands on its left
+end. A seam's `lip` steps the joint in the skin, to hide its line and line the pieces up: for that many mm past the seam, the
+left piece keeps the outer half of the wall, and of the top where there's no top panel, and the right piece is cut back round it
+with 0.2 mm to spare. The lip's end and the step's start slope at 45 degrees, so that neither hangs whichever way its piece
+prints. It's 0 by default, a flat joint. It has to be at least 1 mm, stay inside the room kept clear round the seam, and leave
+the material's minimum web either side, so a 3 mm wall takes one in PETG but not in PETG-GF. In the Shape tab, **Add a seam**
+puts one in the middle of the widest piece, and **Lip past it** sets each one's lip.
 
 ### Rounds on the side profile
 
@@ -396,7 +399,7 @@ seam's tabs, and bodies that hang that low. They're found on a 2 mm grid, shorte
 less, which warns that it's tight. A switch goes to a shift register board if there is one, an analog part to an analog board if
 there is one, and everything else to the microcontroller, from whichever of its ways out is nearest. Without a microcontroller on
 the floor there are no routes. A route's length runs down from the part, across, and up to the board, to the next 10 mm. Wires
-that cross a seam are marked so in the list, with no warning: leave them slack enough to open the halves.
+that cross a seam are marked so in the list, with no warning: leave them slack enough to open the pieces.
 
 **Add cable tie bridges along the wires** puts a bridge every 60 mm along each route, one for routes within 15 mm of each other,
 turned so its tie wraps them, and keeps those the plate has room for. Bridges don't turn routes aside, since wires run over them.
@@ -584,12 +587,13 @@ height, it keeps a flat underside, which needs a little support, as does one you
 
 A plate can also carry `countersunkHoles` and locating `pins` for whatever sits on it.
 
-If the plate doesn't fit the bed, it splits 60 mm from the shell's seam, so it ties the two halves together. Screws
-go at the corners and either side of that joint, then wherever a wall has a gap over `plate.screwSpacing`. They
+If the plate doesn't fit the bed, it splits as few times as it needs to, each joint 60 mm from one of the shell's seams, so it
+ties the pieces together, or closer where a piece wouldn't fit otherwise. With no seams it splits evenly. `plate.seamX` sets
+the joints instead, as one x or a list. Screws go at the corners and either side of each joint, then wherever a wall has a gap over `plate.screwSpacing`. They
 move out of the way of parts, so moving a part can change them and rebuild the shell. Replace them all by listing
 `plate.screws`, or set `plate.enabled` to false.
 
-With `"joint": "rib"`, the pieces also bolt to each other through an 11 mm rib along the joint, before anything goes on, so the
+With `"joint": "rib"`, the pieces also bolt to each other through an 11 mm rib along each joint, before anything goes on, so the
 plate is one rigid piece, as on the Desk Synth V2. The left piece has a boss for each bolt's heat-set insert, which goes in sideways,
 and the right piece takes an M3 x 10 flat-head screw in a countersink, driven from the right. A wedge-shaped tongue low on the
 right half fits a groove in the left, to keep the plate flush, and neither half needs support standing up. The rib runs between
@@ -666,13 +670,13 @@ The app works out the orientation from each part's real mesh, after every change
 part's surfaces face down, and scores them on what has to hang in the air, what starts in mid-air, whether there's enough on
 the bed, whether it fits, and how tall it is. Then it goes up through the chosen one a layer at a time to find anything with
 nothing under it. The checks come from the Desk Synth's own scripts, `oh.py`, `islands.py` and `support.py`, and they reach the same
-orientations as that build without being told: shell halves on their outer walls, top pieces face down, and plates flat.
+orientations as that build without being told: shell pieces on their outer walls or left ends, top pieces face down, and plates flat.
 
 Some of this is taken care of in the design, depending on how the part prints:
 
 | Part | Prints | Shaped for it |
 | --- | --- | --- |
-| Shell with a seam | On its outer wall, seam up | Bosses, tabs and rail blocks slope back to a wall at 45 degrees, holes have a teardrop point, and a fin carries a rear tab's web up to the skin |
+| Shell with a seam | On its outer wall, seam up, or between two seams on its left end | Bosses, tabs and rail blocks slope back to a wall at 45 degrees, holes have a teardrop point, and a fin carries a rear tab's web up to the skin |
 | Shell without a seam | Upright, base down | Plate bosses rise at 45 degrees from the wall they touch, and screw tabs have a 45 degree gusset under them, bored through, with the screw's head in a countersink |
 | Top piece | Face down, posts up | Its holes need no support at all |
 | Plate and rail | Flat, countersinks down | Nothing, though under an upright shell's bosses the plate has wedges, sloping up |
@@ -759,7 +763,7 @@ been printed yet, including this.
 
 ## Limits for now
 
-- One seam at most, straight across the width. The validator's rules handle more, but the schema caps it at one.
+- Seams run straight across the width.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
 - One panel thickness for all surfaces.

@@ -39,7 +39,9 @@ import {
   setRailScrew,
   setRound,
   setSeam,
-  setSeamLip,
+  addSeam,
+  removeSeam,
+  updateSeam,
   setTopPanel,
   shapeValues,
   updateEnclosure,
@@ -67,7 +69,6 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
   const labels: RawConfig[] = config.labels ?? [];
   const vents: RawConfig[] = config.vents ?? [];
   const cableTies: RawConfig[] = config.plate?.cableTies ?? [];
-  const seam = seams[0];
   // Ignores a field left empty, rather than turning it into 0.
   const number = (apply: (value: number) => RawConfig) => (text: string) => {
     const value = Number(text);
@@ -466,24 +467,32 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
           <NumberField label="Bed z" value={fabrication.buildVolume.z} onCommit={number((size) => setBed(config, "z", size))} />
         </div>
         <label className="check">
-          <input type="checkbox" checked={seam !== undefined} onChange={(event) => onChange(setSeam(config, event.target.checked ? e.width / 2 : null))} />
-          Split the shell in two, for a small bed
+          <input type="checkbox" checked={seams.length > 0} onChange={(event) => onChange(setSeam(config, event.target.checked ? e.width / 2 : null))} />
+          Split the shell into pieces, for a small bed
         </label>
-        {seam ? (
+        {seams.map((seam, index) => (
+          <div className="fields" key={index}>
+            <NumberField label={seams.length > 1 ? `Seam ${index + 1} at x` : "Split at x"} value={seam.x} onCommit={number((x) => updateSeam(config, index, { x }))} />
+            <NumberField label="Lip past it" value={seam.lip} onCommit={number((lip) => updateSeam(config, index, { lip }))} />
+            {seams.length > 1 ? <button className="danger" onClick={() => onChange(removeSeam(config, index))}>Remove seam</button> : null}
+          </div>
+        ))}
+        {seams.length ? (
           <>
-            <div className="fields">
-              <NumberField label="Split at x" value={seam.x} onCommit={number((x) => setSeam(config, x))} />
-              <NumberField label="Lip past it" value={seam.lip} onCommit={number((lip) => setSeamLip(config, lip))} />
-            </div>
-            <p className="hint">A lip hides the joint and lines the halves up: the left half's outer skin reaches this far over a step in the right half. 0 leaves it flat.</p>
+            <p className="hint">A lip hides the joint and lines the pieces up: the left piece's outer skin reaches this far over a step in the right one. 0 leaves it flat.</p>
+            <button onClick={() => onChange(addSeam(config))}>Add a seam</button>
           </>
         ) : null}
         <div className="fields">
           <TextField
             label="Split the plate at x"
             placeholder="Automatic"
-            value={plate.seamX === undefined ? "" : String(plate.seamX)}
-            onCommit={optional((x) => setPlateSplit(config, x ?? null))}
+            value={plate.seamX === undefined ? "" : [plate.seamX].flat().join(", ")}
+            onCommit={(text) => {
+              if (text.trim() === "") onChange(setPlateSplit(config, null));
+              const joints = parseSplits(text);
+              if (joints?.length) onChange(setPlateSplit(config, joints));
+            }}
           />
           <label>
             Where the plate splits

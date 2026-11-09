@@ -64,7 +64,7 @@ describe("rubber feet", () => {
       expect(placed.plate!.feet, file).toHaveLength(4);
     }
     const split = plan(feetAtCorners(deskSynth())).plate!;
-    expect(split.feet.filter((foot) => foot.x < split.jointX!)).toHaveLength(2);
+    expect(split.feet.filter((foot) => foot.x < split.joints[0]!)).toHaveLength(2);
   });
 
   it("are in the hardware and the steps, last", () => {

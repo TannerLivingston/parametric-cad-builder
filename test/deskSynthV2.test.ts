@@ -16,7 +16,7 @@ describe("the Desk Synth V2 example", () => {
     const result = validateConfig(config());
     expect(result.ok).toBe(true);
     const plan = (result as { plan: BuildPlan }).plan;
-    expect(plan.plate!.rib).toMatchObject({ x: 176 });
+    expect(plan.plate!.ribs).toMatchObject([{ x: 176 }]);
     expect(plan.creases[0]!.screws.length).toBeGreaterThanOrEqual(3);
     expect(plan.topPieces.find((p) => p.name === "Panel 1")!.tongue).not.toBeNull();
     expect(plan.config.components.find((c) => c.id === "mcu")!.type).toBe("rp2350-plus");

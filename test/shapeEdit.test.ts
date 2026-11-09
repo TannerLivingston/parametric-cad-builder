@@ -521,7 +521,7 @@ describe("fixings on the plate", () => {
     const moved = setPlateSplit(wide, 150);
     expect(moved.plate).toEqual({ seamX: 150 });
     const result = validateConfig(moved);
-    expect(result.ok && result.plan.plate?.jointX).toBe(150);
+    expect(result.ok && result.plan.plate?.joints).toEqual([150]);
     expect(setPlateSplit(moved, null).plate).toBeUndefined();
   });
 

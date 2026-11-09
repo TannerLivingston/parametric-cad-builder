@@ -106,7 +106,7 @@ export function faceDown(surface: Pick<Surface, "cos" | "sin">): Matrix {
 const isSame = (a: Matrix, b: Matrix) => a.every((value, i) => Math.abs(value - b[i]!) < 1e-9);
 
 // Whether the shell prints on its side, which its features are then shaped for. Halves print best
-// that way, because the open seam faces up. A shell in one piece would have its far wall as a wide
+// that way, because the open seam faces up. A piece between two seams stands on its left end. A shell in one piece would have its far wall as a wide
 // roof, so it stays upright, unless the mesh says otherwise.
 export function shellPrintsOnSide(seams: number): boolean {
   return seams > 0;
@@ -128,7 +128,8 @@ export function orientationsFor(plan: BuildPlan, part: PrintedPart): Orientation
 
 function plannedOrientation(plan: BuildPlan, part: PrintedPart, faces: Orientation[]): Matrix | null {
   if (part.kind === "top" || part.kind === "knob") return faces[0]?.matrix ?? null;
-  if (part.kind === "shell" && plan.shellOnSide) return AXES[part.index === 0 ? 2 : 3]!.matrix;
+  // The last piece has its right wall down, and the rest their left wall or end.
+  if (part.kind === "shell" && plan.shellOnSide) return AXES[part.index < plan.seams.length ? 2 : 3]!.matrix;
   return AXES[0]!.matrix;
 }
 

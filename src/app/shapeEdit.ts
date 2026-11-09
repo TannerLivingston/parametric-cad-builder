@@ -166,12 +166,34 @@ export function setSeam(config: RawConfig, x: number | null): RawConfig {
   return { ...rest, seams: [{ ...seams[0], x: tidy(x) }] };
 }
 
+// Another seam, in the middle of the widest piece.
+export function addSeam(config: RawConfig): RawConfig {
+  const { enclosure: e } = shapeValues(config);
+  const seams: RawConfig[] = config.seams ?? [];
+  const bounds = [0, ...seams.map((seam) => seam.x as number).sort((a, b) => a - b), e.width];
+  let widest = 0;
+  for (let i = 1; i < bounds.length - 1; i++) if (bounds[i + 1]! - bounds[i]! > bounds[widest + 1]! - bounds[widest]!) widest = i;
+  return { ...config, seams: [...seams, { x: tidy((bounds[widest]! + bounds[widest + 1]!) / 2) }] };
+}
+
 // A lip of 0 is the default, a flat joint, so it leaves the file.
-export function setSeamLip(config: RawConfig, lip: number): RawConfig {
-  const { seams = [] } = config;
-  if (!seams[0]) return config;
-  const { lip: _old, ...seam } = seams[0];
-  return { ...config, seams: [lip > 0 ? { ...seam, lip: tidy(lip) } : seam] };
+export function updateSeam(config: RawConfig, index: number, change: { x?: number; lip?: number }): RawConfig {
+  const seams: RawConfig[] = config.seams ?? [];
+  if (!seams[index]) return config;
+  const { lip: old = 0, ...seam }: RawConfig = { ...seams[index], ...(change.x !== undefined && { x: tidy(change.x) }) };
+  const lip = change.lip ?? old;
+  return { ...config, seams: seams.map((old, i) => (i === index ? (lip > 0 ? { ...seam, lip: tidy(lip) } : seam) : old)) };
+}
+
+export function setSeamLip(config: RawConfig, lip: number, index = 0): RawConfig {
+  return updateSeam(config, index, { lip });
+}
+
+// Taking away the last seam joins the shell again.
+export function removeSeam(config: RawConfig, index: number): RawConfig {
+  const { seams = [], ...rest } = config;
+  const left = seams.filter((_: RawConfig, i: number) => i !== index);
+  return left.length ? { ...rest, seams: left } : rest;
 }
 
 export function addWallHole(config: RawConfig): RawConfig {
@@ -393,9 +415,10 @@ function updatePlate(config: RawConfig, patch: RawConfig): RawConfig {
   return Object.keys(next).length ? { ...rest, plate: next } : rest;
 }
 
-// Null goes back to choosing it automatically.
-export function setPlateSplit(config: RawConfig, x: number | null): RawConfig {
-  return updatePlate(config, { seamX: x === null ? undefined : tidy(x) });
+// Null, or none, goes back to choosing them automatically. One joint is kept as a number.
+export function setPlateSplit(config: RawConfig, x: number | number[] | null): RawConfig {
+  const joints = [x ?? []].flat().map(tidy).sort((a, b) => a - b);
+  return updatePlate(config, { seamX: joints.length === 0 ? undefined : joints.length === 1 ? joints[0] : joints });
 }
 
 // Shift registers on a board of your own, for the pin count. None is the default, so it leaves the file.

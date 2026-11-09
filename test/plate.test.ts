@@ -18,15 +18,15 @@ const screwProblem = (config: any) => errors(config).find((e) => e.code === "PLA
 
 describe("planning the plate", () => {
   it("splits it only when the bed can't take it whole", () => {
-    expect(plan(deskSynth()).plate?.jointX).not.toBeNull();
+    expect(plan(deskSynth()).plate?.joints).toHaveLength(1);
     const big = blank({ fabrication: { buildVolume: { x: 400, y: 400, z: 256 } } });
-    expect(plan(big).plate?.jointX).toBeNull();
+    expect(plan(big).plate?.joints).toEqual([]);
     expect(plan(big).printedParts.filter((p) => p.kind === "plate").map((p) => p.name)).toEqual(["Plate"]);
   });
 
   it("keeps the joint away from the shell's seam, and every piece on the bed", () => {
     const { plate, seams, printedParts } = plan(deskSynth());
-    expect(Math.abs(plate!.jointX! - seams[0]!.x)).toBeGreaterThan(30);
+    expect(Math.abs(plate!.joints[0]! - seams[0]!.x)).toBeGreaterThan(30);
     for (const part of printedParts.filter((p) => p.kind === "plate")) {
       expect(Math.max(part.size[0], part.size[1])).toBeLessThanOrEqual(256);
     }
@@ -47,7 +47,7 @@ describe("planning the plate", () => {
 
   it.each([400, 450, 480])("comes closer to the seam when a %i mm plate needs it to fit", (width) => {
     const { plate, seams, printedParts } = plan(blank({ enclosure: { width, frontHeight: 40, surfaces: [{ id: "top", y: 100, z: 40 }] }, seams: [{ x: width / 2 }] }));
-    expect(Math.abs(plate!.jointX! - seams[0]!.x)).toBeGreaterThanOrEqual(15);
+    expect(Math.abs(plate!.joints[0]! - seams[0]!.x)).toBeGreaterThanOrEqual(15);
     for (const part of printedParts.filter((p) => p.kind === "plate")) expect(part.size[0]).toBeLessThanOrEqual(256);
   });
 
@@ -90,7 +90,7 @@ describe("placing screws automatically", () => {
 
   it("holds down both sides of the plate's joint", () => {
     const { plate } = plan(deskSynth());
-    const joint = plate!.jointX!;
+    const joint = plate!.joints[0]!;
     expect(plate!.screws.some(([x]) => x < joint && joint - x < 25)).toBe(true);
     expect(plate!.screws.some(([x]) => x > joint && x - joint < 25)).toBe(true);
   });
