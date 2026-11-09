@@ -305,6 +305,13 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
     if (group) group.ids.push(id);
     else groups.set(key, { ids: [id], part, change, placed: used.some((u) => u.id === id) });
   }
+  // As thick as the surface the part is on, taking the first if it's on several.
+  const thicknessFor = (ids: string[]) => {
+    const component = config.components.find((c) => ids.includes(c.type) && "u" in c);
+    const surfaces = config.enclosure.surfaces;
+    const surface = component && "u" in component ? (surfaces.find((s) => s.id === component.surface) ?? surfaces[0]) : undefined;
+    return surface?.thickness ?? panelThickness;
+  };
   const addPartRows = (placed: boolean) => {
     for (const { ids, part, change, placed: isPlaced } of groups.values()) {
       if (isPlaced !== placed) continue;
@@ -326,7 +333,7 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
           parts: ids,
           current: change,
           steps,
-          thickness: panelThickness,
+          thickness: thicknessFor(ids),
           depth: tall + grown + 2 * PART_PAD + FIT_PIP_BAND,
           pitch: span + grown + 2 * PART_PAD,
           part,
@@ -340,7 +347,7 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
           parts: ids,
           current: change,
           steps: [{ pips: 0, value: change, size: change }],
-          thickness: panelThickness,
+          thickness: thicknessFor(ids),
           depth: tall + 2 * PART_PAD + FIT_PIP_BAND,
           pitch: span + 2 * PART_PAD,
           part,
@@ -457,7 +464,8 @@ function planSeamJoint(plan: BuildPlan): [FitWallSection, FitWallSection] | null
   if (!seam) return null;
   const tab = seam.tabs.find((candidate) => !candidate.surface) ?? seam.tabs[0];
   if (!tab) return null;
-  const { wall, panelThickness } = plan.config.enclosure;
+  const { wall } = plan.config.enclosure;
+  const panelThickness = plan.profile.surfaces.find((surface) => surface.id === tab.surface)?.thickness ?? 0;
   const corners = tabSection(tab);
   const ys = corners.map(([y]) => y);
   const zs = corners.map(([, z]) => z);

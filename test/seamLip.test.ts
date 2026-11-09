@@ -41,8 +41,9 @@ describe("a seam's lip, planned", () => {
     expect(flat.seams[0]!.lip).toBe(0);
     // Longer than the pins that already stick out past the seam.
     const long = plan(withLip(8));
-    expect(long.printedParts[0]!.size[0]).toBeCloseTo(186 + 8);
-    expect(plan(withLip(2)).printedParts[0]!.size[0]).toBeCloseTo(flat.printedParts[0]!.size[0]);
+    // Its end slopes on by half the 3.25 mm wall.
+    expect(long.printedParts[0]!.size[0]).toBeCloseTo(186 + 8 + 3.25 / 2);
+    expect(plan(withLip(1.5)).printedParts[0]!.size[0]).toBeCloseTo(flat.printedParts[0]!.size[0]);
   });
 
   it("is refused too short, past the room kept round the seam, or on a skin too thin to halve", () => {

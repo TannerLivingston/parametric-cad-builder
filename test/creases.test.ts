@@ -46,8 +46,8 @@ describe("a crease joint", () => {
     const joint = buildPlan.creases[0]!;
     const [deck, panel] = buildPlan.profile.surfaces;
     const t = buildPlan.config.enclosure.panelThickness;
-    expect(undersideAt(deck!, t, joint.y)).toBeCloseTo(undersideAt(panel!, t, joint.y), 6);
-    expect(joint.z).toBeCloseTo(undersideAt(deck!, buildPlan.config.enclosure.panelThickness, joint.y) - CREASE_SCREW_DROP);
+    expect(undersideAt(deck!, joint.y, t)).toBeCloseTo(undersideAt(panel!, joint.y, t), 6);
+    expect(joint.z).toBeCloseTo(undersideAt(deck!, joint.y) - CREASE_SCREW_DROP);
     expect(joint.screws.length).toBeGreaterThanOrEqual(3);
     for (const x of joint.screws) expect(joint.spans.some(([a, b]) => x > a && x < b)).toBe(true);
   });

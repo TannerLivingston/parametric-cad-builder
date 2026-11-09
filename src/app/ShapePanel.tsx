@@ -39,6 +39,7 @@ import {
   setRailScrew,
   setRound,
   setSeam,
+  setSurfaceThickness,
   addSeam,
   removeSeam,
   updateSeam,
@@ -108,6 +109,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
                 <TextField label="Name" value={surface.id} onCommit={(name) => onChange(renameSurface(config, surface.id, name))} />
                 <NumberField label="Depth" value={surface.y} onCommit={number((y) => updateSurface(config, surface.id, { y }))} />
                 <NumberField label="Height" value={surface.z} onCommit={number((z) => updateSurface(config, surface.id, { z }))} />
+                <TextField label="Thickness" placeholder={String(e.panelThickness)} value={surface.thickness === undefined ? "" : String(surface.thickness)} onCommit={optional((thickness) => setSurfaceThickness(config, surface.id, thickness))} />
               </div>
               <label className="check">
                 <input

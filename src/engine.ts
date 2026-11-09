@@ -16,7 +16,7 @@ import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTa
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
-import { buildProfile, offsetChain, surfacePoint, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
+import { buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
 export const BOLT_DIAMETER = 3.4; // M3 clearance, as used in the Desk Synth shell
 const FRAME_OVERLAP = 0.5; // tabs reach this far into the walls, so the fuse is clean
@@ -105,7 +105,7 @@ interface OuterForms {
 function surfaceSlab(plan: BuildPlan, surface: Surface): Shape3D {
   const e = plan.config.enclosure;
   const { surfaces, depth } = plan.profile;
-  const inner = offsetChain(surfaces, e.panelThickness, -1, depth + 1)!;
+  const inner = offsetChain(surfaces, ownThickness, -1, depth + 1)!;
   const raise = 1;
   const y0 = surface.index === 0 ? -1 : surface.y0;
   const y1 = surface.index === surfaces.length - 1 ? depth + 1 : surface.y1;
@@ -798,7 +798,7 @@ function nearestTab(seam: PlannedSeam, [y, z]: Point2): SeamTab | null {
 
 // The outline of the space inside the shell, as if its wall and top were only so thick. Less than
 // nothing is outside it.
-function cavityOutline(plan: BuildPlan, wall: number, panel: number, x: number) {
+function cavityOutline(plan: BuildPlan, wall: number, panel: Inset, x: number) {
   const e = plan.config.enclosure;
   const profile = buildProfile(plan.profile.surfaces, { wall, panelThickness: panel, floorThickness: e.floorThickness, rounds: e.rounds });
   if (!profile) throw new Error("The seam's lip has no profile to follow.");
@@ -810,14 +810,16 @@ function cavityOutline(plan: BuildPlan, wall: number, panel: number, x: number) 
 
 // The outside of the shell's skin, from `inset` deep, between `from` and `to`. Past `to`, it narrows
 // to nothing at 45 degrees, from inside out, which is how a lip ends and how the step for it starts.
-function skinBand(plan: BuildPlan, inset: [number, number], from: number, to: number): Shape3D {
+// It's half of the wall and of each surface's own thickness, and `more` besides.
+function skinBand(plan: BuildPlan, more: number, from: number, to: number): Shape3D {
   const [depth, height] = [plan.profile.depth, plan.profile.maxHeight];
-  const [wall, panel] = inset;
+  const wall = plan.config.enclosure.wall / 2 + more;
+  const panel = (less: number): Inset => (surface) => surface.thickness / 2 + more - less;
   // On to just outside the shell, so the slope runs right through the skin.
-  const run = Math.max(wall, panel) + 0.5;
+  const run = Math.max(wall, ...plan.profile.surfaces.map((surface) => surface.thickness / 2 + more)) + 0.5;
   const span = makeBox([from, -2, -3], [to + run, depth + 2, height + 2]) as Shape3D;
-  const straight = cavityOutline(plan, wall, panel, from - 1).extrude(to - from + 1) as Shape3D;
-  const slope = cavityOutline(plan, wall, panel, to).loftWith(cavityOutline(plan, wall - run, panel - run, to + run), { ruled: true });
+  const straight = cavityOutline(plan, wall, panel(0), from - 1).extrude(to - from + 1) as Shape3D;
+  const slope = cavityOutline(plan, wall, panel(0), to).loftWith(cavityOutline(plan, wall - run, panel(run), to + run), { ruled: true });
   return span.cut(straight.fuse(slope));
 }
 
@@ -826,11 +828,10 @@ function skinBand(plan: BuildPlan, inset: [number, number], from: number, to: nu
 // at 45 degrees, parallel, so that whichever way a piece prints, nothing hangs: an end piece prints
 // with its seam up, and one between two seams stands on its left end, on the step.
 function lipAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
-  const e = plan.config.enclosure;
-  const lip = right.intersect(skinBand(plan, [e.wall / 2, e.panelThickness / 2], seam.x, seam.x + seam.lip));
+  const lip = right.intersect(skinBand(plan, 0, seam.x, seam.x + seam.lip));
   // The same gap square to the slope as along the lip.
   const stepEnd = seam.x + seam.lip + LIP_GAP * (Math.SQRT2 - 1);
-  const step = skinBand(plan, [e.wall / 2 + LIP_GAP, e.panelThickness / 2 + LIP_GAP], seam.x - 1, stepEnd);
+  const step = skinBand(plan, LIP_GAP, seam.x - 1, stepEnd);
   return [left.fuse(lip), right.cut(step)];
 }
 
@@ -1069,9 +1070,9 @@ function cutPart(blank: Shape3D, index: number, plan: BuildPlan): Shape3D {
   const cutouts = plan.cutouts.filter((c) => c.printedPart === index);
   const labels = plan.labels.filter((label) => label.printedPart === index);
   if (cutouts.length === 0 && labels.length === 0) return blank;
-  const thickness = plan.config.enclosure.panelThickness;
+  const surfaceOf = (id: string) => plan.profile.surfaces.find((s) => s.id === id)!;
   const tools = [
-    ...cutouts.map((c) => cutoutTool(c, plan.profile.surfaces.find((s) => s.id === c.surface)!, thickness, cutoutUp(plan, c))),
+    ...cutouts.map((c) => cutoutTool(c, surfaceOf(c.surface), surfaceOf(c.surface).thickness, cutoutUp(plan, c))),
     ...labels.flatMap((label) => labelTools(label, plan)),
   ];
   return blank.cut(compoundShapes(apart(tools)) as Shape3D);

@@ -35,8 +35,8 @@ describe("a shell in three pieces", () => {
     const shells = built.printedParts.filter((part) => part.kind === "shell");
     expect(shells.map((part) => part.name)).toEqual(["Shell 1", "Shell 2", "Shell 3"]);
     for (const part of shells) expect(part.size[0]).toBeLessThanOrEqual(256);
-    // The middle piece carries the second seam's pins and lip, the last nothing past its end.
-    expect(shells[1]!.size[0]).toBeCloseTo(373 - 186 + 3.5);
+    // The middle piece carries the second seam's lip, with its sloped end, and the last nothing past its end.
+    expect(shells[1]!.size[0]).toBeCloseTo(373 - 186 + 3 + 1.5);
     expect(shells[2]!.size[0]).toBeCloseTo(560 - 373);
   });
 

@@ -51,7 +51,7 @@ export function buildSceneModel(raw: RawConfig): SceneModel | null {
   if (!parsed.success) return null;
   const config: Config = parsed.data;
   const parts = partsOf(parsed.data as RawConfig);
-  const surfaces = buildSurfaces(config.enclosure.frontHeight, config.enclosure.surfaces);
+  const surfaces = buildSurfaces(config.enclosure.frontHeight, config.enclosure.surfaces, config.enclosure.panelThickness);
   const seamXs = config.seams.map((s) => s.x).sort((a, b) => a - b);
   const printedPartAt = (x: number) => {
     const index = seamXs.findIndex((seam) => x < seam);
@@ -267,7 +267,7 @@ export function issueSpot(issue: Pick<Issue, "path" | "where">, config: RawConfi
   const panel = indexed(/^topPanels\[(\d+)\]/);
   if (panel !== null) {
     const surface = model.surfaces.find((s) => s.id === config.topPanels?.[panel]?.surface);
-    return surface ? { min: [0, surface.y0, Math.min(surface.z0, surface.z1) - model.panelThickness], max: [model.width, surface.y1, Math.max(surface.z0, surface.z1)] } : null;
+    return surface ? { min: [0, surface.y0, Math.min(surface.z0, surface.z1) - surface.thickness], max: [model.width, surface.y1, Math.max(surface.z0, surface.z1)] } : null;
   }
   return null;
 }

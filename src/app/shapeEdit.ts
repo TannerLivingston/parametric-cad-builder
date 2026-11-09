@@ -93,6 +93,16 @@ export function updateSurface(config: RawConfig, id: string, patch: { y?: number
   return updateEnclosure(config, { surfaces });
 }
 
+// A surface's own thickness. None goes back to the enclosure's, and leaves the file.
+export function setSurfaceThickness(config: RawConfig, id: string, thickness: number | undefined): RawConfig {
+  const surfaces = (config.enclosure?.surfaces ?? []).map((s: RawConfig) => {
+    if (s.id !== id) return s;
+    const { thickness: _old, ...rest } = s;
+    return thickness === undefined ? rest : { ...rest, thickness: tidy(thickness) };
+  });
+  return updateEnclosure(config, { surfaces });
+}
+
 // Parts and top panels follow the new name. A name that's empty or taken changes nothing.
 export function renameSurface(config: RawConfig, id: string, name: string): RawConfig {
   const next = name.trim();

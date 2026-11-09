@@ -382,7 +382,6 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
 // What wires have to keep out of: every part's body, and what holds the enclosure together.
 function wiringObstacles(config: Config, profile: Profile, placed: Placed[], seams: PlannedSeam[], plate: PlatePlan | null, topScrews: TopScrew[], posts: PlacedPost[], blocks: HolderBlock[]): WireObstacle[] {
   const e = config.enclosure;
-  const t = e.panelThickness;
   const floor = e.floorThickness;
   const top = profile.maxHeight;
   const column = (name: string, x: number, y: number, r: number, z0: number, z1: number): WireObstacle => ({ name, xLow: x - r, xHigh: x + r, section: [[y - r, z0], [y + r, z0], [y + r, z1], [y - r, z1]] });
@@ -395,6 +394,7 @@ function wiringObstacles(config: Config, profile: Profile, placed: Placed[], sea
       const shape = item.shape("below");
       const [hu, hv] = halfExtents(shape);
       const point = (v: number, n: number) => surfacePoint(item.surface!, v, n);
+      const t = item.surface.thickness;
       const far = -t - item.part.below.depth;
       obstacles.push({ name, componentId: item.id, xLow: shape.cx - hu, xHigh: shape.cx + hu, section: [point(shape.cy - hv, -t), point(shape.cy + hv, -t), point(shape.cy + hv, far), point(shape.cy - hv, far)] });
     } else if (item.part.mount === "floor") {
@@ -451,7 +451,7 @@ function planWiring(config: Config, profile: Profile, placed: Placed[], seams: P
   for (const item of placed) {
     const component = config.components[item.index]!;
     const rotation = component.rotationDeg as Rotation;
-    if (item.part.mount === "panel" && item.surface && "u" in component) rooms.push(...panelWireRooms(item.id, item.part, item.surface, component.u, component.v, rotation, e.panelThickness));
+    if (item.part.mount === "panel" && item.surface && "u" in component) rooms.push(...panelWireRooms(item.id, item.part, item.surface, component.u, component.v, rotation, item.surface.thickness));
     else if (item.part.mount === "floor" && "x" in component) rooms.push(...floorWireRooms(item.id, item.part, component.x, component.y, rotation, floor));
     else if (item.part.mount === "wall" && "wall" in component) rooms.push(...wallWireRooms(item.id, item.part, component.wall, component.at, component.z, rotation, { wall: e.wall, width: e.width, depth: profile.depth }));
   }
@@ -621,7 +621,6 @@ function wallPartBox(item: Placed, config: Config) {
 
 function checkWallParts(placed: Placed[], config: Config, profile: Profile, seams: PlannedSeam[], blocks: HolderBlock[], issues: Issues) {
   const e = config.enclosure;
-  const t = e.panelThickness;
   const walled = placed.filter((item) => item.part.mount === "wall");
   walled.forEach((item, n) => {
     const fit = wallFit(item, config)!;
@@ -665,6 +664,7 @@ function checkWallParts(placed: Placed[], config: Config, profile: Profile, seam
         const below = other.shape("below");
         const [ou, ov] = halfExtents(below);
         const surface = other.surface;
+        const t = surface.thickness;
         const section = [surfacePoint(surface, below.cy - ov, -t), surfacePoint(surface, below.cy + ov, -t), surfacePoint(surface, below.cy + ov, -t - other.part.below.depth), surfacePoint(surface, below.cy - ov, -t - other.part.below.depth)];
         const mine: Point2[] = [[yLow, bottom], [yHigh, bottom], [yHigh, top], [yLow, top]];
         if (xLow < below.cx + ou + PART_CLEARANCE && xHigh > below.cx - ou - PART_CLEARANCE && polygonsOverlap(section, mine)) fail("BODIES_COLLIDE", `The body of "${item.id}" runs into "${other.id}" under the top.`, [other.id]);
@@ -800,7 +800,7 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
       const [yHigh, zHigh] = surfacePoint(surface, high.v, 0);
       const where: IssueBox = { min: [low.u, Math.min(yLow, yHigh), Math.min(zLow, zHigh) - 1], max: [high.u, Math.max(yLow, yHigh), Math.max(zLow, zHigh) + 1] };
       const problem = (message: string) => fail(message, where);
-      if (e.panelThickness - label.depth < limits.minSkin) return problem(`is ${mm(label.depth)} deep, leaving under ${mm(limits.minSkin)} of the ${mm(e.panelThickness)} panel behind it.`);
+      if (surface.thickness - label.depth < limits.minSkin) return problem(`is ${mm(label.depth)} deep, leaving under ${mm(limits.minSkin)} of the ${mm(surface.thickness)} panel behind it.`);
       const { margin, vMin, vMax } = usableSurface(surface, config, profile, limits.minWeb);
       if (low.u < margin || high.u > e.width - margin || low.v < vMin || high.v > vMax || offRoundedCorner(surface, config, profile, limits.minWeb, low, high)) {
         return problem(`takes up u ${mm(low.u)} to ${mm(high.u)}, v ${mm(low.v)} to ${mm(high.v)}, too close to or past the edge. The usable part of "${surface.id}" is u ${mm(margin)} to ${mm(e.width - margin)}, v ${mm(vMin)} to ${mm(vMax)}.`);
@@ -954,7 +954,7 @@ function checkHolders(blocks: HolderBlock[], config: Config, profile: Profile, s
       const shape = item.shape("below");
       const [hu, hv] = halfExtents(shape);
       if (block.xLow >= shape.cx + hu + PART_CLEARANCE || block.xHigh <= shape.cx - hu - PART_CLEARANCE) continue;
-      const far = -e.panelThickness - item.part.below.depth;
+      const far = -item.surface.thickness - item.part.below.depth;
       const section = [surfacePoint(item.surface, shape.cy - hv, 0), surfacePoint(item.surface, shape.cy + hv, 0), surfacePoint(item.surface, shape.cy + hv, far), surfacePoint(item.surface, shape.cy - hv, far)];
       if (polygonsOverlap(section, column)) fail(`${name} runs into the body of "${item.id}".`);
     }
@@ -1041,9 +1041,9 @@ function planTopPieces(config: Config, profile: Profile, firstIndex: number, lim
     const usable = ranges.filter(([from, to]) => to - from > 0.01);
     // Only pieces that meet get a tongue, and not those either side of the opening.
     const meets = (n: number) => panel.joint === "tongue" && n >= 0 && n < usable.length - 1 && Math.abs(usable[n]![1] - usable[n + 1]![0]) < 0.01;
-    const root = Math.min(TONGUE_ROOT, e.panelThickness - 2 * limits.minSkin - 2 * TONGUE_FIT);
+    const root = Math.min(TONGUE_ROOT, surface.thickness - 2 * limits.minSkin - 2 * TONGUE_FIT);
     if (usable.some((_, n) => meets(n)) && root < MIN_TONGUE_ROOT) {
-      issues.error("TOP_PANEL_INVALID", `A ${mm(e.panelThickness)} panel is too thin for a tongue where ${panel.surface} splits, which needs ${mm(2 * limits.minSkin + 2 * TONGUE_FIT + MIN_TONGUE_ROOT)}. Make the panel thicker, or set its joint to "flat".`, `topPanels[${i}].joint`);
+      issues.error("TOP_PANEL_INVALID", `A ${mm(surface.thickness)} panel is too thin for a tongue where ${panel.surface} splits, which needs ${mm(2 * limits.minSkin + 2 * TONGUE_FIT + MIN_TONGUE_ROOT)}. Make the panel thicker, or set its joint to "flat".`, `topPanels[${i}].joint`);
     }
     const vFrom = TONGUE_INSET;
     const vTo = surface.length - TONGUE_INSET - (surface.index === profile.surfaces.length - 1 ? profile.rearTangent : 0);
@@ -1066,7 +1066,7 @@ function topPrintedPart(piece: TopPiece, config: Config, profile: Profile): Prin
   const surface = profile.surfaces.find((s) => s.id === piece.surface)!;
   const color = topPanelFor(config, piece.surface)!.color;
   // A tongue sticks out past its piece.
-  const size: [number, number, number] = [piece.xMax - piece.xMin + (piece.tongue?.root ?? 0), surface.length, Math.abs(surface.z1 - surface.z0) + config.enclosure.panelThickness];
+  const size: [number, number, number] = [piece.xMax - piece.xMin + (piece.tongue?.root ?? 0), surface.length, Math.abs(surface.z1 - surface.z0) + surface.thickness];
   return { index: piece.printedPart, kind: "top", name: piece.name, color, xMin: piece.xMin, xMax: piece.xMax, size };
 }
 
@@ -1089,7 +1089,6 @@ function planRailPart(config: Config, index: number, issues: Issues): PrintedPar
 function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], seams: PlannedSeam[], placed: Placed[], cutouts: PlacedShape[], limits: Limits, fixtures: Fixtures, fasteners: PlannedFasteners, issues: Issues): TopScrew[] {
   if (pieces.length === 0) return [];
   const e = config.enclosure;
-  const t = e.panelThickness;
   const r = TOP_POST_DIAMETER / 2;
   const near = e.wall + r + 0.3; // a post can't touch the wall, because it's on a separate part
   const rearWallY = profile.depth - e.wall;
@@ -1100,6 +1099,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
       const shape = p.shape("below");
       const [hu, hv] = halfExtents(shape);
       const surface = p.surface;
+      const t = surface.thickness;
       const far = -t - p.part.below.depth;
       return [{ xLow: shape.cx - hu, xHigh: shape.cx + hu, section: [surfacePoint(surface, shape.cy - hv, -t), surfacePoint(surface, shape.cy + hv, -t), surfacePoint(surface, shape.cy + hv, far), surfacePoint(surface, shape.cy - hv, far)] }];
     }),
@@ -1276,7 +1276,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
       const gaps = sorted.slice(1).map((value, i) => value - sorted[i]!);
       const inside = Math.max(0, ...gaps);
       const end = Math.max(sorted[0]! - from, to - sorted.at(-1)!);
-      const pieceBox: IssueBox = { min: [piece.xMin, Math.max(surface.y0, e.wall), Math.min(surface.z0, surface.z1) - t], max: [piece.xMax, surface.y1, Math.max(surface.z0, surface.z1)] };
+      const pieceBox: IssueBox = { min: [piece.xMin, Math.max(surface.y0, e.wall), Math.min(surface.z0, surface.z1) - surface.thickness], max: [piece.xMax, surface.y1, Math.max(surface.z0, surface.z1)] };
       if (inside > TOP_SCREW_GAP) {
         issues.warn("FASTENER_GAP", `${piece.name} has ${mm(inside)} between screws ${what}, so it may lift or flex there. Add a screw if there's room, or add a split.`, `topPanels[${panelIndex}]`, [], pieceBox);
       } else if (end > TOP_SCREW_FREE_END) {
@@ -1376,6 +1376,11 @@ function checkWalls(config: Config, limits: Limits, issues: Issues) {
   if (e.panelThickness < limits.minWall) {
     issues.error("WALL_TOO_THIN", `Panel is ${mm(e.panelThickness)}, but ${material} needs at least ${mm(limits.minWall)}.`, "enclosure.panelThickness");
   }
+  e.surfaces.forEach((surface, i) => {
+    if (surface.thickness !== undefined && surface.thickness < limits.minWall) {
+      issues.error("WALL_TOO_THIN", `The ${surface.id} surface is ${mm(surface.thickness)} thick, but ${material} needs at least ${mm(limits.minWall)}.`, `enclosure.surfaces[${i}].thickness`);
+    }
+  });
 }
 
 function checkRounds(config: Config, surfaces: Surface[], issues: Issues) {
@@ -1419,7 +1424,7 @@ function planProfile(config: Config, issues: Issues): Profile | null {
   });
   if (!sound) return null;
 
-  const surfaces = buildSurfaces(e.frontHeight, e.surfaces);
+  const surfaces = buildSurfaces(e.frontHeight, e.surfaces, e.panelThickness);
   surfaces.forEach((s, i) => {
     const path = `enclosure.surfaces[${i}]`;
     if (Math.abs(degrees(s.angle)) > MAX_SURFACE_ANGLE) {
@@ -1441,9 +1446,9 @@ function planProfile(config: Config, issues: Issues): Profile | null {
   }
   checkRounds(config, surfaces, issues);
   if (issues.hasError("GEOMETRY_IMPOSSIBLE")) return null;
-  const profile = buildProfile(surfaces, e);
+  const profile = buildProfile(surfaces, { wall: e.wall, floorThickness: e.floorThickness, rounds: e.rounds });
   if (!profile) {
-    issues.error("GEOMETRY_IMPOSSIBLE", `A surface is too short for a ${mm(e.panelThickness)} panel and ${mm(e.wall)} walls, so the inside has no shape. Lengthen it or merge it with a neighbour.`, "enclosure.surfaces");
+    issues.error("GEOMETRY_IMPOSSIBLE", `A surface is too short for its panel's thickness and ${mm(e.wall)} walls, so the inside has no shape. Lengthen it or merge it with a neighbour.`, "enclosure.surfaces");
     return null;
   }
   const lowest = Math.min(...profile.inner.map(([, z]) => z));
@@ -1493,7 +1498,6 @@ function tabHoldsOnToNothing(config: Config, profile: Profile) {
 // Whether a part stops a tab going here. Tabs slope out past the rib's own thickness.
 function tabBlockers(seam: Config["seams"][number], placed: Placed[], cutouts: PlacedShape[], config: Config, minWeb: number) {
   const reachX = seam.ribHalfThickness + seam.ribWidth;
-  const t = config.enclosure.panelThickness;
   const floorTop = config.enclosure.floorThickness;
   const opening = config.opening;
   return (tab: SeamTab) => {
@@ -1519,6 +1523,7 @@ function tabBlockers(seam: Config["seams"][number], placed: Placed[], cutouts: P
         if (polygonsOverlap(quad, box)) return true;
       } else if (item.part.mount === "panel" && item.surface && item.part.below.depth > 0) {
         const surface = item.surface;
+        const t = surface.thickness;
         const far = -t - item.part.below.depth;
         const body = [surfacePoint(surface, shape.cy - hv, -t), surfacePoint(surface, shape.cy + hv, -t), surfacePoint(surface, shape.cy + hv, far), surfacePoint(surface, shape.cy - hv, far)];
         if (polygonsOverlap(quad, body)) return true;
@@ -1565,7 +1570,6 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       profile.inner,
       {
         wall: e.wall,
-        panelThickness: e.panelThickness,
         ribWidth: seam.ribWidth,
         ribBase: config.plate.enabled ? e.floorThickness : 0,
         lower: Object.values(e.rounds).some((radius) => radius > 0) ? profile.lower : undefined,
@@ -1592,7 +1596,7 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       if (seam.lip < MIN_LIP) issues.error("SEAM_INVALID", `A lip of ${mm(seam.lip)} is too short to line the halves up. Make it at least ${mm(MIN_LIP)}, or 0 for none.`, `${path}.lip`);
       if (seam.lip > reach) issues.error("SEAM_INVALID", `A lip of ${mm(seam.lip)} reaches past the room kept clear round the seam, ${mm(reach)} either side. Make it shorter.`, `${path}.lip`);
       // The lip is the outer half of the skin, and what it fits over is the inner half less the gap.
-      const thinnest = Math.min(e.wall, ...(config.topPanels.length < profile.surfaces.length ? [e.panelThickness] : []));
+      const thinnest = Math.min(e.wall, ...profile.surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness));
       if (thinnest / 2 - LIP_GAP < minWeb) {
         issues.error("SEAM_INVALID", `A lip takes half of the ${mm(thinnest)} skin, leaving ${mm(thinnest / 2 - LIP_GAP)} for the step it fits over, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(2 * (minWeb + LIP_GAP))}, or leave the joint flat.`, `${path}.lip`);
       }
@@ -1625,7 +1629,10 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
     const xMax = bounds[index + 1]!;
     // The part left of a seam carries the alignment pins, and any lip, which stick out past it.
     const seam = [...config.seams].sort((a, b) => a.x - b.x)[index];
-    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, seam.lip) : 0;
+    // A lip's end slopes on past its length, by half of the thickest skin it's in.
+    const skins = [e.wall, ...profile.surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness)];
+    const lip = seam && seam.lip > 0 ? seam.lip + Math.max(...skins) / 2 : 0;
+    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip) : 0;
     const size: [number, number, number] = [xMax - xMin + pins, profile.depth, profile.maxHeight];
     const name = bounds.length > 2 ? `Shell ${index + 1}` : "Shell";
     parts.push({ index, kind: "shell", name, color: e.color, xMin, xMax, size });
@@ -1937,7 +1944,6 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     if (i === 0) return;
     if (x - all[i - 1]! < MIN_PART_WIDTH) issues.error("PLATE_INVALID", `A plate joint at x = ${mm(i === all.length - 1 ? all[i - 1]! : x)} would leave a piece narrower than ${mm(MIN_PART_WIDTH)}.`, "plate.seamX");
   });
-  const t = e.panelThickness;
   const obstacles: BossObstacles = {
     ribs: seams.map((seam) => ({
       x: seam.x,
@@ -1971,6 +1977,7 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
       const [hu, hv] = halfExtents(shape);
       const surface = p.surface;
       const point = (v: number, n: number) => surfacePoint(surface, v, n);
+      const t = surface.thickness;
       const far = -t - p.part.below.depth;
       const ends = [point(shape.cy, -t)[0], point(shape.cy, far)[0]];
       return [{
@@ -2124,7 +2131,6 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
 // runs wherever nothing hangs in its way, and the screws spread along it.
 function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], placed: Placed[], posts: PlacedPost[], topScrews: TopScrew[], cutouts: PlacedShape[], fixtures: Fixtures, plate: PlatePlan | null, limits: Limits, issues: Issues): CreaseJoint[] {
   const e = config.enclosure;
-  const t = e.panelThickness;
   const joints: CreaseJoint[] = [];
   config.topPanels.forEach((panel, panelIndex) => {
     if (panel.crease !== "screws") return;
@@ -2134,7 +2140,7 @@ function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], 
       issues.error("TOP_PANEL_INVALID", `The ${panel.surface} panel's crease can only be screwed to a top panel on the surface behind it.`, `topPanels[${panelIndex}].crease`);
       return;
     }
-    const g = creaseGeometry(front, rear, t);
+    const g = creaseGeometry(front, rear);
     // One box in the side view takes in the flange, the bosses, and the screws' way through them.
     const zone: Point2[] = [[g.y - CREASE_FLANGE_THICKNESS, g.flangeBottom], [g.y + CREASE_BOSS_LENGTH, g.flangeBottom], [g.y + CREASE_BOSS_LENGTH, g.bossTop], [g.y - CREASE_FLANGE_THICKNESS, g.bossTop]];
     const [zoneLow, zoneHigh] = [g.y - CREASE_FLANGE_THICKNESS, g.y + CREASE_BOSS_LENGTH];
@@ -2146,7 +2152,7 @@ function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], 
       if (item.part.mount === "panel" && item.surface && item.part.below.depth > 0) {
         const shape = item.shape("below");
         const [hu, hv] = halfExtents(shape);
-        if (polygonsOverlap(section(item.surface, shape.cy - hv, shape.cy + hv, -t, -t - item.part.below.depth), zone)) block(shape.cx - hu, shape.cx + hu);
+        if (polygonsOverlap(section(item.surface, shape.cy - hv, shape.cy + hv, -item.surface.thickness, -item.surface.thickness - item.part.below.depth), zone)) block(shape.cx - hu, shape.cx + hu);
       } else if (item.part.mount === "floor" && e.floorThickness + item.part.height > g.flangeBottom) {
         const shape = item.shape("below");
         const [hx, hy] = halfExtents(shape);
@@ -2156,7 +2162,7 @@ function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], 
     for (const post of posts) {
       const surface = profile.surfaces.find((s) => s.id === post.surface)!;
       const r = post.diameter / 2;
-      if (polygonsOverlap(section(surface, post.v - r, post.v + r, -t, -post.reach), zone)) block(post.u - r, post.u + r);
+      if (polygonsOverlap(section(surface, post.v - r, post.v + r, -surface.thickness, -post.reach), zone)) block(post.u - r, post.u + r);
     }
     for (const screw of topScrews) {
       const r = TOP_POST_DIAMETER / 2;
@@ -2450,7 +2456,7 @@ function planKnobs(config: Config, placed: Placed[], first: number, issues: Issu
     const rotation = component.rotationDeg as Rotation;
     shafts.forEach((shaft, n) => {
       const knob = component.knob!;
-      const fits = knobFit(knob, shaft, config.enclosure.panelThickness);
+      const fits = knobFit(knob, shaft, item.surface?.thickness ?? config.enclosure.panelThickness);
       const name = shafts.length > 1 ? `Knob ${n + 1} for ${item.id}` : `Knob for ${item.id}`;
       if (typeof fits === "string") {
         issues.error("KNOB_INVALID", `The knob for "${item.id}" ${fits}.`, path, [item.id]);
@@ -2533,7 +2539,7 @@ function checkPartSuitability(placed: Placed[], config: Config, limits: Limits, 
       const users = placed.filter((p) => config.components[p.index]!.type === type).map((p) => p.id);
       issues.warn("UNVERIFIED_PART", `"${type}" dimensions are ${item.part.source === "datasheet" ? "from a datasheet" : "estimates"}, not measured. Check the real part before printing, or print a fit test.`, path, users);
     }
-    if (item.part.mount === "panel") checkPanelPart(item.part, item.id, path, thickness, limits, issues);
+    if (item.part.mount === "panel") checkPanelPart(item.part, item.id, path, item.surface?.thickness ?? thickness, limits, issues);
   }
 }
 
@@ -2627,17 +2633,17 @@ function creaseMargin(a: Surface, b: Surface, thickness: number, minWeb: number)
 // How far a surface can be used, in u and v.
 function usableSurface(surface: Surface, config: Config, profile: Profile, minWeb: number) {
   const e = config.enclosure;
-  const t = e.panelThickness;
+  const t = surface.thickness;
   const margin = Math.max(e.wall, e.topEdgeFillet) + minWeb;
   // A slope makes the top and underside of a surface reach different ys, so an
   // end wall limits whichever of the two reaches furthest.
   const previous = profile.surfaces[surface.index - 1];
   const next = profile.surfaces[surface.index + 1];
   const vMin = previous
-    ? creaseMargin(previous, surface, t, minWeb)
+    ? creaseMargin(previous, surface, Math.max(t, previous.thickness), minWeb)
     : (margin - Math.min(0, t * surface.sin)) / surface.cos;
   const vMax = next
-    ? surface.length - creaseMargin(surface, next, t, minWeb)
+    ? surface.length - creaseMargin(surface, next, Math.max(t, next.thickness), minWeb)
     : (profile.depth - margin - Math.max(0, t * surface.sin) - surface.y0) / surface.cos - profile.rearTangent;
   return { margin, vMin, vMax };
 }
@@ -2718,12 +2724,12 @@ function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: 
   const e = config.enclosure;
   const panel = placed.filter((p): p is PanelPlaced => p.part.mount === "panel" && p.surface !== null);
   const floor = placed.filter((p): p is FloorPlaced => p.part.mount === "floor");
-  const t = e.panelThickness;
 
   // A part's body as a polygon in the world's YZ plane. It tilts with its surface.
   const section = (item: PanelPlaced, which: "above" | "below"): Point2[] => {
     const shape = item.shape(which);
     const [, hv] = halfExtents(shape);
+    const t = item.surface.thickness;
     const near = which === "below" ? -t - SKIMMING : SKIMMING;
     const far = which === "below" ? -t - item.part.below.depth : item.part.above.height;
     const point = (v: number, n: number) => surfacePoint(item.surface, v, n);

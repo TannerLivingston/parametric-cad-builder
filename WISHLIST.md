@@ -9,7 +9,7 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Shape
 
-- [ ] Curved outlines, and more than one panel thickness.
+- [ ] Curved outlines.
 - [ ] Stepped seams.
 
 ## Set aside
@@ -19,6 +19,8 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Done
 
+- [x] **A thickness of its own for each surface,** for its top panel or the shell's skin under it, with everything on it checked
+  against that: cutouts, labels, tongues, creases, the seam's lip, knobs and the fit test.
 - [x] **More than one seam,** for a shell wider than two beds. A piece between two seams stands on its left end to print, so a
   lip's end and its step slope at 45 degrees, and nothing needs support. The plate splits as few times as it needs, each joint
   off a seam, or where it's told, with a rib along each if asked. A round hole in a shell's own top, printed on its side, has

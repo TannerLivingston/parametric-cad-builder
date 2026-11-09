@@ -745,7 +745,7 @@ export class Scene3D {
         ),
       );
       if (this.internals) {
-        const t = this.model!.panelThickness;
+        const t = surface.thickness;
         if (component.above!.height > 0) group.add(this.bodyMesh(component.above!, 0, component.above!.height, color));
         if (component.below!.depth > 0) group.add(this.bodyMesh(component.below!, -t - component.below!.depth, -t, color));
       }

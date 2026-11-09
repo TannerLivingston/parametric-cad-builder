@@ -32,7 +32,7 @@ export async function buildProblems(buildPlan: BuildPlan, enclosure: Enclosure =
     if (!isValidSolid(part.shape)) problems.push(`${label}: invalid solid`);
     const mesh = analyseBinarySTL(await stlBytes(part.shape));
     if (!mesh.watertight) problems.push(`${label}: mesh not watertight`);
-    const expected = buildPlan.cutouts.filter((c) => c.printedPart === part.index).reduce((sum, c) => sum + cutoutVolume(c, thickness, cutoutUp(buildPlan, c)), 0);
+    const expected = buildPlan.cutouts.filter((c) => c.printedPart === part.index).reduce((sum, c) => sum + cutoutVolume(c, buildPlan.profile.surfaces.find((s) => s.id === c.surface)!.thickness, cutoutUp(buildPlan, c)), 0);
     const removed = measureVolume(part.blank) - measureVolume(part.cut);
     if (expected > 0 && Math.abs(removed - expected) / expected > 0.01) {
       problems.push(`${label}: removed ${removed.toFixed(1)} mm3, expected ${expected.toFixed(1)}`);

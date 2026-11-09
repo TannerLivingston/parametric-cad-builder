@@ -25,28 +25,28 @@ export interface CreaseJoint {
 }
 
 // The height of a surface's underside at a world y.
-export function undersideAt(surface: Surface, thickness: number, y: number): number {
+export function undersideAt(surface: Surface, y: number, thickness = surface.thickness): number {
   const v = (y - surface.y0 - thickness * surface.sin) / surface.cos;
   return surface.z0 + v * surface.sin - thickness * surface.cos;
 }
 
 // Where the undersides of two neighbouring surfaces meet.
-function undersidesMeet(front: Surface, rear: Surface, thickness: number): Point2 {
+function undersidesMeet(front: Surface, rear: Surface): Point2 {
   const slope = (s: Surface) => s.sin / s.cos;
-  const at = (s: Surface, y: number) => undersideAt(s, thickness, y);
+  const at = undersideAt;
   const y = rear.y0 + (at(front, rear.y0) - at(rear, rear.y0)) / (slope(rear) - slope(front));
   return [y, at(front, y)];
 }
 
 // Where the flange and bosses go, from the two surfaces alone.
-export function creaseGeometry(front: Surface, rear: Surface, thickness: number) {
-  const meet = Math.abs(front.sin / front.cos - rear.sin / rear.cos) < 1e-9 ? front.y1 : undersidesMeet(front, rear, thickness)[0];
+export function creaseGeometry(front: Surface, rear: Surface) {
+  const meet = Math.abs(front.sin / front.cos - rear.sin / rear.cos) < 1e-9 ? front.y1 : undersidesMeet(front, rear)[0];
   // Where the undersides meet, as on the V2, so that the bosses start right under the rear piece's
   // edge. Any further forward and each would hang a ledge under the front piece, facing down as the
   // rear piece prints face down. The flange and bosses are each trimmed to their own piece.
   const y = meet;
-  const frontAt = (at: number) => undersideAt(front, thickness, at);
-  const rearAt = (at: number) => undersideAt(rear, thickness, at);
+  const frontAt = (at: number) => undersideAt(front, at);
+  const rearAt = (at: number) => undersideAt(rear, at);
   const top = frontAt(y);
   const z = top - CREASE_SCREW_DROP;
   return {

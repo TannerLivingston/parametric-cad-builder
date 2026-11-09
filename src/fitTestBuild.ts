@@ -34,7 +34,7 @@ function pips(count: number, x: number, y: number, top: number, diameter: number
 // A surface lying face down on the bed, with v running towards the front, so the real tools for
 // cutouts and posts make what a top panel prints as.
 function faceDown(y: number): Surface {
-  return { id: "fit", index: 0, y0: y, z0: 0, y1: y, z1: 0, length: 0, angle: 0, cos: -1, sin: 0 };
+  return { id: "fit", index: 0, y0: y, z0: 0, y1: y, z1: 0, thickness: 0, length: 0, angle: 0, cos: -1, sin: 0 };
 }
 
 const cellX = (row: FitRow, i: number) => FIT_MARGIN + row.pitch * (i + 0.5);

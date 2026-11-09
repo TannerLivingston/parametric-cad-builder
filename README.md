@@ -90,7 +90,10 @@ The config is the design. Lengths are in millimetres.
 ```
 
 **Surfaces** describe the side profile. Each one runs from the end of the previous one, or the top of the
-front wall, to its `y` and `z`. The last `y` sets the depth. One tilted panel is simply a list of one.
+front wall, to its `y` and `z`. The last `y` sets the depth. One tilted panel is simply a list of one. A surface is
+`enclosure.panelThickness` thick unless it has a `thickness` of its own, which then goes for everything on it: its top panel or
+the shell's skin under it, how deep its holes and labels can go, the knobs on its shafts, and its row in the fit test. **Thickness**
+on each surface in the Shape tab sets it, and empty goes back to the enclosure's.
 
 **Parts on a surface** use `u`, from the left edge, and `v`, from that surface's front edge along its slope.
 `surface` can be left out if there's only one. **Floor parts** use `x` and `y`.
@@ -767,7 +770,6 @@ been printed yet, including this.
 - Seams run straight across the width.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
-- One panel thickness for all surfaces.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.
 - Parts can block every tab under the surfaces, leaving a seam bolted only at the front and rear. That gives a
   `SEAM_UNBRACED` warning.

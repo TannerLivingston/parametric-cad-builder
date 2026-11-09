@@ -11,6 +11,7 @@ export interface Surface {
   z0: number;
   y1: number;
   z1: number;
+  thickness: number; // of its panel, or of the shell's skin under it
   length: number;
   angle: number;
   cos: number;
@@ -49,9 +50,15 @@ export interface SurfaceInput {
   id: string;
   y: number;
   z: number;
+  thickness?: number | undefined;
 }
 
-export function buildSurfaces(frontHeight: number, inputs: SurfaceInput[]): Surface[] {
+// How far in from each surface: the same for all, or a surface's own.
+export type Inset = number | ((surface: Surface) => number);
+const insetOf = (inset: Inset, surface: Surface) => (typeof inset === "number" ? inset : inset(surface));
+export const ownThickness = (surface: Surface) => surface.thickness;
+
+export function buildSurfaces(frontHeight: number, inputs: SurfaceInput[], panelThickness = 3): Surface[] {
   let y0 = 0;
   let z0 = frontHeight;
   return inputs.map((input, index) => {
@@ -69,6 +76,7 @@ export function buildSurfaces(frontHeight: number, inputs: SurfaceInput[]): Surf
       z0,
       y1: input.y,
       z1: input.z,
+      thickness: input.thickness ?? panelThickness,
       length,
       angle: Math.atan2(dz, dy),
       cos: dy / length,
@@ -87,8 +95,8 @@ export function surfacePoint(surface: Surface, v: number, normal: number): Point
 
 // The chain of surfaces moved `thickness` inward, trimmed to run from frontY to rearY.
 // Returns null if a surface is too short to survive the offset.
-export function offsetChain(surfaces: Surface[], thickness: number, frontY: number, rearY: number): Point2[] | null {
-  const anchors = surfaces.map((s) => surfacePoint(s, 0, -thickness));
+export function offsetChain(surfaces: Surface[], thickness: Inset, frontY: number, rearY: number): Point2[] | null {
+  const anchors = surfaces.map((s) => surfacePoint(s, 0, -insetOf(thickness, s)));
   const at = (i: number, y: number): Point2 => {
     const s = surfaces[i]!;
     const [py, pz] = anchors[i]!;
@@ -176,7 +184,7 @@ const NO_ROUNDS: Rounds = { frontBottom: 0, rearTop: 0, rearBottom: 0 };
 
 export function buildProfile(
   surfaces: Surface[],
-  { wall, panelThickness, floorThickness, rounds = NO_ROUNDS }: { wall: number; panelThickness: number; floorThickness: number; rounds?: Rounds },
+  { wall, panelThickness = ownThickness, floorThickness, rounds = NO_ROUNDS }: { wall: number; panelThickness?: Inset; floorThickness: number; rounds?: Rounds },
 ): Profile | null {
   const last = surfaces.at(-1)!;
   const depth = last.y1;
@@ -307,7 +315,7 @@ export function tabSection(tab: SeamTab): Point2[] {
 export function layoutSeamFasteners(
   surfaces: Surface[],
   inner: Point2[],
-  { wall, panelThickness, ribWidth, ribBase = 0, lower, rearTangent = 0 }: { wall: number; panelThickness: number; ribWidth: number; ribBase?: number; lower?: Point2[] | undefined; rearTangent?: number },
+  { wall, panelThickness = ownThickness, ribWidth, ribBase = 0, lower, rearTangent = 0 }: { wall: number; panelThickness?: Inset; ribWidth: number; ribBase?: number; lower?: Point2[] | undefined; rearTangent?: number },
   isBlocked: (tab: SeamTab) => boolean = () => false,
   isWallGone: (tab: SeamTab) => boolean = () => false,
 ): SeamFasteners | null {
