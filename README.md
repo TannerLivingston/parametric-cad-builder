@@ -467,7 +467,9 @@ because compared with the real build:
 
 - Key travel isn't checked. The fit is only tested with the keys at rest.
 - The deck and panel aren't joined at the crease, where the real one uses dowels. The Desk Synth V2 example screws them together.
-- The seam is straight, and the real one steps.
+- The seam is a plain butt joint. The real one has a tongue along its back and round its rear, 2.5 mm long and 2 mm thick in the
+  middle of a wall about 6 mm thick there, in a groove with 0.2 mm each side, and two 4 x 13 mm keys on the rear wall reaching
+  12 mm across. The Desk Synth V2 example has a lip instead.
 - The ridge behind the panel is simplified.
 - The plate has 8 screws, where the real one has 11, because the perfboard takes the row at the rear of the plate. So its joint
   is at x = 140 rather than 127, where both pieces can be screwed down beside it at the front, and only the rear corners are held.
@@ -489,7 +491,8 @@ solid per part, with volumes matching the engine to within 1 mm³, so the format
   edge into bosses under the panel. The 2.42 inch OLED's body is a cautious box, so the flange stops short of it, with 4 screws
   where the V2 has 7.
 - The panel's two pieces meet with a tongue and groove, which every split in a top panel now has.
-- The shell's seam has a 3 mm lip. The real V2 has a lip there too, but this one's length isn't measured from it.
+- The shell's seam has a 2.5 mm lip, as long as the real shell's tongue, measured from its exported mesh. It's a half-lap in
+  the 3 mm skin, where the real one is a tongue in the middle of a thicker wall, which the generator's even walls have no room for.
 - The plate splits at x = 176, as the V2's does, with a rib that bolts its pieces together. The converter boards move 2 mm left for
   it, as they do there. Their footprints include their STEMMA QT plugs, so only 2 bolts fit, where the V2 has 5.
 - The board is the RP2350-Plus, in the same cradle.
@@ -773,7 +776,8 @@ been printed yet, including this.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.
 - Parts can block every tab under the surfaces, leaving a seam bolted only at the front and rear. That gives a
   `SEAM_UNBRACED` warning.
-- Not describable yet, both in the real Desk Synth: stepped seams, and edge lips round a board.
+- Not describable yet, both in the real Desk Synth: a tongue and keys along the seam, where a lip stands in, and edge lips round a
+  board.
 
 ## Development
 

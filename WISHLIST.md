@@ -10,7 +10,8 @@ proven the numbers. Move an item to the done list once it's built.
 ## Shape
 
 - [ ] Curved outlines.
-- [ ] Stepped seams.
+- [ ] A tongue and groove along the seam, with keys, as the real Desk Synth has. It needs a wall of 4 mm or more there, and the
+  seam's lip does the same job in a thinner one, so this only matters for matching the real shell.
 
 ## Set aside
 
