@@ -1,0 +1,24 @@
+{
+  "name": "replicad-engine",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "vite build",
+    "preview:spike": "vite build && vite preview --port 4173 --strictPort",
+    "smoke": "node scripts/smoke.mjs",
+    "bench": "node scripts/bench.mjs",
+    "fuzz": "node scripts/fuzz.mjs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "type": "module",
+  "dependencies": {
+    "replicad": "^1.2.0",
+    "replicad-opencascadejs": "^1.1.0"
+  },
+  "devDependencies": {
+    "three": "^0.170.0",
+    "vite": "^8.3.5"
+  }
+}

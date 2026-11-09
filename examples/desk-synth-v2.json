@@ -1,0 +1,79 @@
+{
+  "schemaVersion": 1,
+  "name": "Desk Synth, V2",
+  "enclosure": {
+    "width": 351.4,
+    "frontHeight": 28.3,
+    "surfaces": [
+      { "id": "deck", "y": 76.5, "z": 28.3 },
+      { "id": "panel", "y": 120.7, "z": 53.8 },
+      { "id": "ridge", "y": 126.5, "z": 50.4 },
+      { "id": "back", "y": 196.5, "z": 42.96 }
+    ],
+    "rounds": { "frontBottom": 12, "rearTop": 22.6, "rearBottom": 22.6 },
+    "wall": 3.25,
+    "panelThickness": 3,
+    "floorThickness": 3,
+    "cornerRadius": 11.5
+  },
+  "topPanels": [
+    { "surface": "deck", "color": "#1b1c1f", "crease": "screws" },
+    { "surface": "panel", "color": "#1b1c1f", "splits": [214] }
+  ],
+  "opening": {
+    "xMin": 186,
+    "xMax": 336.4,
+    "yEnd": 92,
+    "sill": 7.6,
+    "rail": { "depth": 14, "footHeight": 3, "screwX": [178, 344.5] },
+    "keepOut": [
+      { "xMin": 182, "xMax": 340.4, "yMin": 3.5, "yMax": 18, "top": 25.1 },
+      { "xMin": 182, "xMax": 340.4, "yMin": 18, "yMax": 70, "top": 11.5 },
+      { "xMin": 182, "xMax": 340.4, "yMin": 70, "yMax": 80, "top": 25.1 },
+      { "xMin": 182, "xMax": 340.4, "yMin": 80, "yMax": 150, "top": 15.1 },
+      { "xMin": 182, "xMax": 340.4, "yMin": 150, "yMax": 172, "top": 33.4 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 0, "yMax": 18, "top": 27.1 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 18, "yMax": 36, "top": 27.1 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 36, "yMax": 60, "top": 34.8 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 60, "yMax": 70, "top": 33.9 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 70, "yMax": 80, "top": 33.5 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 80, "yMax": 100, "top": 33.1 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 100, "yMax": 128, "top": 27.1 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 128, "yMax": 150, "top": 35.9 },
+      { "xMin": 186, "xMax": 336.4, "yMin": 150, "yMax": 172, "top": 37.2 }
+    ]
+  },
+  "seams": [{ "x": 186 }],
+  "wiring": { "shiftRegisters": 2 },
+  "fabrication": { "material": "PETG", "fit": { "pinSocket": 4.1, "partHoles": { "arcade-24mm": -0.15, "ec11-dial-19mm": -0.15, "ec11-dial-30mm": -0.15 } }, "fitTestParts": ["oled-ssd1306"] },
+  "plate": {
+    "seamX": 176,
+    "joint": "rib",
+    "countersunkHoles": [{ "x": 192, "y": 80.5 }, { "x": 317, "y": 161.5 }],
+    "pins": [
+      { "x": 207, "y": 161.5, "diameter": 3.7, "height": 4, "tipDiameter": 2.6, "tipHeight": 0.6 },
+      { "x": 262, "y": 161.5, "diameter": 3.7, "height": 4, "tipDiameter": 2.6, "tipHeight": 0.6 },
+      { "x": 332, "y": 80.5, "diameter": 3.7, "height": 4, "tipDiameter": 2.6, "tipHeight": 0.6 }
+    ],
+    "supports": [{ "x": 41, "y": 44.5 }, { "x": 71, "y": 44.5 }, { "x": 101, "y": 44.5 }]
+  },
+  "components": [
+    { "id": "button-1", "type": "arcade-24mm", "surface": "deck", "u": 26, "v": 30.5 },
+    { "id": "button-2", "type": "arcade-24mm", "surface": "deck", "u": 56, "v": 30.5 },
+    { "id": "button-3", "type": "arcade-24mm", "surface": "deck", "u": 86, "v": 30.5 },
+    { "id": "button-4", "type": "arcade-24mm", "surface": "deck", "u": 116, "v": 30.5 },
+    { "id": "button-5", "type": "arcade-24mm", "surface": "deck", "u": 26, "v": 59.5 },
+    { "id": "button-6", "type": "arcade-24mm", "surface": "deck", "u": 56, "v": 59.5 },
+    { "id": "button-7", "type": "arcade-24mm", "surface": "deck", "u": 86, "v": 59.5 },
+    { "id": "button-8", "type": "arcade-24mm", "surface": "deck", "u": 116, "v": 59.5 },
+    { "id": "bass-voicing", "type": "ec11-dial-19mm", "surface": "deck", "u": 158, "v": 28.5 },
+    { "id": "chord-voicing", "type": "ec11-dial-30mm", "surface": "deck", "u": 158, "v": 58.5 },
+    { "id": "encoders-left", "type": "encoder-board-5752", "surface": "panel", "u": 57.75, "v": 35 },
+    { "id": "encoders-right", "type": "encoder-board-5752", "surface": "panel", "u": 279, "v": 35 },
+    { "id": "display", "type": "oled-242-ssd1309", "surface": "panel", "u": 151, "v": 25 },
+    { "id": "mcu", "type": "rp2350-plus", "x": 28.9, "y": 118.5 },
+    { "id": "mainboard", "type": "perfboard-7x9", "x": 108, "y": 133 },
+    { "id": "adc-a", "type": "ads7830", "x": 163.85, "y": 103.25 },
+    { "id": "adc-b", "type": "ads7830", "x": 163.85, "y": 150 }
+  ]
+}

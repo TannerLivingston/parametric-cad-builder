@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "name": "Dial deck",
+  "enclosure": {
+    "width": 140,
+    "frontHeight": 20,
+    "surfaces": [
+      { "id": "face", "y": 60, "z": 40 },
+      { "id": "back", "y": 85, "z": 30 }
+    ],
+    "rounds": { "rearTop": 14 },
+    "wall": 2.4,
+    "panelThickness": 3,
+    "floorThickness": 2.4,
+    "cornerRadius": 8
+  },
+  "topPanels": [{ "surface": "face", "color": "#1b1c1f" }],
+  "fabrication": { "material": "PETG" },
+  "components": [
+    { "id": "display", "type": "oled-242-ssd1309", "surface": "face", "u": 70, "v": 28 },
+    { "id": "dial-small", "type": "ec11-dial-19mm", "surface": "face", "u": 20, "v": 28 },
+    { "id": "dial-large", "type": "ec11-dial-30mm", "surface": "face", "u": 120, "v": 28 },
+    { "id": "mcu", "type": "rp2040-plus", "x": 28.05, "y": 60 }
+  ]
+}

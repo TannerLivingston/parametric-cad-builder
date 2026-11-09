@@ -1,0 +1,52 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev",
+        "--",
+        "--port",
+        "5273",
+        "--strictPort"
+      ],
+      "port": 5273
+    },
+    {
+      "name": "app-production",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "preview"
+      ],
+      "port": 4174
+    },
+    {
+      "name": "app-pages",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--port",
+        "4175",
+        "--strictPort",
+        "--base",
+        "/parametric-cad-builder/"
+      ],
+      "port": 4175
+    },
+    {
+      "name": "replicad-spike",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "--prefix",
+        "spikes/replicad-engine",
+        "run",
+        "preview:spike"
+      ],
+      "port": 4173
+    }
+  ]
+}
