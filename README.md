@@ -391,7 +391,8 @@ about room for wires** in the Wiring section, or `"wiring": { "checks": false }`
 | `width`, `height` | The plug or bundle across, along the edge first |
 | `room` | How far it runs straight out before it can bend: about 14 mm for Dupont plugs on header pins, 10 for a STEMMA QT plug, 8 for soldered wires. 0 where the body takes in its plugs already, like the arcade button's, which leaves only somewhere for the route to start |
 
-A part with `"wiresFrom": "any"`, like a board with a STEMMA QT plug at each end, only needs one of them to have room. The
+A part with `"wiresFrom": "any"`, like a board with a STEMMA QT plug at each end, only needs one of them to have room. The 2.42
+inch OLED is one too: its header can be wired straight down, or out past its end with a right-angle plug, allowed 10 mm. The
 perfboard has none, since it's wired wherever you like.
 
 Routes run along the floor, round anything that comes within 6 mm of it: boards, bosses, cradles, supports, weight pockets, a
@@ -676,7 +677,7 @@ Some of this is taken care of in the design, depending on how the part prints:
 
 | Part | Prints | Shaped for it |
 | --- | --- | --- |
-| Shell with a seam | On its outer wall, seam up, or between two seams on its left end | Bosses, tabs and rail blocks slope back to a wall at 45 degrees, holes have a teardrop point, and a fin carries a rear tab's web up to the skin |
+| Shell with a seam | On its outer wall, seam up, or between two seams on its left end | Bosses, tabs and rail blocks slope back to a wall at 45 degrees, holes have a teardrop point, and a fin carries a rear tab's web up to the skin. A round hole in its own top has a teardrop point towards the top of the print, with a keyway's edge sloping into it, and other cutouts, edges and the seam are kept clear of the point. A rectangular one, such as a screen's window, still needs support, so put those in a top panel |
 | Shell without a seam | Upright, base down | Plate bosses rise at 45 degrees from the wall they touch, and screw tabs have a 45 degree gusset under them, bored through, with the screw's head in a countersink |
 | Top piece | Face down, posts up | Its holes need no support at all |
 | Plate and rail | Flat, countersinks down | Nothing, though under an upright shell's bosses the plate has wedges, sloping up |

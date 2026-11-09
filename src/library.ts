@@ -511,7 +511,12 @@ const WIRES: Record<string, object[]> = {
     { side: "left", at: [0, 4], width: 6, height: 4, room: 10 },
     { side: "right", at: [0, 4], width: 6, height: 4, room: 10 },
   ],
-  "oled-242-ssd1309": [{ side: "down", at: [-31, 0], width: 4, height: 20, room: 14 }],
+  // Its header can be wired straight down, or out past the end of the board with a right-angle plug,
+  // whose housing is about 6 mm before the wires bend away.
+  "oled-242-ssd1309": [
+    { side: "down", at: [-31, 0], width: 4, height: 20, room: 14 },
+    { side: "left", at: [0, 5.5], width: 20, height: 6, room: 10 },
+  ],
   "oled-ssd1306": [{ side: "down", at: [0, 11.5], width: 11, height: 3, room: 14 }],
   "latch-button": [{ side: "down", width: 16, height: 16, room: 10 }],
   "pot-9mm": [{ side: "down", at: [0, -6], width: 10, height: 3, room: 8 }],
@@ -548,7 +553,7 @@ const WIRES: Record<string, object[]> = {
 WIRES["rp2350-plus"] = WIRES["rp2040-plus"]!;
 
 // A plug at each end, of which one will do.
-const EITHER_END = new Set(["encoder-board-5752", "ads7830"]);
+const EITHER_END = new Set(["encoder-board-5752", "ads7830", "oled-242-ssd1309"]);
 
 export const library: Record<string, Part> = Object.fromEntries(
   Object.entries(raw).map(([id, part]) => [id, partSchema.parse(WIRES[id] ? { ...(part as object), wires: WIRES[id], ...(EITHER_END.has(id) ? { wiresFrom: "any" } : {}) } : part)]),

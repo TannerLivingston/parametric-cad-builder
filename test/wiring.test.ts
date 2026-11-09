@@ -163,3 +163,16 @@ describe("validating without the wires", () => {
     expect({ ...bare.plan, wiring: null }).toEqual({ ...full.plan, wiring: null });
   });
 });
+
+describe("the 2.42 inch OLED's wires", () => {
+  it("go straight down or out past its end, so only both blocked warns", () => {
+    expect(wireIssues(deskSynth()).filter((w) => w.componentIds?.includes("display"))).toEqual([]);
+    // A board on the floor under its header, at its left end, and a dial beside that end, block both.
+    const oled = { id: "o", type: "oled-242-ssd1309", surface: "top", u: 90, v: 60 };
+    const under = { id: "b", type: "shift-74hc165", x: 59, y: 60 };
+    expect(wireIssues(box([oled])).filter((w) => w.componentIds?.includes("o"))).toEqual([]);
+    expect(wireIssues(box([oled, under])).filter((w) => w.componentIds?.includes("o"))).toEqual([]);
+    const blocked = wireIssues(box([oled, under, dial("d", 48, 60)])).filter((w) => w.componentIds?.includes("o"));
+    expect(blocked).toHaveLength(1);
+  });
+});

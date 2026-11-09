@@ -879,7 +879,9 @@ function surfacePlane(surface: Surface, normal: number): Plane {
   return new Plane([0, y, z], [1, 0, 0], [0, -surface.sin, surface.cos]);
 }
 
-export function cutoutTool(cutout: PlacedCutout, surface: Surface, thickness: number): Shape3D {
+// `up` is which way along x is up as the part prints, for a shell piece on its side, where a round
+// hole's top would be a roof starting in mid-air. It gets a teardrop's point that way.
+export function cutoutTool(cutout: PlacedCutout, surface: Surface, thickness: number, up: 1 | -1 | 0 = 0): Shape3D {
   const plane = () => surfacePlane(surface, -(thickness + TOOL_OVERSHOOT_BELOW));
   const through = thickness + TOOL_OVERSHOOT_BELOW + TOOL_OVERSHOOT_ABOVE;
   const width = cutout.width ?? 0;
@@ -888,7 +890,20 @@ export function cutoutTool(cutout: PlacedCutout, surface: Surface, thickness: nu
   const withNotches = (tool: Shape3D, notches: PlacedNotch[] | undefined, length: number) =>
     (notches ?? []).reduce((joined, notch) => joined.fuse(drawRectangle(notch.width, notch.height).translate(notch.u, notch.v).sketchOnPlane(plane()).extrude(length) as Shape3D), tool);
   if (cutout.kind === "circle") {
-    return withNotches(drawCircle(cutout.diameter! / 2).translate(cutout.u, cutout.v).sketchOnPlane(plane()).extrude(through) as Shape3D, cutout.notches, through);
+    const r = cutout.diameter! / 2;
+    let hole = drawCircle(r).translate(cutout.u, cutout.v).sketchOnPlane(plane()).extrude(through) as Shape3D;
+    if (up === 0) return withNotches(hole, cutout.notches, through);
+    const c = r * Math.SQRT1_2;
+    const { u, v } = cutout;
+    const point = draw([u + up * c, v - c]).lineTo([u + up * r * Math.SQRT2, v]).lineTo([u + up * c, v + c]).close().sketchOnPlane(plane()).extrude(through) as Shape3D;
+    hole = withNotches(hole.fuse(point), cutout.notches, through);
+    // A notch out to one side, such as a keyway, has its upper edge as a short roof beside the hole,
+    // so that slopes in at 45 degrees from the notch's far end, on down to the hole's middle. Stopping
+    // sooner would leave a hair of plastic between it and the teardrop's side, which runs alongside.
+    for (const [a, b, c] of notchSlopes(cutout, up)) {
+      hole = hole.fuse(draw(a).lineTo(b).lineTo(c).close().sketchOnPlane(plane()).extrude(through) as Shape3D);
+    }
+    return hole;
   }
   if (cutout.kind === "rect") {
     const outline = cutout.cornerRadius ? drawRoundedRectangle(width, height, cutout.cornerRadius) : drawRectangle(width, height);
@@ -912,8 +927,45 @@ export function cutoutTool(cutout: PlacedCutout, surface: Surface, thickness: nu
   return drawRoundedRectangle(width, height, pocketRadius(cutout)).translate(cutout.u, cutout.v).sketchOnPlane(plane()).extrude(depth) as Shape3D;
 }
 
+// The triangles that slope a round hole's notches' upper edges in at 45 degrees: see cutoutTool.
+function notchSlopes(cutout: PlacedCutout, up: 1 | -1): [Point2, Point2, Point2][] {
+  const { u, v } = cutout;
+  return (cutout.notches ?? []).flatMap((notch): [Point2, Point2, Point2][] => {
+    if (Math.abs(notch.v - v) < 0.01) return [];
+    const out = notch.v > v ? 1 : -1;
+    const edge = notch.u + (up * notch.width) / 2;
+    const far = notch.v + (out * notch.height) / 2;
+    return [[[edge, far], [edge, v], [edge + up * Math.abs(far - v), v]]];
+  });
+}
+
+// Which way along x is up as a cutout's part prints, if it's a shell piece on its side, or 0.
+export function cutoutUp(plan: BuildPlan, cutout: PlacedCutout): 1 | -1 | 0 {
+  return plan.shellOnSide && plan.printedParts[cutout.printedPart]?.kind === "shell" ? upAlongX(plan, cutout.u) : 0;
+}
+
 function pocketRadius(cutout: PlacedCutout): number {
   return Math.min(POCKET_CORNER_RADIUS, Math.min(cutout.width!, cutout.height!) / 4);
+}
+
+type Box = { uLow: number; uHigh: number; vLow: number; vHigh: number };
+const notchBox = (n: PlacedNotch): Box => ({ uLow: n.u - n.width / 2, uHigh: n.u + n.width / 2, vLow: n.v - n.height / 2, vHigh: n.v + n.height / 2 });
+const triangleBox = (points: Point2[]): Box => ({ uLow: Math.min(...points.map(([u]) => u)), uHigh: Math.max(...points.map(([u]) => u)), vLow: Math.min(...points.map(([, v]) => v)), vHigh: Math.max(...points.map(([, v]) => v)) });
+const inNotch = (n: PlacedNotch, u: number, v: number) => Math.abs(u - n.u) <= n.width / 2 && Math.abs(v - n.v) <= n.height / 2;
+
+// The area of what `inside` takes in, within the boxes, counted on a fine grid.
+function regionArea(boxes: Box[], inside: (u: number, v: number) => boolean): number {
+  if (!boxes.length) return 0;
+  const step = 0.02;
+  const uLow = Math.min(...boxes.map((b) => b.uLow));
+  const uHigh = Math.max(...boxes.map((b) => b.uHigh));
+  const vLow = Math.min(...boxes.map((b) => b.vLow));
+  const vHigh = Math.max(...boxes.map((b) => b.vHigh));
+  let cells = 0;
+  for (let u = uLow + step / 2; u < uHigh; u += step) {
+    for (let v = vLow + step / 2; v < vHigh; v += step) if (inside(u, v)) cells += 1;
+  }
+  return cells * step * step;
 }
 
 // What a cutout should remove, for checking the booleans against arithmetic.
@@ -934,11 +986,20 @@ function notchArea(notches: PlacedNotch[] | undefined, inHole: (u: number, v: nu
   return cells * step * step;
 }
 
-export function cutoutVolume(cutout: PlacedCutout, thickness: number): number {
+// `up` is as for cutoutTool.
+export function cutoutVolume(cutout: PlacedCutout, thickness: number, up: 1 | -1 | 0 = 0): number {
   const cornerLoss = (r: number) => (4 - Math.PI) * r * r;
   if (cutout.kind === "circle") {
     const r = cutout.diameter! / 2;
-    return (Math.PI * r * r + notchArea(cutout.notches, (u, v) => Math.hypot(u - cutout.u, v - cutout.v) <= r)) * thickness;
+    const inCircle = (u: number, v: number) => Math.hypot(u - cutout.u, v - cutout.v) <= r;
+    if (up === 0) return (Math.PI * r * r + notchArea(cutout.notches, inCircle)) * thickness;
+    // The teardrop's point adds the corner of a square round the circle, r² less a quarter of the circle.
+    const du = (u: number) => (u - cutout.u) * up;
+    const inPoint = (u: number, v: number) => du(u) >= r * Math.SQRT1_2 && du(u) + Math.abs(v - cutout.v) <= r * Math.SQRT2;
+    const slopes = notchSlopes(cutout, up);
+    const inSlope = (u: number, v: number) => slopes.some(([[eu, far], , [au]]) => du(u) >= du(eu) && Math.min(far, cutout.v) <= v && v <= Math.max(far, cutout.v) && du(u) - du(eu) <= Math.abs(far - v) && du(u) <= du(au));
+    const extra = regionArea([...(cutout.notches ?? []).map(notchBox), ...slopes.map(triangleBox)], (u, v) => !inCircle(u, v) && !inPoint(u, v) && ((cutout.notches ?? []).some((n) => inNotch(n, u, v)) || inSlope(u, v)));
+    return (Math.PI * r * r + r * r * (1 - Math.PI / 4) + extra) * thickness;
   }
   const area = cutout.width! * cutout.height!;
   if (cutout.kind === "rect") {
@@ -1010,10 +1071,29 @@ function cutPart(blank: Shape3D, index: number, plan: BuildPlan): Shape3D {
   if (cutouts.length === 0 && labels.length === 0) return blank;
   const thickness = plan.config.enclosure.panelThickness;
   const tools = [
-    ...cutouts.map((c) => cutoutTool(c, plan.profile.surfaces.find((s) => s.id === c.surface)!, thickness)),
+    ...cutouts.map((c) => cutoutTool(c, plan.profile.surfaces.find((s) => s.id === c.surface)!, thickness, cutoutUp(plan, c))),
     ...labels.flatMap((label) => labelTools(label, plan)),
   ];
-  return blank.cut(compoundShapes(tools) as Shape3D);
+  return blank.cut(compoundShapes(apart(tools)) as Shape3D);
+}
+
+// Tools fused where their bounds overlap, since overlapping tools spoil a batched cut. A hole's
+// teardrop point on a shell printed on its side can reach a neighbour's, or a label beside it.
+function apart(tools: Shape3D[]): Shape3D[] {
+  const boxes = tools.map((tool) => tool.boundingBox.bounds);
+  const group = tools.map((_, i) => i);
+  const root = (i: number): number => (group[i] === i ? i : (group[i] = root(group[i]!)));
+  const overlaps = ([a0, a1]: (typeof boxes)[number], [b0, b1]: (typeof boxes)[number]) => a0.every((low, axis) => low < b1[axis]! && b0[axis]! < a1[axis]!);
+  for (let i = 0; i < tools.length; i++) {
+    for (let j = i + 1; j < tools.length; j++) if (overlaps(boxes[i]!, boxes[j]!)) group[root(j)] = root(i);
+  }
+  const joined = new Map<number, Shape3D>();
+  tools.forEach((tool, i) => {
+    const r = root(i);
+    const before = joined.get(r);
+    joined.set(r, before ? before.fuse(tool) : tool);
+  });
+  return [...joined.values()];
 }
 
 // Screw posts on a surface, with their holes.

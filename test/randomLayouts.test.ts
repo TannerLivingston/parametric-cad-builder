@@ -24,7 +24,7 @@ const FLOOR_TYPES = ["rp2040-plus", "ads7830", "pico-rp2350"];
 // Random profiles, with parts placed wherever the validator allows. A third of the
 // attempts slide right up to the limit, where a validator that's slightly too lenient
 // would be caught out.
-function randomLayout(seed: number): BuildPlan | null {
+export function randomLayout(seed: number): BuildPlan | null {
   const random = rng(seed);
   const between = (a: number, b: number) => a + random() * (b - a);
   const width = between(220, 420);

@@ -1,7 +1,7 @@
 export * from "./schema.js";
 export { library, materials } from "./library.js";
 export { validateConfig } from "./validate.js";
-export { buildEnclosure, cutoutVolume, initEngine, placedOnBed, recutPart } from "./engine.js";
+export { buildEnclosure, cutoutUp, cutoutVolume, initEngine, placedOnBed, recutPart } from "./engine.js";
 export { describeEstimate, orientationsFor, planPrint, printGuide, totalEstimate } from "./printing.js";
 export type { LayerGap, Matrix, Orientation, OrientationReport, OverhangPatch, PartPrintReport, PrintEstimate } from "./printing.js";
 export { writeZip } from "./zip.js";

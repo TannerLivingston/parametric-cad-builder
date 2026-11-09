@@ -21,8 +21,8 @@ proven the numbers. Move an item to the done list once it's built.
 
 - [x] **More than one seam,** for a shell wider than two beds. A piece between two seams stands on its left end to print, so a
   lip's end and its step slope at 45 degrees, and nothing needs support. The plate splits as few times as it needs, each joint
-  off a seam, or where it's told, with a rib along each if asked. A round hole in a shell's own top skin still needs a little
-  support when it prints on its side, as it did before.
+  off a seam, or where it's told, with a rib along each if asked. A round hole in a shell's own top, printed on its side, has
+  a teardrop point now, but a rectangular one still needs support there.
 - [x] **A lip along the seam,** set by its length: the left half's outer skin reaches past the seam over a step in the right half,
   with a 0.2 mm gap, so the joint line is hidden and the halves line up. Both halves still print without support. The Desk Synth
   V2 example has a 3 mm one. Not yet printed, so the gap is a guess.

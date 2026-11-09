@@ -1730,6 +1730,13 @@ function placeComponents(config: Config, parts: Record<string, Part>, profile: P
   });
 }
 
+// Which way along x is up as the shell piece a hole is in prints on its side, or 0 if it doesn't, or
+// the hole is in a top panel: as the engine's upAlongX.
+function holePointsUp(config: Config, surfaceId: string, u: number): 1 | -1 | 0 {
+  if (config.seams.length === 0 || topPanelFor(config, surfaceId)) return 0;
+  return u < Math.max(...config.seams.map((seam) => seam.x)) ? 1 : -1;
+}
+
 function placeCutouts(placed: Placed[], partFor: (surface: string, u: number) => number, config: Config, issues: Issues): PlacedShape[] {
   const out: PlacedShape[] = [];
   for (const item of placed) {
@@ -1794,6 +1801,15 @@ function placeCutouts(placed: Placed[], partFor: (surface: string, u: number) =>
       // Each notch keeps other things away too, as a shape of its own.
       for (const notch of [...notches, ...recessNotches]) {
         out.push({ cutout: placedCutout, shape: { kind: "rect", cx: notch.u, cy: notch.v, w: notch.width, h: notch.height }, surface, index: item.index, notch: true });
+      }
+      // So does a round hole's teardrop point, in a shell that prints on its side: see cutoutTool. It
+      // reaches as far as any keyway's slope does.
+      const up = holePointsUp(config, surface.id, u);
+      if (cutout.kind === "circle" && up !== 0) {
+        const r = cutout.diameter / 2;
+        const reach = Math.max(r * Math.SQRT2, ...notches.filter((n) => Math.abs(n.v - v) > 0.01).map((n) => (n.u - u) * up + n.width / 2 + Math.abs(n.v - v) + n.height / 2));
+        const near = r * Math.SQRT1_2;
+        out.push({ cutout: placedCutout, shape: { kind: "rect", cx: u + (up * (near + reach)) / 2, cy: v, w: reach - near, h: 2 * near }, surface, index: item.index, notch: true });
       }
     });
   }

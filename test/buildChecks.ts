@@ -2,7 +2,7 @@
 import { measureVolume, type Shape3D } from "replicad";
 import { analyseBinarySTL, isValidSolid } from "../src/checks.js";
 import { TOP_POST_LENGTH } from "../src/top.js";
-import { buildEnclosure, cutoutVolume, validateConfig, type BuildPlan, type Enclosure } from "../src/index.js";
+import { buildEnclosure, cutoutUp, cutoutVolume, validateConfig, type BuildPlan, type Enclosure } from "../src/index.js";
 
 export const stlBytes = async (shape: Shape3D, tolerance = 0.1) =>
   new Uint8Array(await shape.blobSTL({ binary: true, tolerance, angularTolerance: 0.3 }).arrayBuffer());
@@ -32,7 +32,7 @@ export async function buildProblems(buildPlan: BuildPlan, enclosure: Enclosure =
     if (!isValidSolid(part.shape)) problems.push(`${label}: invalid solid`);
     const mesh = analyseBinarySTL(await stlBytes(part.shape));
     if (!mesh.watertight) problems.push(`${label}: mesh not watertight`);
-    const expected = buildPlan.cutouts.filter((c) => c.printedPart === part.index).reduce((sum, c) => sum + cutoutVolume(c, thickness), 0);
+    const expected = buildPlan.cutouts.filter((c) => c.printedPart === part.index).reduce((sum, c) => sum + cutoutVolume(c, thickness, cutoutUp(buildPlan, c)), 0);
     const removed = measureVolume(part.blank) - measureVolume(part.cut);
     if (expected > 0 && Math.abs(removed - expected) / expected > 0.01) {
       problems.push(`${label}: removed ${removed.toFixed(1)} mm3, expected ${expected.toFixed(1)}`);
