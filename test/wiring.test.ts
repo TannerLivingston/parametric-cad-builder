@@ -107,11 +107,10 @@ describe("routes across the floor", () => {
     expect(to).toEqual({ d: "mcu", s: "sr", sr: "mcu" });
   });
 
-  it("warns once about every part whose wires cross the seam", () => {
+  it("marks wires that cross the seam in the list, without a warning", () => {
     const seamed = box([dial("d", 130, 40), dial("e", 140, 70)], { seams: [{ x: 80 }] });
-    const crossing = wireIssues(seamed).filter((w) => w.code === "WIRE_SEAM");
-    expect(crossing).toHaveLength(1);
-    expect(crossing[0]!.componentIds).toEqual(["d", "e"]);
+    expect(wireIssues(seamed).filter((w) => w.componentIds?.includes("d") || w.componentIds?.includes("e"))).toEqual([]);
+    expect(printGuide(plan(seamed), [])).toMatch(/- d to mcu: about \d+0 mm, across the seam\./);
   });
 
   it("lists each run's length in the print guide", () => {
@@ -150,5 +149,17 @@ describe("cable ties along the wires", () => {
     expect(next.plate.cableTies.length).toBeGreaterThan(0);
     expect(next.plate.cableTies.length).toBeLessThan(spots.length);
     expect(validateConfig(next).ok).toBe(true);
+  });
+});
+
+describe("validating without the wires", () => {
+  it("leaves out their rooms, routes and warnings, and nothing else", () => {
+    const config = deskSynth();
+    const full = validateConfig(config);
+    const bare = validateConfig(config, { wiring: false });
+    if (!full.ok || !bare.ok) throw new Error("invalid");
+    expect(bare.plan.wiring).toEqual({ rooms: [], routes: [] });
+    expect(bare.warnings).toEqual(full.warnings.filter((w) => !w.code.startsWith("WIRE")));
+    expect({ ...bare.plan, wiring: null }).toEqual({ ...full.plan, wiring: null });
   });
 });

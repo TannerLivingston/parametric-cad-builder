@@ -33,6 +33,7 @@ const DEFAULTS = configSchema.parse({
 // setting it, and it shows what was picked last even after Undo takes it back.
 const { surface: _surface, fasteners: _fasteners, ...TOP_PANEL_DEFAULTS } = configSchema.shape.topPanels.parse([{ surface: "a" }])[0]!;
 export const DEFAULT_TOP_COLOR = TOP_PANEL_DEFAULTS.color;
+const { x: _x, ...SEAM_DEFAULTS } = configSchema.shape.seams.parse([{ x: 1 }])[0]!;
 
 export type ShapeValues = Pick<Config, "topPanels" | "seams" | "wallHoles" | "opening"> & {
   enclosure: Config["enclosure"];
@@ -57,7 +58,7 @@ export function shapeValues(config: RawConfig): ShapeValues {
       buildVolume: { ...DEFAULTS.fabrication.buildVolume, ...fabrication.buildVolume },
     },
     topPanels: (config.topPanels ?? []).map((panel: RawConfig) => ({ ...TOP_PANEL_DEFAULTS, ...panel })),
-    seams: config.seams ?? [],
+    seams: (config.seams ?? []).map((seam: RawConfig) => ({ ...SEAM_DEFAULTS, ...seam })),
     wallHoles: (config.wallHoles ?? []).map((hole: RawConfig) => ({ cornerRadius: 0, ...hole })),
     opening: config.opening ? { keepOut: [], ...config.opening } : undefined,
     plate: { ...DEFAULTS.plate, ...config.plate },
@@ -163,6 +164,14 @@ export function setSeam(config: RawConfig, x: number | null): RawConfig {
   const { seams = [], ...rest } = config;
   if (x === null) return rest;
   return { ...rest, seams: [{ ...seams[0], x: tidy(x) }] };
+}
+
+// A lip of 0 is the default, a flat joint, so it leaves the file.
+export function setSeamLip(config: RawConfig, lip: number): RawConfig {
+  const { seams = [] } = config;
+  if (!seams[0]) return config;
+  const { lip: _old, ...seam } = seams[0];
+  return { ...config, seams: [lip > 0 ? { ...seam, lip: tidy(lip) } : seam] };
 }
 
 export function addWallHole(config: RawConfig): RawConfig {
@@ -417,7 +426,7 @@ export function tiesAlongWires(config: RawConfig): RawConfig {
   let next = spots.length ? updatePlate(config, { cableTies: [...existing, ...spots] }) : config;
   // Each pass drops those the validator rejects, since one can only clash with another that's already in.
   for (let pass = 0; pass < spots.length; pass++) {
-    const check = validateConfig(next);
+    const check = validateConfig(next, { wiring: false });
     if (check.ok) break;
     const bad = new Set(check.errors.flatMap((issue) => /^plate\.cableTies\[(\d+)\]$/.exec(issue.path)?.[1] ?? []).map(Number).filter((i: number) => i >= existing.length));
     if (bad.size === 0) break;

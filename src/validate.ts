@@ -22,6 +22,8 @@ export const MIN_RIB_WIDTH = 7; // fits an M3 clearance hole with walls around i
 export const MIN_RIB_HALF_THICKNESS = 3.5; // leaves a usable pin in a blind socket
 export const MIN_PART_WIDTH = 40;
 export const PIN_ALLOWANCE = 1.5; // the rib keeps this much behind each pin
+export const LIP_GAP = 0.2; // round a seam's lip, in the step it fits over
+export const MIN_LIP = 1;
 export const MIN_LABEL_SIZE = 3.5;
 const MIN_STANDOFF_WALL = 0.8; // two lines from a 0.4 mm nozzle
 const LABEL_GAP = 1.5; // from a part or hole it's for
@@ -82,7 +84,6 @@ export type IssueCode =
   | "ERGONOMICS"
   | "WIRE_ROOM"
   | "WIRE_ROUTE"
-  | "WIRE_SEAM"
   | "KNOB_INVALID";
 
 export interface Issue {
@@ -182,6 +183,7 @@ export interface PlannedSeam extends SeamFasteners {
   x: number;
   ribWidth: number;
   ribHalfThickness: number;
+  lip: number;
   pinLength: number;
 }
 
@@ -277,7 +279,9 @@ interface Limits {
 const mm = (value: number) => `${Math.round(value * 100) / 100} mm`;
 const degrees = (radians: number) => (radians * 180) / Math.PI;
 
-export function validateConfig(input: unknown): ValidationResult {
+// `wiring: false` leaves the wires' rooms and routes out, which only ever warn, for a caller that
+// only counts errors and validates many times over, such as the search for a spot for a new part.
+export function validateConfig(input: unknown, { wiring: withWiring = true }: { wiring?: boolean } = {}): ValidationResult {
   const parsed = configSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -347,7 +351,7 @@ export function validateConfig(input: unknown): ValidationResult {
   printedParts.push(...knobs.map((knob): PrintedPart => ({ index: knob.printedPart, kind: "knob", name: knob.name, color: knob.color, xMin: knob.u - knob.diameter / 2, xMax: knob.u + knob.diameter / 2, size: knob.key ? [knob.key.width, knob.key.depth, knob.height] : [knob.diameter, knob.diameter, knob.height] })));
 
   const pins = checkPins(config, placed, issues);
-  const wiring = planWiring(config, profile, placed, seams, plate, topScrews, posts, holderBlockList, issues);
+  const wiring = withWiring ? planWiring(config, profile, placed, seams, plate, topScrews, posts, holderBlockList, issues) : { rooms: [], routes: [] };
   const steps = listAssembly(config, seams, plate, posts, topScrews, placed, creases, cutouts.filter((c) => !c.notch).map((c) => c.cutout), shellParts.length);
 
   return issues.result({
@@ -507,10 +511,7 @@ function planWiring(config: Config, profile: Profile, placed: Placed[], seams: P
   if (warn) {
     for (const id of unrouted) issues.warn("WIRE_ROUTE", `There's no way across the floor for "${id}"'s wires to reach the board they go to. Make room, or, since this is a rough guide, turn wiring checks off in the Wiring section.`, `components[${indexOf(id)}]`, [id]);
     const tight = routes.filter((route) => route.tight).map((route) => route.from);
-    if (tight.length) issues.warn("WIRE_ROUTE", `Wires from ${quoteList(tight)} only just get past what's on the floor, with less than ${mm(WIRE_BUNDLE)} for them. Make room if you can.`, "wiring", tight);
-    const crossing = routes.filter((route) => route.seams.length).map((route) => route.from);
-    if (crossing.length) issues.warn("WIRE_SEAM", `Wires from ${quoteList(crossing)} cross the seam, so the halves only come apart once they're unplugged. Leave them slack, or put a plug in them there.`, "wiring", crossing);
-  }
+    if (tight.length) issues.warn("WIRE_ROUTE", `Wires from ${quoteList(tight)} only just get past what's on the floor, with less than ${mm(WIRE_BUNDLE)} for them. Make room if you can.`, "wiring", tight);  }
   return { rooms, routes };
 }
 
@@ -1581,6 +1582,16 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
     if (topBolts === 0 && config.topPanels.length === 0) {
       issues.warn("SEAM_UNBRACED", `Parts leave no room for a tab under any surface at the seam at x = ${mm(seam.x)}, so it's only bolted at the front and rear. Move parts away from it if you can.`, path);
     }
+    if (seam.lip > 0) {
+      const reach = seam.ribHalfThickness + seam.ribWidth;
+      if (seam.lip < MIN_LIP) issues.error("SEAM_INVALID", `A lip of ${mm(seam.lip)} is too short to line the halves up. Make it at least ${mm(MIN_LIP)}, or 0 for none.`, `${path}.lip`);
+      if (seam.lip > reach) issues.error("SEAM_INVALID", `A lip of ${mm(seam.lip)} reaches past the room kept clear round the seam, ${mm(reach)} either side. Make it shorter.`, `${path}.lip`);
+      // The lip is the outer half of the skin, and what it fits over is the inner half less the gap.
+      const thinnest = Math.min(e.wall, ...(config.topPanels.length < profile.surfaces.length ? [e.panelThickness] : []));
+      if (thinnest / 2 - LIP_GAP < minWeb) {
+        issues.error("SEAM_INVALID", `A lip takes half of the ${mm(thinnest)} skin, leaving ${mm(thinnest / 2 - LIP_GAP)} for the step it fits over, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(2 * (minWeb + LIP_GAP))}, or leave the joint flat.`, `${path}.lip`);
+      }
+    }
     if (seam.x - seam.ribHalfThickness - SEAM_DRIVER_ROOM < e.wall) {
       issues.error("SEAM_INVALID", `A seam at x = ${mm(seam.x)} leaves too little room in the left half to drive its bolts, which needs ${mm(SEAM_DRIVER_ROOM)} for a stubby screwdriver. Move it to the right.`, `${path}.x`);
     }
@@ -1603,9 +1614,9 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
   for (let index = 0; index < bounds.length - 1; index++) {
     const xMin = bounds[index]!;
     const xMax = bounds[index + 1]!;
-    // The part left of a seam carries the alignment pins, which stick out past it.
+    // The part left of a seam carries the alignment pins, and any lip, which stick out past it.
     const seam = config.seams[index];
-    const pins = seam ? seam.ribHalfThickness - PIN_ALLOWANCE : 0;
+    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, seam.lip) : 0;
     const size: [number, number, number] = [xMax - xMin + pins, profile.depth, profile.maxHeight];
     const name = bounds.length > 2 ? `Shell ${index + 1}` : "Shell";
     parts.push({ index, kind: "shell", name, color: e.color, xMin, xMax, size });

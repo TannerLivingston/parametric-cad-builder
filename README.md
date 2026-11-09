@@ -149,6 +149,13 @@ base down with no supports.
 **`keepOut`** lists boxes of room the contents need, each up to height `top`. Nothing else may enter one: not bosses, tabs,
 posts, boards or part bodies. It's also how the validator checks the contents fit under the surfaces past the opening.
 
+**`seams`** split the shell across its width, for a small bed, with bolted tabs and pins inside. A seam's `lip` steps the joint
+in the skin, to hide its line and line the halves up: for that many mm past the seam, the left half keeps the outer half of the
+wall, and of the top where there's no top panel, and the right half is cut back round it with 0.2 mm to spare. Each half prints
+with its seam facing up, so the lip stands straight up from one and the step is a ledge on the other, and neither needs support.
+It's 0 by default, a flat joint. It has to be at least 1 mm, stay inside the room kept clear round the seam, and leave the
+material's minimum web either side, so a 3 mm wall takes one in PETG but not in PETG-GF. **Lip past it** in the Shape tab sets it.
+
 ### Rounds on the side profile
 
 ```json
@@ -389,7 +396,7 @@ seam's tabs, and bodies that hang that low. They're found on a 2 mm grid, shorte
 less, which warns that it's tight. A switch goes to a shift register board if there is one, an analog part to an analog board if
 there is one, and everything else to the microcontroller, from whichever of its ways out is nearest. Without a microcontroller on
 the floor there are no routes. A route's length runs down from the part, across, and up to the board, to the next 10 mm. Wires
-that cross a seam warn once, since the halves only come apart when they're unplugged.
+that cross a seam are marked so in the list, with no warning: leave them slack enough to open the halves.
 
 **Add cable tie bridges along the wires** puts a bridge every 60 mm along each route, one for routes within 15 mm of each other,
 turned so its tie wraps them, and keeps those the plate has room for. Bridges don't turn routes aside, since wires run over them.
@@ -475,12 +482,13 @@ solid per part, with volumes matching the engine to within 1 mm³, so the format
   edge into bosses under the panel. The 2.42 inch OLED's body is a cautious box, so the flange stops short of it, with 4 screws
   where the V2 has 7.
 - The panel's two pieces meet with a tongue and groove, which every split in a top panel now has.
+- The shell's seam has a 3 mm lip. The real V2 has a lip there too, but this one's length isn't measured from it.
 - The plate splits at x = 176, as the V2's does, with a rib that bolts its pieces together. The converter boards move 2 mm left for
   it, as they do there. Their footprints include their STEMMA QT plugs, so only 2 bolts fit, where the V2 has 5.
 - The board is the RP2350-Plus, in the same cradle.
 - Its three supports stand between the buttons, under the middle of the deck.
 
-Its lip along the shell's seam, edge lips round the perfboard and snap-off support fins aren't describable.
+Edge lips round the perfboard and snap-off support fins aren't describable.
 
 ### The Dial deck example
 
@@ -510,7 +518,7 @@ produce wrong geometry with no error.
 | `BODIES_COLLIDE` | Parts touching above a surface, below it, across surfaces, or on the floor |
 | `BODY_HITS_ENCLOSURE` | A body reaching the floor, walls or another surface, allowing for each slope |
 | `BODY_HITS_RIB` | A body or board in the way of a seam tab, or a board crossing the seam |
-| `SEAM_INVALID` | A seam too near an edge, a tab too small, or too little height for its fasteners |
+| `SEAM_INVALID` | A seam too near an edge, a tab too small, too little height for its fasteners, or a lip too short, too long or on too thin a skin |
 | `SEAM_UNBRACED` | Warning: parts leave no room for a tab under any surface |
 | `PLATE_INVALID` | A plate joint too near an edge, too few screws, or a listed or added screw in the way of something |
 | `TOP_PANEL_INVALID` | A top panel on a missing surface, two on one surface, a piece with too few screws, or an added screw that can't go there |
@@ -527,7 +535,6 @@ produce wrong geometry with no error.
 | `ERGONOMICS` | Warning: controls too close for fingers, 2 mm between buttons and 5 mm beside a knob or fader, or a screen lying flatter than about 15 degrees, or facing away |
 | `WIRE_ROOM` | Warning: something's in the way of the room a part's wires need where they leave it. See Wires |
 | `WIRE_ROUTE` | Warning: no way across the floor for a part's wires to its board, or only a tight one |
-| `WIRE_SEAM` | Warning: wires cross the seam, so they have to be unplugged to take the halves apart |
 
 Material limits in [src/library.ts](src/library.ts) are starting points for a 0.4 mm nozzle, not test
 results. `fabrication.minWall`, `minWeb` and `minSkin` override them.
@@ -759,7 +766,7 @@ been printed yet, including this.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.
 - Parts can block every tab under the surfaces, leaving a seam bolted only at the front and rear. That gives a
   `SEAM_UNBRACED` warning.
-- Not describable yet, all in the real Desk Synth: stepped seams, or a lip along one, and edge lips round a board.
+- Not describable yet, both in the real Desk Synth: stepped seams, and edge lips round a board.
 
 ## Development
 

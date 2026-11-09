@@ -10,7 +10,7 @@ proven the numbers. Move an item to the done list once it's built.
 ## Shape
 
 - [ ] Curved outlines, more than one seam, and more than one panel thickness.
-- [ ] Stepped seams, or the Desk Synth V2's lip along one.
+- [ ] Stepped seams.
 
 ## Set aside
 
@@ -19,6 +19,9 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Done
 
+- [x] **A lip along the seam,** set by its length: the left half's outer skin reaches past the seam over a step in the right half,
+  with a 0.2 mm gap, so the joint line is hidden and the halves line up. Both halves still print without support. The Desk Synth
+  V2 example has a 3 mm one. Not yet printed, so the gap is a guess.
 - [x] **Key caps,** printed for a Cherry MX-style switch, now in the library: a flat top on a collar over its cross stem,
   printed top down without support. Its socket uses the knob's fit, with no fit test row of its own yet.
 - [x] **Room for wires, their routes, and cable ties along them.** Each part keeps room where its wires leave it, they're routed

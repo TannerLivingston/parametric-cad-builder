@@ -683,7 +683,7 @@ export function printGuide(plan: BuildPlan, reports: PartPrintReport[]): string 
   }
   if (plan.wiring.routes.length) {
     lines.push("", "Wires", `Their routes across the floor, down from each part and up to its board. ${WIRE_SLACK_NOTE}`);
-    for (const route of plan.wiring.routes) lines.push(`- ${route.from} to ${route.to}: about ${wireLength(route.length)} mm.`);
+    for (const route of plan.wiring.routes) lines.push(`- ${route.from} to ${route.to}: about ${wireLength(route.length)} mm${route.seams.length ? ", across the seam" : ""}.`);
   }
   if (plan.assembly.length) {
     lines.push("", "Putting it together");

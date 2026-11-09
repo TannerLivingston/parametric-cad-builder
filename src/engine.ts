@@ -10,13 +10,13 @@ import type { Fit } from "./schema.js";
 import { textOutline } from "./lettering.js";
 import { CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, type CreaseJoint } from "./crease.js";
 import type { BuildPlan, PlacedCutout, PlacedLabel, PlacedNotch, PlacedPost, PlannedSeam } from "./validate.js";
-import { POST_ROOT_DEPTH, TOOL_OVERSHOOT_ABOVE, TOOL_OVERSHOOT_BELOW } from "./validate.js";
+import { LIP_GAP, POST_ROOT_DEPTH, TOOL_OVERSHOOT_ABOVE, TOOL_OVERSHOOT_BELOW } from "./validate.js";
 import { CAP_COLLAR, KNOB_GRIP_COUNT, KNOB_POINTER, type PlannedCap, type PlannedKnob } from "./knob.js";
 import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTabExtent, type TopJoint, type TopScrew } from "./top.js";
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
-import { offsetChain, surfacePoint, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
+import { buildProfile, offsetChain, surfacePoint, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
 export const BOLT_DIAMETER = 3.4; // M3 clearance, as used in the Desk Synth shell
 const FRAME_OVERLAP = 0.5; // tabs reach this far into the walls, so the fuse is clean
@@ -784,8 +784,30 @@ function nearestTab(seam: PlannedSeam, [y, z]: Point2): SeamTab | null {
   return best;
 }
 
+// The space inside the shell, as if its wall and top were only so thick, from x0 to x1.
+function cavityInset(plan: BuildPlan, wall: number, panel: number, x0: number, x1: number): Shape3D {
+  const e = plan.config.enclosure;
+  const profile = buildProfile(plan.profile.surfaces, { wall, panelThickness: panel, floorThickness: e.floorThickness, rounds: e.rounds });
+  if (!profile) throw new Error("The seam's lip has no profile to follow.");
+  return extrudedPath(profile.cavityPath, x0, x1);
+}
+
+// A seam's lip: for its length past the seam, the left half keeps the outer half of the wall and
+// top, and the right half is stepped back round it with a gap. Each half prints with its seam
+// facing up, so the lip stands straight up from one and the step is a ledge on the other.
+function lipAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
+  const e = plan.config.enclosure;
+  const [depth, height] = [plan.profile.depth, plan.profile.maxHeight];
+  const span = (x0: number, x1: number) => makeBox([x0, -1, -2], [x1, depth + 1, height + 1]) as Shape3D;
+  const lip = right.intersect(span(seam.x, seam.x + seam.lip)).cut(cavityInset(plan, e.wall / 2, e.panelThickness / 2, seam.x - 1, seam.x + seam.lip + 1));
+  const step = span(seam.x - 1, seam.x + seam.lip + LIP_GAP).cut(cavityInset(plan, e.wall / 2 + LIP_GAP, e.panelThickness / 2 + LIP_GAP, seam.x - 2, seam.x + seam.lip + 2));
+  return [left.fuse(lip), right.cut(step)];
+}
+
 // Seam inserts print upright, because a shell half prints with its seam facing up.
-function joinAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, fit: Fit): [Shape3D, Shape3D] {
+function joinAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
+  const fit = plan.config.fabrication.fit;
+  if (seam.lip > 0) [left, right] = lipAtSeam(left, right, seam, plan);
   let l = left.cut(compoundShapes(seam.bolts.map((point) => seamBoltLeftHole(seam, point, fit.screwHole))) as Shape3D);
   let r = right.cut(compoundShapes(seam.bolts.map((point) => acrossSeam(fit.insertHole, INSERT_HOLE_DEPTH + 1, seam.x - 1, point))) as Shape3D);
   for (const point of seam.pins) {
@@ -795,13 +817,13 @@ function joinAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, fit: Fit):
   return [l, r];
 }
 
-function splitAtSeams(shell: Shape3D, seams: PlannedSeam[], fit: Fit): Shape3D[] {
+function splitAtSeams(shell: Shape3D, plan: BuildPlan): Shape3D[] {
   const parts: Shape3D[] = [];
   let remaining = shell;
-  for (const seam of [...seams].sort((a, b) => a.x - b.x)) {
+  for (const seam of [...plan.seams].sort((a, b) => a.x - b.x)) {
     const { positive, negative } = remaining.split("YZ", seam.x);
     if (!positive || !negative) throw new Error(`The seam at x = ${seam.x} missed the shell.`);
-    const [left, right] = joinAtSeam(negative as Shape3D, positive as Shape3D, seam, fit);
+    const [left, right] = joinAtSeam(negative as Shape3D, positive as Shape3D, seam, plan);
     parts.push(left);
     remaining = right;
   }
@@ -997,7 +1019,7 @@ export function buildEnclosure(plan: BuildPlan): Enclosure {
   };
   const forms = timed("forms", () => outerForms(plan));
   const shell = timed("shell", () => shellBlank(plan, forms));
-  const blanks = timed("split", () => splitAtSeams(shell, plan.seams, plan.config.fabrication.fit));
+  const blanks = timed("split", () => splitAtSeams(shell, plan));
   const parts: BuiltPart[] = [];
   const add = (blank: Shape3D) => {
     const index = parts.length;

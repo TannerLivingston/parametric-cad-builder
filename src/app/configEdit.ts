@@ -87,7 +87,7 @@ function unusedId(config: RawConfig, type: string): string {
 }
 
 function errorCount(config: RawConfig): number {
-  const result = validateConfig(config);
+  const result = validateConfig(config, { wiring: false });
   return result.ok ? 0 : result.errors.length;
 }
 

@@ -9,7 +9,7 @@ const MIN_ROOM = 20; // the closest a new screw starts to another, so that it do
 type Changes = { add?: any[]; remove?: any[] };
 
 const plannedOf = (config: RawConfig): PlannedFasteners | undefined => {
-  const result = validateConfig(config);
+  const result = validateConfig(config, { wiring: false });
   return result.ok ? result.plan.fasteners : result.fasteners;
 };
 

@@ -224,10 +224,14 @@ export const openingSchema = z.strictObject({
   keepOut: z.array(z.strictObject({ xMin: offset, xMax: offset, yMin: offset, yMax: offset, top: length })).default([]),
 });
 
+// `lip` steps the joint in the shell's skin: for this far past the seam, the left half keeps the
+// outer half of the wall, and of the top where the shell has one, over a step cut back in the right
+// half. It hides the joint line and lines the halves up. 0 leaves the joint flat.
 export const seamSchema = z.strictObject({
   x: length,
   ribWidth: length.default(9),
   ribHalfThickness: length.default(5),
+  lip: z.number().nonnegative().default(0),
 });
 
 // Engraved text. It goes with a part, moving when the part does, or at a spot on a surface or wall.

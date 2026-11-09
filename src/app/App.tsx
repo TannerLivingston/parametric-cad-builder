@@ -215,7 +215,7 @@ export function App() {
           const item = planned.items.find((f) => f.id === id);
           if (!item) return;
           const moved = moveFastener(current, item, x, y);
-          const check = validateConfig(moved.config);
+          const check = validateConfig(moved.config, { wiring: false });
           const now = (check.ok ? check.plan.fasteners : check.fasteners)?.items.find((f) => f.id === moved.id);
           setDragProblem(now?.problem ?? null);
           scene.setFastenerDragProblem(Boolean(now?.problem));
@@ -968,7 +968,7 @@ export function App() {
                 <h2>Wires <span className="count">{result.plan.wiring.routes.length}</span></h2>
                 <p className="hint">Along their routes across the floor, shown with Wires in the view, down from each part and up to its board. {WIRE_SLACK_NOTE}</p>
                 <ul className="hardware">
-                  {result.plan.wiring.routes.map((route) => <li key={route.from}>{route.from} to {route.to}, about {wireLength(route.length)} mm</li>)}
+                  {result.plan.wiring.routes.map((route) => <li key={route.from}>{route.from} to {route.to}, about {wireLength(route.length)} mm{route.seams.length ? ", across the seam" : ""}</li>)}
                 </ul>
               </section>
             ) : null}

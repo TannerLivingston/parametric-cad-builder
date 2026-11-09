@@ -39,6 +39,7 @@ import {
   setRailScrew,
   setRound,
   setSeam,
+  setSeamLip,
   setTopPanel,
   shapeValues,
   updateEnclosure,
@@ -469,9 +470,13 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
           Split the shell in two, for a small bed
         </label>
         {seam ? (
-          <div className="fields">
-            <NumberField label="Split at x" value={seam.x} onCommit={number((x) => setSeam(config, x))} />
-          </div>
+          <>
+            <div className="fields">
+              <NumberField label="Split at x" value={seam.x} onCommit={number((x) => setSeam(config, x))} />
+              <NumberField label="Lip past it" value={seam.lip} onCommit={number((lip) => setSeamLip(config, lip))} />
+            </div>
+            <p className="hint">A lip hides the joint and lines the halves up: the left half's outer skin reaches this far over a step in the right half. 0 leaves it flat.</p>
+          </>
         ) : null}
         <div className="fields">
           <TextField

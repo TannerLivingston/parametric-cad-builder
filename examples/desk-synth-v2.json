@@ -43,7 +43,7 @@
       { "xMin": 186, "xMax": 336.4, "yMin": 150, "yMax": 172, "top": 37.2 }
     ]
   },
-  "seams": [{ "x": 186 }],
+  "seams": [{ "x": 186, "lip": 3 }],
   "wiring": { "shiftRegisters": 2 },
   "fabrication": { "material": "PETG", "fit": { "pinSocket": 4.1, "partHoles": { "arcade-24mm": -0.15, "ec11-dial-19mm": -0.15, "ec11-dial-30mm": -0.15 } }, "fitTestParts": ["oled-ssd1306"] },
   "plate": {
