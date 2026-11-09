@@ -11,7 +11,7 @@ import { textOutline } from "./lettering.js";
 import { CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, type CreaseJoint } from "./crease.js";
 import type { BuildPlan, PlacedCutout, PlacedLabel, PlacedNotch, PlacedPost, PlannedSeam } from "./validate.js";
 import { POST_ROOT_DEPTH, TOOL_OVERSHOOT_ABOVE, TOOL_OVERSHOOT_BELOW } from "./validate.js";
-import { KNOB_GRIP_COUNT, KNOB_POINTER, type PlannedKnob } from "./knob.js";
+import { CAP_COLLAR, KNOB_GRIP_COUNT, KNOB_POINTER, type PlannedCap, type PlannedKnob } from "./knob.js";
 import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTabExtent, type TopJoint, type TopScrew } from "./top.js";
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
@@ -1025,6 +1025,7 @@ export function knobSolid(knob: PlannedKnob, surface: Surface): Shape3D {
     const [y, z] = surfacePoint(surface, knob.v, normal);
     return new Plane([knob.u, y, z], [1, 0, 0], [0, -surface.sin, surface.cos]);
   };
+  if (knob.key) return capSolid(knob, knob.key, plane);
   const bottom = knob.underside;
   const tall = knob.height;
   let solid = drawCircle(r).sketchOnPlane(plane(bottom)).extrude(tall) as Shape3D;
@@ -1051,6 +1052,18 @@ export function knobSolid(knob: PlannedKnob, surface: Surface): Shape3D {
     bore = bore.cut(beyond.sketchOnPlane(plane(bottom - 2)).extrude(hole.depth + 4) as Shape3D);
   }
   return solid.cut(bore);
+}
+
+// A key cap where it goes, over its switch: a flat top with rounded corners, on a round collar that
+// the stem's cross goes up into. Printed top down, the socket opens upwards, and nothing overhangs.
+function capSolid(knob: PlannedKnob, key: PlannedCap, plane: (normal: number) => Plane): Shape3D {
+  const corner = Math.min(1.5, key.width / 4, key.depth / 4);
+  const top = drawRoundedRectangle(key.width, key.depth, corner).sketchOnPlane(plane(key.topUnderside)).extrude(key.thickness) as Shape3D;
+  const collar = drawCircle(CAP_COLLAR / 2).sketchOnPlane(plane(knob.underside)).extrude(key.topUnderside - knob.underside + 0.01) as Shape3D;
+  const [length, width] = key.cross;
+  const height = key.socketTop - knob.underside + 1;
+  const cross = (drawRectangle(length, width).sketchOnPlane(plane(knob.underside - 1)).extrude(height) as Shape3D).fuse(drawRectangle(width, length).sketchOnPlane(plane(knob.underside - 1)).extrude(height) as Shape3D);
+  return top.fuse(collar).cut(cross);
 }
 
 // Re-cuts one printed part after its cutouts change, reusing its blank. The shell and

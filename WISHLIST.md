@@ -7,10 +7,6 @@ proven the numbers. Move an item to the done list once it's built.
 
 - [ ] Describing a design in words, with the validator still judging the result.
 
-## Physical details
-
-- [ ] Button caps. Knobs are done.
-
 ## Shape
 
 - [ ] Curved outlines, more than one seam, and more than one panel thickness.
@@ -23,6 +19,8 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Done
 
+- [x] **Key caps,** printed for a Cherry MX-style switch, now in the library: a flat top on a collar over its cross stem,
+  printed top down without support. Its socket uses the knob's fit, with no fit test row of its own yet.
 - [x] **Room for wires, their routes, and cable ties along them.** Each part keeps room where its wires leave it, they're routed
   across the floor to their board with lengths on the Print tab, and a button lays cable tie bridges along the routes. All of it
   only warns, and one tick turns it off. The library's plugs are estimates.

@@ -11,7 +11,7 @@ import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THI
 import { blocksTopDriver, tabGussetDepth, TOP_TAB_LENGTH, TOP_TAB_THICKNESS, MIN_TOP_SCREWS, MIN_TOP_SCREW_SPACING, TOP_POST_DIAMETER, postBottomAt, topScrewProblem, topTabExtent, type TopJoint, type TopObstacles, type TopPiece, type TopScrew, type TopScrewWall, GROOVE_DEPTH, MIN_TONGUE_ROOT, TONGUE_FIT, TONGUE_INSET, TONGUE_ROOT } from "./top.js";
 import { textOutline, unsupportedCharacters } from "./lettering.js";
 import { planPins, type PinBudget } from "./pins.js";
-import { DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
+import { capFit, DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
 import { BARB_REACH, holderBlocks, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { panelWireRooms, floorWireRooms, wallWireRooms, wireRoomProblem, floorBlock, routeWire, WIRE_BUNDLE, type Point3, type WireObstacle, type WireRoom, type WireRoute } from "./wiring.js";
 import { BOSS_DIAMETER, bossProblem, chosenBossLift, shortBossTop, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, choosePlateJoint, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
@@ -344,7 +344,7 @@ export function validateConfig(input: unknown): ValidationResult {
     ...planRailPart(config, firstPlate + plateParts.length, issues),
   ];
   const knobs = planKnobs(config, placed, printedParts.length, issues);
-  printedParts.push(...knobs.map((knob): PrintedPart => ({ index: knob.printedPart, kind: "knob", name: knob.name, color: knob.color, xMin: knob.u - knob.diameter / 2, xMax: knob.u + knob.diameter / 2, size: [knob.diameter, knob.diameter, knob.height] })));
+  printedParts.push(...knobs.map((knob): PrintedPart => ({ index: knob.printedPart, kind: "knob", name: knob.name, color: knob.color, xMin: knob.u - knob.diameter / 2, xMax: knob.u + knob.diameter / 2, size: knob.key ? [knob.key.width, knob.key.depth, knob.height] : [knob.diameter, knob.diameter, knob.height] })));
 
   const pins = checkPins(config, placed, issues);
   const wiring = planWiring(config, profile, placed, seams, plate, topScrews, posts, holderBlockList, issues);
@@ -1693,6 +1693,17 @@ function placeComponents(config: Config, parts: Record<string, Part>, profile: P
           const [du, dv] = rotateOffset(shafts[0]!.at, rotation);
           return { kind: "circle", cx: cx + du, cy: cy + dv, r: knob.diameter / 2 };
         }
+        // So does a key cap wider than its switch.
+        const cap = "cap" in component ? component.cap : undefined;
+        const stems = part.mount === "panel" ? part.stems : [];
+        if (which === "above" && cap && stems.length === 1) {
+          const [hu, hv] = halfExtents(shape);
+          const [w, h] = rotation === 90 || rotation === 270 ? [cap.depth, cap.width] : [cap.width, cap.depth];
+          if (w / 2 > hu || h / 2 > hv) {
+            const [du, dv] = rotateOffset(stems[0]!.at, rotation);
+            return { kind: "rect", cx: cx + du, cy: cy + dv, w: Math.max(w, 2 * hu), h: Math.max(h, 2 * hv) };
+          }
+        }
         return shape;
       },
     };
@@ -2264,7 +2275,11 @@ function listAssembly(config: Config, seams: PlannedSeam[], plate: PlatePlan | n
   if (plate?.screws.length) step("Screw on the plate from below.", ["shell", "plate"]);
   if (config.opening?.rail) step("Screw on the rail from below, last.", ["shell", "rail"]);
   if (plate?.feet.length) step("Stick a rubber foot into each recess under the plate.", ["plate"]);
-  if (config.components.some((c) => "knob" in c && c.knob)) step("Push the knobs onto their shafts, last, each with its groove over the shaft's flat.", ["knob"]);
+  const hasKnobs = config.components.some((c) => "knob" in c && c.knob);
+  const hasCaps = config.components.some((c) => "cap" in c && c.cap);
+  if (hasKnobs) step("Push the knobs onto their shafts, last, each with its groove over the shaft's flat.", ["knob"]);
+  else if (hasCaps) step("Push the key caps onto their switches' stems, last.", ["knob"]);
+  if (hasKnobs && hasCaps) step("Push the key caps onto their switches' stems.", []);
   return steps;
 }
 
@@ -2343,12 +2358,47 @@ function listHardware(config: Config, profile: Profile, seams: PlannedSeam[], pl
   return items;
 }
 
-// A knob on each shaft of a part that asks for them, after the other printed parts.
+// A knob on each shaft of a part that asks for them, and a cap on each stem, after the other printed parts.
 function planKnobs(config: Config, placed: Placed[], first: number, issues: Issues): PlannedKnob[] {
   const knobs: PlannedKnob[] = [];
   const { fit } = config.fabrication;
+  const planCaps = (item: Placed, component: { u: number; v: number; rotationDeg: number }, cap: { width: number; depth: number; thickness: number; color?: string | undefined }) => {
+    const path = `components[${item.index}].cap`;
+    const stems = item.part.mount === "panel" ? item.part.stems : [];
+    if (!stems.length || !item.surface) {
+      issues.error("KNOB_INVALID", `"${item.id}" has no stem for a key cap.`, path, [item.id]);
+      return;
+    }
+    const rotation = component.rotationDeg as Rotation;
+    stems.forEach((stem, n) => {
+      const fits = capFit(cap, stem, fit.knobHole);
+      if (typeof fits === "string") {
+        issues.error("KNOB_INVALID", `The cap for "${item.id}" ${fits}.`, path, [item.id]);
+        return;
+      }
+      const [du, dv] = rotateOffset(stem.at, rotation);
+      const [width, depth] = rotation === 90 || rotation === 270 ? [cap.depth, cap.width] : [cap.width, cap.depth];
+      const { collarBottom, ...key } = fits;
+      knobs.push({
+        componentId: item.id,
+        name: stems.length > 1 ? `Cap ${n + 1} for ${item.id}` : `Cap for ${item.id}`,
+        printedPart: first + knobs.length,
+        surface: item.surface!.id,
+        u: component.u + du,
+        v: component.v + dv,
+        toward: rotateOffset([0, 1], rotation),
+        diameter: Math.max(width, depth),
+        underside: collarBottom,
+        height: key.topUnderside + cap.thickness - collarBottom,
+        hole: { diameter: key.cross[0], flat: null, depth: key.socketTop - collarBottom },
+        color: cap.color ?? DEFAULT_KNOB_COLOR,
+        key: { width, depth, thickness: cap.thickness, ...key },
+      });
+    });
+  };
   for (const item of placed) {
     const component = config.components[item.index]!;
+    if ("u" in component && component.cap) planCaps(item, component, component.cap);
     if (!("u" in component) || !component.knob) continue;
     const path = `components[${item.index}].knob`;
     const shafts = item.part.mount === "panel" ? item.part.shafts : [];

@@ -56,6 +56,18 @@ export function setKnob(config: RawConfig, id: string, patch: RawComponent | nul
   };
 }
 
+// A printed key cap for a part's stems, changed, or taken off with null.
+export function setCap(config: RawConfig, id: string, patch: RawComponent | null): RawConfig {
+  return {
+    ...config,
+    components: (config.components ?? []).map((c: RawComponent) => {
+      if (c.id !== id) return c;
+      const { cap, ...rest } = c;
+      return patch === null ? rest : { ...rest, cap: { ...cap, ...Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, typeof v === "number" ? tidy(v) : v])) } };
+    }),
+  };
+}
+
 export function removeComponent(config: RawConfig, id: string): RawConfig {
   const { labels = [], ...rest } = config;
   const kept = labels.filter((label: RawConfig) => label.component !== id);

@@ -461,6 +461,19 @@ const raw: Record<string, unknown> = {
     },
     notes: "The size is Seeed's, the same for each XIAO. The cradle is laid out like the RP2040-Plus's, for headers soldered with their plastic underneath, and its USB-C faces the left edge. Check the board's thickness, and print a fit test for the clips.",
   },
+  "mx-switch": {
+    name: "Cherry MX-style key switch",
+    source: "datasheet",
+    pins: { switches: 1 },
+    mount: "panel",
+    control: "press",
+    // A 14 mm square hole, through a 1.5 mm skin that a recess from below leaves, for its clips.
+    cutouts: [{ kind: "rect", width: 14, height: 14, recess: { width: 15.6, height: 15.6, skin: 1.5 } }],
+    above: { footprint: { shape: "rect", width: 15.6, height: 15.6 }, height: 6.6 },
+    below: { footprint: { shape: "rect", width: 14, height: 14 }, depth: 5.3 },
+    stems: [{ top: 11.6, cross: [4, 1.2], housing: 6.6 }],
+    notes: "Cherry's sizes. It clips into the skin from above, and the body below, with its pins, is for a 3 mm panel. Give it a printed cap, whose stem socket fabrication.fit.knobHole loosens, or put a bought one on.",
+  },
   "shift-74hc165": {
     name: "74HC165 shift register breakout",
     pins: { shiftInputs: 8 },
@@ -525,6 +538,7 @@ const WIRES: Record<string, object[]> = {
     { side: "rear", at: [0, 5], width: 6, height: 4, room: 10 },
   ],
   "shift-74hc165": [{ side: "up", at: [0, 13.7], width: 18, height: 2.6, room: 14 }],
+  "mx-switch": [{ side: "down", width: 10, height: 6, room: 8 }],
   "midi-din-5": [{ side: "back", width: 16, height: 12, room: 12 }],
   "trs-35-panel": [{ side: "back", width: 10, height: 10, room: 10 }],
   "trs-635-panel": [{ side: "back", width: 14, height: 14, room: 12 }],

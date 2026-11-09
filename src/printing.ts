@@ -631,7 +631,7 @@ export function resolvedFor(plan: BuildPlan, part: PrintedPart): string[] {
     return plan.labels.some((label) => label.printedPart === part.index) ? [face, "Its labels are on the bed side too, so they come out crisp. Leave supports off for it, or the slicer may put some inside big letters."] : [face];
   }
   if (part.kind === "plate" || part.kind === "rail") return ["Prints flat, with its countersinks on the bed."];
-  if (part.kind === "knob") return ["Prints top down, so the hole for its shaft opens upwards and needs no support."];
+  if (part.kind === "knob") return [plan.knobs.find((knob) => knob.printedPart === part.index)?.key ? "Prints top down, so its collar stands up from the top and the socket for its stem opens upwards, needing no support." : "Prints top down, so the hole for its shaft opens upwards and needs no support."];
   if (plan.shellOnSide) return ["Prints on its side with the seam up, so its bosses and screw tabs slope back to the wall, and its holes have a point on top."];
   return plan.topScrews.length ? ["Prints upright, so its screw tabs have gussets under them."] : [];
 }

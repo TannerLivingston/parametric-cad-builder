@@ -97,6 +97,12 @@ export const panelPartSchema = z.strictObject({
   // Shafts that a printed knob can go on. `length` is from the underside of the panel, which the
   // part is held against, and `flat` is across a D shaft's flat side, which faces +v before turning.
   shafts: z.array(z.strictObject({ at, diameter: length, flat: length.optional(), length })).default([]),
+  // Cross stems that a printed key cap can go on, like a Cherry MX switch's. Heights are above the
+  // panel's face: `top` is the stem's tip, `cross` its arms' length and width, and `housing` the top
+  // of what it moves in, which a pressed cap has to stay clear of.
+  stems: z
+    .array(z.strictObject({ at, top: length, cross: z.tuple([length, length]), crossHeight: length.default(3.6), housing: length, travel: length.default(4) }))
+    .default([]),
   // How it's used, for checking there's room for fingers, and that a screen can be seen.
   control: z.enum(["press", "turn", "slide", "touch", "screen"]).optional(),
 });
@@ -162,8 +168,12 @@ const componentBase = {
 // A printed knob for each of a part's shafts, this wide and tall. It sits as low on the shaft as the nut allows.
 export const knobSchema = z.strictObject({ diameter: length.default(14), height: length.default(16), color: z.string().min(1).optional() });
 
+// A printed key cap for each of a part's stems: a flat top this wide, deep and thick, on a collar
+// round the stem.
+export const capSchema = z.strictObject({ width: length.default(15), depth: length.default(15), thickness: length.default(2.4), color: z.string().min(1).optional() });
+
 export const componentSchema = z.union([
-  z.strictObject({ ...componentBase, surface: z.string().min(1).optional(), u: offset, v: offset, knob: knobSchema.optional() }),
+  z.strictObject({ ...componentBase, surface: z.string().min(1).optional(), u: offset, v: offset, knob: knobSchema.optional(), cap: capSchema.optional() }),
   z.strictObject({ ...componentBase, x: offset, y: offset }),
   z.strictObject({ ...componentBase, wall: wallSchema, at: offset, z: length }),
 ]);

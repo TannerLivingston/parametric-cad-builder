@@ -326,6 +326,24 @@ is the shaft's size plus `fabrication.fit.knobHole`, 0.1 mm unless a fit test sa
 holes to try once a design has a knob. Knobs are printed parts of their own, top down so the hole needs no support, with a
 `color` of their own, and they go on last.
 
+### Key caps
+
+A part with a cross stem, like the library's `mx-switch`, can have a printed key cap on it, from the Layout tab or in the config:
+
+```json
+{ "id": "key-1", "type": "mx-switch", "surface": "top", "u": 60, "v": 40, "cap": { "width": 15, "depth": 15, "thickness": 2.4 } }
+```
+
+Each is a flat top with rounded corners, 15 mm square and 2.4 mm thick unless given, on a 5.5 mm collar that the stem's cross
+goes up into. The collar rests at the foot of the cross, and the top stays 0.5 mm clear of the switch's housing with the key
+pressed all the way down. A part's `stems` give each one's place, the height of its tip and its housing above the face, its
+cross's arms, and its travel. The socket is the cross plus `fabrication.fit.knobHole`, since there's no fit test row for it yet.
+A cap prints top down, with its collar standing up, so nothing overhangs, and it's a printed part of its own that goes on last.
+One wider than its switch stands in for it when keeping fingers' room.
+
+The `mx-switch` is a Cherry MX-style switch by Cherry's sizes. It clips into a 14 mm square hole through a 1.5 mm skin, which
+a recess from below leaves in a thicker panel.
+
 ### Pins
 
 The Print tab counts the microcontroller's pins a design uses, if wired the way it assumes, and gives each part on the I2C bus an
@@ -388,7 +406,7 @@ crossing the seam.
 | Source | Parts |
 | --- | --- |
 | Measured, from the Desk Synth's Fusion model | 24 mm arcade button, EC11 dials (19 and 30 mm), Adafruit #5752 encoder board, 2.42 inch SSD1309 OLED, RP2040-Plus, 7 x 9 cm perfboard, ADS7830 board |
-| From the maker's drawing, not in that build | 0.96 inch SSD1306 OLED, whose boards vary, so check yours, and the RP2350-Plus, which has the RP2040-Plus's outline and goes in the same cradle in the Desk Synth V2. Teensy 4.0 and 4.1, Arduino Nano and Seeed XIAO, each in a cradle laid out like the RP2040-Plus's, with its USB through the left wall when it's against it. Print a fit test for their clips |
+| From the maker's drawing, not in that build | A Cherry MX-style key switch. 0.96 inch SSD1306 OLED, whose boards vary, so check yours, and the RP2350-Plus, which has the RP2040-Plus's outline and goes in the same cradle in the Desk Synth V2. Teensy 4.0 and 4.1, Arduino Nano and Seeed XIAO, each in a cradle laid out like the RP2040-Plus's, with its USB through the left wall when it's against it. Print a fit test for their clips |
 | Estimated, not in that build | Latching button, potentiometer, TTP223, Pico 2, 74HC165 breakout |
 
 The arcade button's hole is from the model, but its body isn't measured: the diameter comes from the

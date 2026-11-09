@@ -6,7 +6,7 @@ import type { Part } from "../schema.js";
 import type { FitTestPlan } from "../fitTest.js";
 import { validateConfig, type Issue, type PlannedFasteners } from "../validate.js";
 import { designFromHash, designHash } from "./shareLink.js";
-import { addComponent, setKnob, formatConfig, parseConfig, partsOf, removeComponent, updateComponent, type RawConfig } from "./configEdit.js";
+import { addComponent, setCap, setKnob, formatConfig, parseConfig, partsOf, removeComponent, updateComponent, type RawConfig } from "./configEdit.js";
 import { describeEstimate, WIRE_SLACK_NOTE, wireLength, type PartPrintReport } from "../printing.js";
 import { EngineClient, type BedView, type BuildResult, type FitTestMesh } from "./engineClient.js";
 import { moveFastener, removeFastener } from "./fastenerEdit.js";
@@ -810,6 +810,21 @@ export function App() {
                       <>
                         <NumberField label="Knob width" value={selectedComponent.knob.diameter ?? 14} onCommit={(diameter) => applyConfig(setKnob(config, selectedComponent.id, { diameter }))} />
                         <NumberField label="Knob height" value={selectedComponent.knob.height ?? 16} onCommit={(height) => applyConfig(setKnob(config, selectedComponent.id, { height }))} />
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+                {selectedPart.mount === "panel" && selectedPart.stems?.length ? (
+                  <div className="fields">
+                    <label className="check">
+                      <input type="checkbox" checked={Boolean(selectedComponent.cap)} onChange={(e) => applyConfig(setCap(config, selectedComponent.id, e.target.checked ? {} : null))} />
+                      Print {selectedPart.stems.length > 1 ? "key caps" : "a key cap"} for it
+                    </label>
+                    {selectedComponent.cap ? (
+                      <>
+                        <NumberField label="Cap width" value={selectedComponent.cap.width ?? 15} onCommit={(width) => applyConfig(setCap(config, selectedComponent.id, { width }))} />
+                        <NumberField label="Cap depth" value={selectedComponent.cap.depth ?? 15} onCommit={(depth) => applyConfig(setCap(config, selectedComponent.id, { depth }))} />
+                        <NumberField label="Top thickness" value={selectedComponent.cap.thickness ?? 2.4} step={0.2} onCommit={(thickness) => applyConfig(setCap(config, selectedComponent.id, { thickness }))} />
                       </>
                     ) : null}
                   </div>

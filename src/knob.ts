@@ -23,6 +23,32 @@ export interface PlannedKnob {
   height: number; // its own
   hole: { diameter: number; flat: number | null; depth: number }; // as cut, with the fit added
   color: string;
+  key?: PlannedCap; // a key cap on a cross stem, rather than a round knob on a shaft
+}
+
+// A key cap: a flat top on a round collar, with the stem's cross up into the collar. Heights are
+// above the panel's face, like a knob's underside, which for a cap is the bottom of its collar.
+export interface PlannedCap {
+  width: number; // along u, before turning
+  depth: number;
+  thickness: number;
+  topUnderside: number; // of its flat top, clear of the housing when pressed
+  cross: [number, number]; // its socket's arms, with the fit added
+  socketTop: number; // past the stem's tip
+}
+
+export const CAP_COLLAR = 5.5; // across, round the stem, as on a bought cap
+export const CAP_CLEARANCE = 0.5; // over the housing, pressed all the way, and past the stem's tip
+
+// Where a cap sits on its stem, or why it can't: its collar rests at the bottom of the stem's cross,
+// and its top stays clear of the housing pressed all the way down.
+export function capFit(cap: { width: number; depth: number; thickness: number }, stem: { top: number; cross: [number, number]; crossHeight: number; housing: number; travel: number }, fit: number): Omit<PlannedCap, "width" | "depth" | "thickness"> & { collarBottom: number } | string {
+  if (Math.min(cap.width, cap.depth) < CAP_COLLAR + 2) return `is ${Math.min(cap.width, cap.depth)} mm across, and needs at least ${CAP_COLLAR + 2} mm round its collar`;
+  const collarBottom = stem.top - stem.crossHeight;
+  const topUnderside = Math.max(stem.housing + stem.travel + CAP_CLEARANCE, collarBottom + 1);
+  const socketTop = stem.top + CAP_CLEARANCE;
+  if (socketTop > topUnderside + cap.thickness - 0.8) return `is ${cap.thickness} mm thick, and needs at least ${round(socketTop - topUnderside + 0.8)} mm over the stem's tip`;
+  return { collarBottom, topUnderside, cross: [stem.cross[0] + fit, stem.cross[1] + fit], socketTop };
 }
 
 // Where a knob sits on its shaft, or why it can't. It goes as low as the nut allows, unless the
