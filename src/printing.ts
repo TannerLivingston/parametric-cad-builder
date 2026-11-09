@@ -498,11 +498,35 @@ export function findLayerGaps(welded: Welded, report: Pick<OrientationReport, "m
         }
         reach = grown;
       }
+      // A run with what's held up at both ends, and no longer than a bridge can go, bridges, along
+      // either axis, as a slicer would.
+      const held = (i: number) => current[i] === 1 && reach[i] === 1;
+      const bridged = new Uint8Array(nx * ny);
+      const across = (count: number, length: number, at: (line: number, step: number) => number) => {
+        for (let line = 0; line < count; line++) {
+          let step = 0;
+          while (step < length) {
+            const first = at(line, step);
+            if (!current[first] || reach[first]) {
+              step += 1;
+              continue;
+            }
+            let end = step;
+            while (end + 1 < length && current[at(line, end + 1)] && !reach[at(line, end + 1)]) end += 1;
+            if (step > 0 && end + 1 < length && held(at(line, step - 1)) && held(at(line, end + 1)) && (end - step + 1 + 2 * REACH_PIXELS) * PIXEL <= BRIDGE_SPAN) {
+              for (let k = step; k <= end; k++) bridged[at(line, k)] = 1;
+            }
+            step = end + 1;
+          }
+        }
+      };
+      across(ny, nx, (row, col) => row * nx + col);
+      across(nx, ny, (col, row) => row * nx + col);
       let pixels = 0;
       let [ca, cb, ra, rb] = [Infinity, -Infinity, Infinity, -Infinity];
       for (let row = 0; row < ny; row++) {
         for (let col = 0; col < nx; col++) {
-          if (current[row * nx + col] && !reach[row * nx + col]) {
+          if (current[row * nx + col] && !reach[row * nx + col] && !bridged[row * nx + col]) {
             pixels += 1;
             ca = Math.min(ca, col);
             cb = Math.max(cb, col);
@@ -517,7 +541,7 @@ export function findLayerGaps(welded: Welded, report: Pick<OrientationReport, "m
         const b = toDesign(x0 + cb * PIXEL, y0 + rb * PIXEL, z);
         const min: [number, number, number] = [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.min(a[2], b[2])];
         const max: [number, number, number] = [Math.max(a[0], b[0]), Math.max(a[1], b[1]), Math.max(a[2], b[2])];
-        const joined = hits.find((hit) => z - hit.toZ < LAYER * 2.5 && min[0] < hit.max[0] + 2 && max[0] > hit.min[0] - 2 && min[1] < hit.max[1] + 2 && max[1] > hit.min[1] - 2 && min[2] < hit.max[2] + 2 && max[2] > hit.min[2] - 2);
+        const joined = hits.find((hit) => z - zLow - hit.toZ < LAYER * 2.5 && min[0] < hit.max[0] + 2 && max[0] > hit.min[0] - 2 && min[1] < hit.max[1] + 2 && max[1] > hit.min[1] - 2 && min[2] < hit.max[2] + 2 && max[2] > hit.min[2] - 2);
         if (joined) {
           joined.area += area;
           joined.toZ = z - zLow;

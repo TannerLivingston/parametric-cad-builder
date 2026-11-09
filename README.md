@@ -120,7 +120,10 @@ An enclosure can be more than a shell and a plate. These are optional, and the D
 
 **`topPanels`** turn a surface into separate printed pieces that cap the shell out to its outer edge, in their own colour.
 `splits` cuts a piece that won't fit the bed. Screws go up through tabs on the shell into inserts in posts under the piece,
-and their positions are worked out for you, moving around parts. A cutout on that surface belongs to the piece above it,
+and their positions are worked out for you, moving around parts. On a shell with no seam, which prints upright, each tab has
+a 45 degree gusset under it, down to the wall, and its screw is a flat head in a countersink, M3 x 8. A tab goes where its
+gusset fits above the plate where it can. Where one can't, such as along a low front wall, it only goes if no other screw is
+within 45 mm, and its gusset's foot needs a little support. A rear edge has no wall under it, so it gets no tabs there. A cutout on that surface belongs to the piece above it,
 so moving a button re-cuts that piece alone.
 
 Where `splits` cuts a piece, a tongue on the left piece fits a groove in the right one, to keep their faces flush, unless
@@ -508,7 +511,13 @@ By default, a plate fits inside the walls with 0.25 mm of clearance. These sizes
 
 The Ø8 mm bosses are my choice, and merge with the wall beside them. Under a separate top panel, a boss stops just past its
 insert and has to touch a wall. So does one on the front or rear wall of a seamed shell, which also slopes back to the wall
-at 45 degrees, because it prints on its side. Any other boss rises to the top of the shell. Insert holes in a seamed shell have a teardrop point towards the seam, for the same reason.
+at 45 degrees, because it prints on its side. Any other boss rises to the top of the shell.
+
+A shell with no seam prints upright, where a boss's flat underside would start in mid-air over the plate. So there, a boss's
+underside rises at 45 degrees from the wall it touches. Its insert starts above the slope, and the plate has a wedge under it,
+filling the space up to it, for the screw to pull the plate up against. The screw is longer for it, an M3 x 12 flat-head rather
+than x 8. A boss stands about 5.5 mm taller this way, so where that would put it in the way of something, or there isn't the
+height, it keeps a flat underside, which needs a little support, as does one you list away from the walls. Insert holes in a seamed shell have a teardrop point towards the seam, for the same reason.
 
 A plate can also carry `countersunkHoles` and locating `pins` for whatever sits on it.
 
@@ -600,16 +609,18 @@ Some of this is taken care of in the design, depending on how the part prints:
 
 | Part | Prints | Shaped for it |
 | --- | --- | --- |
-| Shell with a seam | On its outer wall, seam up | Bosses, tabs and rail blocks slope back to a wall at 45 degrees, and holes have a teardrop point |
-| Shell without a seam | Upright, base down | Screw tabs have a 45 degree gusset under them, bored through for the screw |
+| Shell with a seam | On its outer wall, seam up | Bosses, tabs and rail blocks slope back to a wall at 45 degrees, holes have a teardrop point, and a fin carries a rear tab's web up to the skin |
+| Shell without a seam | Upright, base down | Plate bosses rise at 45 degrees from the wall they touch, and screw tabs have a 45 degree gusset under them, bored through, with the screw's head in a countersink |
 | Top piece | Face down, posts up | Its holes need no support at all |
-| Plate and rail | Flat, countersinks down | Nothing |
+| Plate and rail | Flat, countersinks down | Nothing, though under an upright shell's bosses the plate has wedges, sloping up |
 
 A shell without a seam stays upright even with a bottom round, because on its side its far wall would be a wide roof. With a
 top that's part of the shell, it goes face down instead, unless the mesh says otherwise.
 
 The limits are 45 degrees from upright for an overhang, about 70 for a roof, and a span of 12 mm for a bridge. They're taken from
-the Desk Synth's scripts and haven't been proven by a print. What's left over, the app says to use supports for, and marks on the bed
+the Desk Synth's scripts and haven't been proven by a print. Going up a layer at a time, each layer can reach 0.8 mm past the
+one under it. Past that, a stretch held up at both ends, along x or y, no more than 12 mm apart, is a bridge, such as the roof of
+a hole. A patch smaller than 0.5 mm² is too small for a slicer to support, and is left out, so specks here and there don't add up. What's left over, the app says to use supports for, and marks on the bed
 view. It only knows the Centauri Carbon 2's 256 mm bed by default, though `fabrication.buildVolume` can change it.
 
 These results are from the Desk Synth example in ElegooSlicer, using the Centauri Carbon 2 profile with Rapid PETG. They show
@@ -627,7 +638,8 @@ metres of support, and its share of the filament for that part:
 The two-part shell before this used 45.5 m and 15.5 m at 20°. Adding the rounds raised these from 9.2 m and 3.9 m, and took
 Shell 1 at 10° from none to 8.5 m. Much of what's left on Shell 1 goes to the seam bolts, at about 3 m each, because the head recess
 leaves a thin sliver that starts in mid-air. The Dial deck's shell, printed upright, took 1.84 m before its tabs had gussets, and
-takes 1.02 m now, most of it under the plate bosses. Nothing has been printed yet.
+1.02 m after, most of it under the plate bosses. Since then, the head bores and the bosses have been reshaped for it, and the
+app finds nothing left that needs support on any part of either example, but they haven't been sliced again, so ElegooSlicer's own figures are still from before. Nothing has been printed yet.
 
 ### Fit test
 

@@ -15,7 +15,7 @@ import { KNOB_GRIP_COUNT, KNOB_POINTER, type PlannedKnob } from "./knob.js";
 import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTabExtent, type TopJoint, type TopScrew } from "./top.js";
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
-import { BOSS_DIAMETER, bossSlope, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
+import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
 import { offsetChain, surfacePoint, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
 export const BOLT_DIAMETER = 3.4; // M3 clearance, as used in the Desk Synth shell
@@ -217,6 +217,26 @@ function topTabGusset(tab: ReturnType<typeof topTabExtent>, wall: TopScrew["wall
   return pen.close().sketchOnPlane(plane).extrude(sideways ? tab.yHigh - tab.yLow : tab.xHigh - tab.xLow) as Shape3D;
 }
 
+const TOP_WEB_FIN = 1.6; // thick, four lines
+
+// Which way, along the surface, a top screw's tab reaches from its wall.
+function towardTip(screw: Pick<TopScrew, "wall">): [number, number] {
+  return ({ left: [1, 0], right: [-1, 0], front: [0, 1], rear: [0, -1] } as const)[screw.wall] as [number, number];
+}
+
+// The point of a teardrop round a top screw, towards its tab's tip, past the chord between where its
+// sides meet the circle, as a prism up from zBottom.
+function teardropPoint(screw: Pick<TopScrew, "x" | "y" | "wall">, r: number, zBottom: number, height: number): Shape3D {
+  const [ux, uy] = towardTip(screw);
+  const c = r * Math.SQRT1_2;
+  return draw([screw.x + ux * c - uy * c, screw.y + uy * c + ux * c])
+    .lineTo([screw.x + ux * r * Math.SQRT2, screw.y + uy * r * Math.SQRT2])
+    .lineTo([screw.x + ux * c + uy * c, screw.y + uy * c - ux * c])
+    .close()
+    .sketchOnPlane("XY", zBottom)
+    .extrude(height) as Shape3D;
+}
+
 // What a top screw needs on the shell: a tab to bear on, with a clearance hole.
 function topScrewTab(plan: BuildPlan, screw: TopScrew, envelope: Shape3D): Shape3D {
   const e = plan.config.enclosure;
@@ -245,18 +265,56 @@ function topScrewTab(plan: BuildPlan, screw: TopScrew, envelope: Shape3D): Shape
       const tall = outline().sketchOnPlane("XY", tab.zLow).extrude(plan.profile.maxHeight + 1 - tab.zLow) as Shape3D;
       const web = tall.intersect(boxSolid([tab.xLow - spread, tab.xHigh + spread], [surface.y1 + 0.2, rearWallY], [tab.zLow, plan.profile.maxHeight + 1]));
       solid = solid.fuse(envelope.intersect(web));
+      if (plan.shellOnSide) {
+        // On its side, the web's corner nearest the bed would come first, as a line hanging from the
+        // skin, so a fin carries on from it at 45 degrees up to the skin, for it to grow from.
+        const towardBed = screw.x < (plan.seams[0]?.x ?? Infinity) ? -1 : 1;
+        const corner = towardBed > 0 ? tab.xHigh + spread : tab.xLow - spread;
+        const top = plan.profile.maxHeight + 1;
+        const rise = top - tab.zLow;
+        const fin = draw([corner - towardBed * 2, tab.zLow])
+          .lineTo([corner, tab.zLow])
+          .lineTo([corner + towardBed * rise, top])
+          .lineTo([corner - towardBed * 2, top])
+          .close()
+          .sketchOnPlane(new Plane([0, rearWallY, 0], [1, 0, 0], [0, -1, 0]))
+          .extrude(TOP_WEB_FIN) as Shape3D;
+        solid = solid.fuse(envelope.intersect(fin));
+      }
     }
   }
+  const hole = plan.config.fabrication.fit.screwHole;
+  const boreDiameter = Math.max(DRIVER_DIAMETER, COUNTERSINK_DIAMETER) + 0.6;
   if (!plan.shellOnSide) {
-    // Upright, it'd be a flat roof, so a gusset slopes back to the wall, with the screw's way bored through.
+    // Upright, it'd be a flat roof, so a gusset slopes back to the wall, with the screw's way bored
+    // through, wide enough for a flat head. The head sits in a countersink, since the flat ring
+    // round a plain hole would hang over the bore.
     const depth = tabGussetDepth(tab, screw.wall, e.floorThickness);
     if (depth > 0) {
       const gusset = topTabGusset(tab, screw.wall, depth);
-      const bore = makeCylinder(DRIVER_DIAMETER / 2, depth + 2, [screw.x, screw.y, tab.zLow - depth - 2], [0, 0, 1]);
+      // A teardrop, pointing up the gusset's slope. Round, its far side would leave a sliver of the
+      // slope starting in mid-air, the way a seam bolt's head bore does.
+      const bore = makeCylinder(boreDiameter / 2, depth + 2, [screw.x, screw.y, tab.zLow - depth - 2], [0, 0, 1]).fuse(teardropPoint(screw, boreDiameter / 2, tab.zLow - depth - 2, depth + 2));
       solid = solid.fuse(envelope.intersect(gusset).cut(bore));
     }
+    // The countersink sits as deep as it has to for its cone to be as wide as the bore where the two
+    // meet, under the tab, and the bore's point has a 45 degree roof, so the tab's underside has no
+    // flat rim round them.
+    const head = COUNTERSINK_DIAMETER / 2;
+    const sink = (boreDiameter / 2 - head) / ((head - hole / 2) / COUNTERSINK_DEPTH);
+    const apex = (boreDiameter / 2) * Math.SQRT2;
+    const [ux, uy] = towardTip(screw);
+    const roof = draw([0, tab.zLow - 0.01])
+      .lineTo([apex, tab.zLow - 0.01])
+      .lineTo([apex, tab.zLow])
+      .lineTo([0, tab.zLow + apex])
+      .close()
+      .sketchOnPlane(new Plane([screw.x - uy * apex, screw.y + ux * apex, 0], [ux, uy, 0], [uy, -ux, 0]))
+      .extrude(2 * apex) as Shape3D;
+    const pointRoofed = teardropPoint(screw, boreDiameter / 2, tab.zLow - 0.01, apex + 0.01).intersect(roof);
+    return solid.cut(plateScrewHole(screw.x, screw.y, TOP_TAB_THICKNESS, hole, tab.zLow + sink, boreDiameter)).cut(pointRoofed);
   }
-  return solid.cut(shellHole(plan, screw.x, screw.y, plan.config.fabrication.fit.screwHole, TOP_TAB_THICKNESS + 2, tab.zLow - 1));
+  return solid.cut(shellHole(plan, screw.x, screw.y, hole, TOP_TAB_THICKNESS + 2, tab.zLow - 1));
 }
 
 // A hole through a wall, and no further. The rounded rectangle is drawn across the wall.
@@ -299,6 +357,28 @@ export function holderSolid(block: HolderBlock, floorTop: number): Shape3D {
   return solid.fuse(barb as Shape3D);
 }
 
+// On a shell that prints upright, the space under a plate boss: below a 45 degree slope rising from
+// each wall it touches. It's cut from the boss, and filled by a wedge on the plate.
+// It's null for a boss with a flat underside, with no lift.
+function underBoss(plan: BuildPlan, x: number, y: number, lift: number): Shape3D | null {
+  if (lift === 0) return null;
+  const feet = bossFeet(plateInput(plan.config, plan.profile), x, y);
+  const z0 = plan.config.enclosure.floorThickness;
+  const reach = BOSS_DIAMETER + 4;
+  const tools = feet.map(({ axis, at, inward }) => {
+    // Drawn across the wall, along x or y and up, and pushed along it past the boss either side.
+    const outline = draw([at - inward, z0 - 1])
+      .lineTo([at + inward * reach, z0 - 1])
+      .lineTo([at + inward * reach, z0 + reach])
+      .lineTo([at, z0])
+      .lineTo([at - inward, z0])
+      .close();
+    const plane = axis === "y" ? new Plane([x - reach, 0, 0], [0, 1, 0], [1, 0, 0]) : new Plane([0, y + reach, 0], [1, 0, 0], [0, -1, 0]);
+    return outline.sketchOnPlane(plane).extrude(2 * reach) as Shape3D;
+  });
+  return tools.reduce((all, tool) => all.intersect(tool));
+}
+
 function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
   const e = plan.config.enclosure;
   const { inner } = plan.profile;
@@ -325,16 +405,21 @@ function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
     plan.plate.screws.forEach(([x, y], i) => {
       const short = plan.plate!.shortBosses[i];
       const slope = short ? bossSlope(sizes, x, y) : null;
-      const boss = makeCylinder(BOSS_DIAMETER / 2, short ? SHORT_BOSS_HEIGHT : height, [x, y, floorTop], [0, 0, 1]);
+      const lift = plan.plate!.lifts[i]!;
+      const shortHeight = shortBossTop(sizes, lift) - floorTop;
+      const boss = makeCylinder(BOSS_DIAMETER / 2, short ? shortHeight : height, [x, y, floorTop], [0, 0, 1]);
+      // Upright, its underside rises from the walls it touches: see bossFeet.
+      const under = underBoss(plan, x, y, lift);
       if (!slope) {
-        columns.push(boss);
+        columns.push(under ? boss.cut(under) : boss);
         return;
       }
       // A round can stop the wall short of a boss at the edge of the plate, so it needs tying to it.
       if (!plan.shellOnSide) {
         const across = (BOSS_DIAMETER / 2) * Math.SQRT1_2;
         const wallY = slope[0]![1];
-        shell = shell.fuse(envelope.intersect(boss.fuse(boxSolid([x - across, x + across], [Math.min(y, wallY), Math.max(y, wallY)], [floorTop, floorTop + SHORT_BOSS_HEIGHT]))));
+        const tied = boss.fuse(boxSolid([x - across, x + across], [Math.min(y, wallY), Math.max(y, wallY)], [floorTop, floorTop + shortHeight]));
+        shell = shell.fuse(envelope.intersect(under ? tied.cut(under) : tied));
         return;
       }
       // It prints on its side, so it slopes back to the wall. Slopes can overlap their
@@ -345,7 +430,7 @@ function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
     });
     if (columns.length) shell = shell.fuse(envelope.intersect(compoundShapes(columns) as Shape3D));
     const holes = compoundShapes(
-      plan.plate.screws.map(([x, y]) => shellHole(plan, x, y, shellInsertDiameter(plan), INSERT_HOLE_DEPTH + 1, floorTop - 1)),
+      plan.plate.screws.map(([x, y], i) => shellHole(plan, x, y, shellInsertDiameter(plan), INSERT_HOLE_DEPTH + 1 + plan.plate!.lifts[i]!, floorTop - 1)),
     );
     shell = shell.cut(holes as Shape3D);
   }
@@ -470,19 +555,21 @@ function topBlank(plan: BuildPlan, forms: OuterForms, pieceIndex: number): Shape
 }
 
 // Countersunk from the base, so screw heads end up flush with the underside.
-export function plateScrewHole(x: number, y: number, thickness: number, diameter: number): Shape3D {
-  const overshoot = 0.2;
+// A countersunk hole up from zBase. Its cone carries on below until it's `widest` across, so that
+// it meets a bore under it without a ledge.
+export function plateScrewHole(x: number, y: number, thickness: number, diameter: number, zBase = 0, widest = 0): Shape3D {
   const head = COUNTERSINK_DIAMETER / 2;
   const shank = diameter / 2;
   const slope = (head - shank) / COUNTERSINK_DEPTH;
+  const overshoot = Math.max(0.2, (widest / 2 - head) / slope + 0.05);
   return draw([0, -overshoot])
     .lineTo([head + slope * overshoot, -overshoot])
     .lineTo([shank, COUNTERSINK_DEPTH])
     .lineTo([shank, thickness + overshoot])
     .lineTo([0, thickness + overshoot])
     .close()
-    .sketchOnPlane(new Plane([x, y, 0], [1, 0, 0], [0, -1, 0]))
-    .revolve([0, 0, 1], { origin: [x, y, 0] }) as Shape3D;
+    .sketchOnPlane(new Plane([x, y, zBase], [1, 0, 0], [0, -1, 0]))
+    .revolve([0, 0, 1], { origin: [x, y, zBase] }) as Shape3D;
 }
 
 function plateBlanks(plan: BuildPlan): Shape3D[] {
@@ -500,7 +587,29 @@ function plateBlanks(plan: BuildPlan): Shape3D[] {
   const notch = plateNotchFor(plan.config);
   if (notch) plate = plate.cut(boxSolid([notch.xLow, notch.xHigh], [-1, notch.yHigh], [-1, e.floorThickness + 1]));
   if (plan.plate.screws.length) {
-    plate = plate.cut(compoundShapes(plan.plate.screws.map(([x, y]) => plateScrewHole(x, y, e.floorThickness, fit.screwHole))) as Shape3D);
+    // Upright, a wedge fills the space under each boss's slope, for the screw to pull up against.
+    if (!plan.shellOnSide) {
+      const footprint = outline.translate(e.width / 2, (yFront + yRear) / 2).sketchOnPlane("XY").extrude(e.floorThickness + BOSS_DIAMETER + 4) as Shape3D;
+      // A gusset that reaches under a boss fills that part of the space itself.
+      const gussets = plan.topScrews.flatMap((screw) => {
+        const surface = plan.profile.surfaces.find((s) => s.id === plan.topPieces[screw.piece]!.surface)!;
+        const tab = topTabExtent(screw, e.wall, e.width, screw.wall === "rear" ? surface.y1 + 3 : plan.profile.depth - e.wall, false);
+        const depth = tabGussetDepth(tab, screw.wall, e.floorThickness);
+        return depth > 0 ? [{ tab, solid: () => topTabGusset(tab, screw.wall, depth) }] : [];
+      });
+      const wedges = plan.plate.screws.flatMap(([x, y], i) => {
+        const under = underBoss(plan, x, y, plan.plate!.lifts[i]!);
+        if (!under) return [];
+        let wedge = makeCylinder(BOSS_DIAMETER / 2, BOSS_DIAMETER + 1, [x, y, e.floorThickness - 0.5], [0, 0, 1]).intersect(under).intersect(footprint);
+        const r = BOSS_DIAMETER / 2;
+        for (const { tab, solid } of gussets) {
+          if (x + r > tab.xLow && x - r < tab.xHigh && y + r > tab.yLow && y - r < tab.yHigh) wedge = wedge.cut(solid());
+        }
+        return [wedge];
+      });
+      if (wedges.length) plate = plate.fuse(compoundShapes(wedges) as Shape3D);
+    }
+    plate = plate.cut(compoundShapes(plan.plate.screws.map(([x, y], i) => plateScrewHole(x, y, e.floorThickness + plan.plate!.lifts[i]!, fit.screwHole))) as Shape3D);
   }
   const { countersunkHoles, pins } = plan.config.plate;
   if (countersunkHoles.length) {
@@ -612,16 +721,17 @@ function acrossSeam(diameter: number, length: number, x: number, [y, z]: Point2)
 }
 
 // Each bolt goes through a countersink on the left, into a heat-set insert on the right. Both
-// print without needing a flat seat. The head's bore through the slope still costs about 3 m
-// of support per bolt in ElegooSlicer, but the alternatives tried were worse: a slot open to
-// the tab's edge adds a flat roof, and a bore tangent to that edge makes an invalid solid.
+// print without needing a flat seat. The head's bore runs through the tab's slope, which rises
+// away from the wall as the half prints, so it's a teardrop pointing that way: round, its far side
+// would leave a sliver of the slope starting in mid-air, which cost about 3 m of support per bolt
+// in ElegooSlicer. The point has a 45 degree roof where it meets the countersink.
 function seamBoltLeftHole(seam: PlannedSeam, [y, z]: Point2, boltDiameter: number): Shape3D {
   const head = COUNTERSINK_DIAMETER / 2;
   const shank = boltDiameter / 2;
   const far = seam.x - seam.ribHalfThickness;
   const clearOut = seam.ribWidth + FRAME_OVERLAP + 1;
   const coneDepth = (head - shank) / ((head - SCREW_CLEARANCE_DIAMETER / 2) / COUNTERSINK_DEPTH);
-  return draw([far - clearOut, 0])
+  const round = draw([far - clearOut, 0])
     .lineTo([far - clearOut, head])
     .lineTo([far, head])
     .lineTo([far + coneDepth, shank])
@@ -630,6 +740,48 @@ function seamBoltLeftHole(seam: PlannedSeam, [y, z]: Point2, boltDiameter: numbe
     .close()
     .sketchOnPlane(new Plane([0, y, z], [1, 0, 0], [0, 0, 1]))
     .revolve([1, 0, 0], { origin: [0, y, z] }) as Shape3D;
+  const tab = nearestTab(seam, [y, z]);
+  if (!tab) return round;
+  // Across the bolt, in y and z: which way is up the slope, and square to that.
+  const [iy, iz] = tab.inward;
+  const length = Math.hypot(iy, iz);
+  const [uy, uz] = [iy / length, iz / length];
+  const c = head * Math.SQRT1_2;
+  const apex = head * Math.SQRT2;
+  const point = draw([y + uy * c - uz * c, z + uz * c + uy * c])
+    .lineTo([y + uy * apex, z + uz * apex])
+    .lineTo([y + uy * c + uz * c, z + uz * c - uy * c])
+    .close()
+    .sketchOnPlane(new Plane([far - clearOut, 0, 0], [0, 1, 0], [1, 0, 0]))
+    .extrude(clearOut + apex) as Shape3D;
+  // Drawn along the slope and x, and pushed across it either side.
+  const roof = draw([0, far - clearOut])
+    .lineTo([apex, far - clearOut])
+    .lineTo([apex, far])
+    .lineTo([0, far + apex])
+    .close()
+    .sketchOnPlane(new Plane([0, y - uz * apex, z + uy * apex], [0, uy, uz], [0, uz, -uy]))
+    .extrude(2 * apex) as Shape3D;
+  return round.fuse(point.intersect(roof));
+}
+
+// The tab a seam bolt goes through: the one whose line it's nearest.
+function nearestTab(seam: PlannedSeam, [y, z]: Point2): SeamTab | null {
+  let best: SeamTab | null = null;
+  let bestDistance = Infinity;
+  for (const tab of seam.tabs) {
+    const [ay, az] = tab.start;
+    const [by, bz] = tab.end;
+    const dy = by - ay;
+    const dz = bz - az;
+    const t = Math.max(0, Math.min(1, ((y - ay) * dy + (z - az) * dz) / (dy * dy + dz * dz || 1)));
+    const distance = Math.hypot(y - (ay + t * dy), z - (az + t * dz));
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = tab;
+    }
+  }
+  return best;
 }
 
 // Seam inserts print upright, because a shell half prints with its seam facing up.

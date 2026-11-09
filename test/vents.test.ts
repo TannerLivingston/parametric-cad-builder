@@ -7,6 +7,7 @@ import { TIE_BRIDGE, ventSlots } from "../src/fixtures.js";
 import { addCableTie, addVent, removeCableTie, removeVent, updateCableTie, updateVent } from "../src/app/shapeEdit.js";
 import { buildSceneModel, issueSpot } from "../src/app/sceneModel.js";
 import { plateNotchFor } from "../src/validate.js";
+import { BOSS_DIAMETER, INSERT_HOLE_DIAMETER } from "../src/plate.js";
 import { errors, deskSynth } from "./helpers.js";
 
 const box = (overrides: Record<string, unknown> = {}): any => ({
@@ -180,6 +181,8 @@ describe("as printed", () => {
     const reports = planPrint(built, parts.map((part) => part.shape.mesh({ tolerance: 0.1, angularTolerance: 0.3 })));
     const plate = reports.find((report) => report.name === "Plate")!;
     expect(plate.needsSupport).toBe(false);
-    expect(built.printedParts.find((part) => part.kind === "plate")!.size[2]).toBeCloseTo(built.config.enclosure.floorThickness + TIE_BRIDGE.height);
+    // Upright, the wedges under the plate's bosses stand taller than the bridge.
+    const wedge = Math.max(...built.plate!.lifts.map((lift) => (lift > 0 ? lift - INSERT_HOLE_DIAMETER / 2 + BOSS_DIAMETER / 2 : 0)));
+    expect(built.printedParts.find((part) => part.kind === "plate")!.size[2]).toBeCloseTo(built.config.enclosure.floorThickness + Math.max(TIE_BRIDGE.height, wedge));
   }, 60_000);
 });

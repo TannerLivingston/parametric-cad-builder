@@ -167,6 +167,53 @@ export function isShortBoss(input: Pick<PlatePlanInput, "wall" | "depth" | "plat
   return obstacles.onSide && bossSlope(input, x, y) !== null;
 }
 
+// On a shell that prints upright, a boss's underside would start in mid-air over the plate, so it
+// rises at 45 degrees from each wall it touches, and the plate has a wedge to fill the space under
+// it. This is the line on the plate's top where each slope starts, along x or y, and which way
+// is into the shell.
+export interface BossFoot {
+  axis: "x" | "y";
+  at: number;
+  inward: 1 | -1;
+}
+
+export function bossFeet(input: PlatePlanInput, x: number, y: number): BossFoot[] {
+  const r = BOSS_RADIUS;
+  const front = input.plateFront === undefined ? input.wall : input.plateFront - input.clearance;
+  const rear = input.plateRear === undefined ? input.depth - input.wall : input.plateRear + input.clearance;
+  const feet: BossFoot[] = [];
+  if (x - r <= input.wall) feet.push({ axis: "x", at: input.wall, inward: 1 });
+  if (x + r >= input.width - input.wall) feet.push({ axis: "x", at: input.width - input.wall, inward: -1 });
+  if (y - r <= (input.plateFront ?? input.wall)) feet.push({ axis: "y", at: front, inward: 1 });
+  if (y + r >= (input.plateRear ?? input.depth - input.wall)) feet.push({ axis: "y", at: rear, inward: -1 });
+  return feet;
+}
+
+// How far up an upright boss's insert hole starts, so that all of it is in the boss, above its slope.
+// It's 0 for a boss with a flat underside: on a shell printing on its side, away from the walls, or
+// where there isn't the height for its insert that high, when its underside needs a little support.
+export function bossLift(input: PlatePlanInput, profile: Profile, onSide: boolean, x: number, y: number): number {
+  if (onSide) return 0;
+  const feet = bossFeet(input, x, y);
+  if (feet.length === 0) return 0;
+  const under = Math.min(...feet.map((foot) => foot.inward * ((foot.axis === "x" ? x : y) - foot.at)));
+  const lift = Math.max(under, 0) + INSERT_HOLE_DIAMETER / 2;
+  const ceiling = lowestHeight(profile.inner, y - BOSS_RADIUS, y + BOSS_RADIUS);
+  return ceiling - input.floorThickness < INSERT_HOLE_DEPTH + INSERT_ROOF + lift ? 0 : lift;
+}
+
+// Where a short boss stops, with its insert lifted this far.
+export function shortBossTop(input: Pick<PlatePlanInput, "floorThickness">, lift: number): number {
+  return input.floorThickness + SHORT_BOSS_HEIGHT + lift;
+}
+
+// How far a boss here has its insert lifted: as bossLift says, unless lifting it would put it in the
+// way of something, when it keeps a flat underside, which needs a little support.
+export function chosenBossLift(input: PlatePlanInput, profile: Profile, obstacles: BossObstacles, x: number, y: number): number {
+  const lift = bossLift(input, profile, obstacles.onSide, x, y);
+  return lift > 0 && bossProblemWith(input, profile, obstacles, x, y, lift) !== null ? 0 : lift;
+}
+
 function touchesWall(input: PlatePlanInput, x: number, y: number): boolean {
   const r = BOSS_RADIUS;
   return x - r <= input.wall || x + r >= input.width - input.wall || y - r <= (input.plateFront ?? input.wall) || y + r >= (input.plateRear ?? input.depth - input.wall);
@@ -174,6 +221,10 @@ function touchesWall(input: PlatePlanInput, x: number, y: number): boolean {
 
 // Why a boss can't go here, or null if it can. Anything in its column is in the way.
 export function bossProblem(input: PlatePlanInput, profile: Profile, obstacles: BossObstacles, x: number, y: number): string | null {
+  return bossProblemWith(input, profile, obstacles, x, y, chosenBossLift(input, profile, obstacles, x, y));
+}
+
+function bossProblemWith(input: PlatePlanInput, profile: Profile, obstacles: BossObstacles, x: number, y: number, lift: number): string | null {
   const r = BOSS_RADIUS;
   const short = isShortBoss(input, obstacles, x, y);
   // Slopes only go on the shell that prints on its side.
@@ -184,9 +235,9 @@ export function bossProblem(input: PlatePlanInput, profile: Profile, obstacles: 
   const notch = obstacles.plateNotch;
   if (notch && x > notch.xLow - SCREW_EDGE_MARGIN && x < notch.xHigh + SCREW_EDGE_MARGIN && y < notch.yHigh + SCREW_EDGE_MARGIN) return "it's too close to the edge of the plate";
   const ceiling = lowestHeight(profile.inner, y - r, y + r);
-  if (ceiling - input.floorThickness < INSERT_HOLE_DEPTH + INSERT_ROOF) return "there isn't enough height for its insert";
+  if (ceiling - input.floorThickness < INSERT_HOLE_DEPTH + INSERT_ROOF + lift) return "there isn't enough height for its insert";
   // A slope is widest at the wall, so what matters is how wide it is where the tabs are.
-  const top = short ? input.floorThickness + SHORT_BOSS_HEIGHT : profile.maxHeight;
+  const top = short ? shortBossTop(input, lift) : profile.maxHeight;
   for (const rib of obstacles.ribs) {
     const beside = rib.tabs?.filter((tab) => tab.zLow < top).map((tab) => reachBetween(tab.yLow, tab.yHigh));
     const room = beside ? Math.max(r, ...beside) : reach;
@@ -205,7 +256,7 @@ export function bossProblem(input: PlatePlanInput, profile: Profile, obstacles: 
     if (Math.max(dx, dy) < obstacles.minWeb) return "it would show through a cutout";
   }
   for (const c of obstacles.posts) {
-    if (short && (c.zLow ?? 0) > input.floorThickness + SHORT_BOSS_HEIGHT) continue;
+    if (short && (c.zLow ?? 0) > top) continue;
     const dx = Math.max(c.xLow - x, x - c.xHigh) - reach;
     const dy = Math.max(c.yLow - y, y - c.yHigh) - r;
     if (Math.max(dx, dy) < obstacles.minWeb) return "another part's screw needs that space";

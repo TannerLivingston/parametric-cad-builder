@@ -3,7 +3,7 @@
 // heat-set inserts in posts under each piece.
 import { highestFloor, lowestHeight, type Profile } from "./profile.js";
 import { gap, halfExtents, polygonsOverlap, type Shape } from "./geometry.js";
-import { DRIVER_DIAMETER, INSERT_HOLE_DEPTH, type SeamDriverPath } from "./plate.js";
+import { COUNTERSINK_DIAMETER, DRIVER_DIAMETER, INSERT_HOLE_DEPTH, type SeamDriverPath } from "./plate.js";
 import type { Point2 } from "./profile.js";
 
 export const TOP_POST_DIAMETER = 8;
@@ -12,7 +12,10 @@ export const TOP_TAB_THICKNESS = 3;
 export const TOP_TAB_LENGTH = 12;
 const POST_RADIUS = TOP_POST_DIAMETER / 2;
 const DRIVER_RADIUS = DRIVER_DIAMETER / 2;
+const GUSSET_FOOT_SHORT = 0.9; // how far short of a tab's reach its gusset may stop: 0.5 into the wall, and 0.4 past it
 const TAB_REACH_PAST_SCREW = 3.2; // a clearance hole with 1.5 mm of plastic beyond it
+// Upright, the screw's flat head sits in a countersink, which needs plastic beyond it too.
+const TAB_REACH_PAST_COUNTERSINK = COUNTERSINK_DIAMETER / 2 + 1;
 const TAB_MAX_SPREAD = 8; // how far a tab's sloped base reaches sideways along its wall
 const MIN_TOP_SCREW_SPACING = 20;
 export const MIN_TOP_SCREWS = 2;
@@ -75,7 +78,7 @@ export interface TopObstacles {
 // the post, or from the rear skin forward for the rear edge. On a shell printing on its side, a
 // tab on the front or rear wall spreads along it, so that it slopes back to the wall as it prints.
 export function topTabExtent(screw: Pick<TopScrew, "x" | "y" | "wall" | "postBottom">, wall: number, width: number, wallY: number, onSide = true) {
-  const r = TAB_REACH_PAST_SCREW;
+  const r = onSide ? TAB_REACH_PAST_SCREW : TAB_REACH_PAST_COUNTERSINK;
   const half = TOP_TAB_LENGTH / 2;
   const zHigh = screw.postBottom - 0.2;
   const zLow = zHigh - TOP_TAB_THICKNESS;
@@ -103,13 +106,21 @@ export function topScrewProblem(
   obstacles: TopObstacles,
   surface: string,
   screw: Pick<TopScrew, "x" | "y" | "wall" | "postBottom">,
-  sizes: { wall: number; width: number; depth: number; cornerRadius: number; floorThickness: number; rearWallY: number; seamXs: number[]; onSide?: boolean },
+  sizes: { wall: number; width: number; depth: number; cornerRadius: number; floorThickness: number; rearWallY: number; seamXs: number[]; onSide?: boolean; wholeGusset?: boolean },
   uv: { u: number; v: number },
 ): string | null {
   const tab = topTabExtent(screw, sizes.wall, sizes.width, sizes.rearWallY, sizes.onSide ?? true);
   // Near a bottom round, the floor of the space inside is that round.
   const floor = Math.max(sizes.floorThickness, highestFloor(profile.lower, tab.yLow, tab.yHigh));
   if (tab.zLow < floor + 1) return "there isn't enough height for its tab";
+  // Upright, a rear tab hangs from the skin above, with no wall below it at all. Its gusset should
+  // reach the wall at 45 degrees before the plate, too, or its foot starts in mid-air and needs a
+  // little support, which the layout avoids where it can.
+  if (sizes.onSide === false && screw.wall === "rear") return "its tab would have nothing under it, since the shell prints upright";
+  // A tab starts 0.5 mm into the wall, so its gusset's foot can stop that short, and a layer's width more.
+  if (sizes.onSide === false && sizes.wholeGusset && tabGussetDepth(tab, screw.wall, floor) < (screw.wall === "left" || screw.wall === "right" ? tab.xHigh - tab.xLow : tab.yHigh - tab.yLow) - GUSSET_FOOT_SHORT) {
+    return "there isn't enough height for the gusset under its tab";
+  }
   const post: Shape = { kind: "circle", cx: uv.u, cy: uv.v, r: POST_RADIUS };
   for (const cutout of obstacles.cutouts) {
     if (cutout.surface === surface && gap(post, cutout.shape) < obstacles.minWeb) return "it would show through a cutout";

@@ -7,12 +7,6 @@ proven the numbers. Move an item to the done list once it's built.
 
 - [ ] Describing a design in words, with the validator still judging the result.
 
-## Printing
-
-- [ ] More of what's left resolved in the design rather than left to supports. On the Desk Synth, what's left is the seam bolts'
-  countersinks through their tab slopes, and the end of the web behind Panel 1's rear screw tab, which would need room the
-  encoder board's cautious box takes. An upright shell, like the Dial deck's, still has its plate bosses hanging over the bed.
-
 ## Physical details
 
 - [ ] Button caps. Knobs are done.
@@ -20,10 +14,6 @@ proven the numbers. Move an item to the done list once it's built.
 ## Electronics
 
 - [ ] Wiring room and cable routing.
-
-## Assembly and sharing
-
-- [ ] A hosted version, so that others can open a design's link.
 
 ## Shape
 
@@ -37,6 +27,11 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Done
 
+- [x] **Nothing left to support** on any part of the Desk Synth or the Dial deck, by the app's own check. Upright plate bosses
+  rise from their wall at 45 degrees over a wedge on the plate. Upright top tabs take flat heads in countersinks, with
+  teardrop bores, and go where their gusset fits where they can. Seam bolts' head bores are teardrops too, and a fin carries
+  a rear tab's web up to the skin. The check now lets short roofs held at both ends bridge. Not yet sliced or printed.
+- [x] **A hosted version,** on GitHub Pages, so that others can open a design's link.
 - [x] **Inlaid labels in a second colour,** as a body of their own in the part's object in each bed's 3MF. Not yet opened in a
   slicer.
 - [x] **Printed knobs** on a part's shafts, fluted with a pointer, and a row in the fit test for their D holes.

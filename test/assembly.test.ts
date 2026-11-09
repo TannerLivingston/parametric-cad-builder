@@ -448,7 +448,8 @@ describe("the Dial deck example", () => {
     expect(buildPlan.plate!.shortBosses.filter(Boolean).length).toBeGreaterThan(0);
     const shell = parts.find((p) => p.kind === "shell")!.shape;
     for (const [x, y] of buildPlan.plate!.screws) {
-      const wallProbe = (dx: number, dy: number) => makeCylinder(0.3, 3, [x + dx, y + dy, 6], [0, 0, 1]);
+      // Above its underside, which slopes up from the wall as the shell prints upright.
+      const wallProbe = (dx: number, dy: number) => makeCylinder(0.3, 3, [x + dx, y + dy, 11], [0, 0, 1]);
       const r = 3.4;
       const solid = [[r, 0], [-r, 0], [0, r], [0, -r]].map(([dx, dy]) => overlap(shell, wallProbe(dx!, dy!)) / measureVolume(wallProbe(dx!, dy!)));
       expect(Math.min(...solid), `boss at ${x}, ${y}`).toBeGreaterThan(0.999);

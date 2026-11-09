@@ -70,6 +70,14 @@ describe("choosing how the Desk Synth prints", () => {
     shapes = made.enclosure.parts.map((part) => part.shape);
   }, 120_000);
   const of = (name: string) => reports.find((r) => r.name === name)!;
+  const overlap = (a: Shape3D, b: Shape3D) => {
+    try {
+      return measureVolume(a.intersect(b));
+    } catch (error) {
+      if (String(error).includes("deleted")) throw error;
+      return 0;
+    }
+  };
 
   // From Tools/orient.py, which is how the real parts were printed.
   it.each([
@@ -100,19 +108,26 @@ describe("choosing how the Desk Synth prints", () => {
     expect(best.steepArea).toBeLessThan(upright.steepArea);
   });
 
-  it("agrees with the slicer about what needs support", () => {
-    // ElegooSlicer: 10.1 m and 7.3 m for the shells, and nothing for the top pieces or plates.
-    for (const name of ["Shell 1", "Shell 2"]) expect(of(name).needsSupport, name).toBe(true);
-    for (const name of ["Deck 1", "Deck 2", "Panel 1", "Panel 2", "Plate 1", "Plate 2"]) expect(of(name).needsSupport, name).toBe(false);
+  it("needs no support for any part", () => {
+    // ElegooSlicer put 10.1 m and 7.3 m under the shells before their seam bolts' head bores were
+    // teardrops and Panel 1's rear tab had its fin, and nothing under the top pieces or plates. It
+    // hasn't been run since.
+    for (const report of reports) expect(report.needsSupport, report.name).toBe(false);
   });
 
-  it("finds the gaps at the seam bolts, which is where the slicer's support goes", () => {
+  it("points each seam bolt's head bore up its tab's slope, as a teardrop", () => {
+    // Where the slicer's support went, at about 3 m a bolt, when the bores were round.
     const seam = built.seams[0]!;
-    const gaps = of("Shell 1").gaps;
-    expect(gaps.length).toBeGreaterThan(0);
-    for (const gap of gaps) {
-      expect(gap.max[0]).toBeGreaterThan(seam.x - seam.ribHalfThickness - seam.ribWidth - 8);
-      expect(gap.toZ).toBeGreaterThan(150);
+    const shell = shapes[built.printedParts.find((p) => p.name === "Shell 1")!.index]!;
+    const far = seam.x - seam.ribHalfThickness;
+    for (const [y, z] of seam.bolts) {
+      const tab = seam.tabs.reduce((best, tab) => (Math.abs(tab.start[0] - y) + Math.abs(tab.start[1] - z) < Math.abs(best.start[0] - y) + Math.abs(best.start[1] - z) ? tab : best));
+      const [iy, iz] = tab.inward;
+      const along = 3.9 / Math.hypot(iy, iz);
+      // Just past the round bore, up the slope: empty. The same distance down it: solid.
+      const probe = (sign: number) => makeCylinder(0.15, 1, [far - 1.5, y + sign * iy * along, z + sign * iz * along], [1, 0, 0]);
+      expect(overlap(shell, probe(1)), `${y}, ${z}`).toBeLessThan(0.001);
+      expect(overlap(shell, probe(-1)), `${y}, ${z}`).toBeGreaterThan(0.05);
     }
   });
 
@@ -127,7 +142,7 @@ describe("choosing how the Desk Synth prints", () => {
   });
 
   it("says why in a note", () => {
-    expect(of("Shell 1").notes.join()).toContain("turn on supports");
+    expect(of("Shell 1").notes.join()).not.toContain("supports");
     expect(of("Shell 1").resolved.join()).toContain("on its side");
     expect(of("Deck 1").resolved.join()).toContain("face");
     expect(of("Deck 1").notes).toEqual([]);
@@ -275,8 +290,9 @@ describe("reading a mesh", () => {
 
     it("finds nothing under a plain block", () => expect(gaps(box([0, 0, 0], [20, 20, 20]))).toEqual([]));
 
-    it("finds a shelf, where it is, and how high", () => {
+    it("finds a shelf, where it is, and how high, and says to turn on supports", () => {
       const shelf = box([0, 0, 0], [10, 20, 30]).fuse(box([9, 0, 20], [30, 20, 30]));
+      expect(planPartPrint({ index: 0, name: "Shelf" }, mesh(shelf), [option()], BED).notes.join()).toContain("turn on supports");
       const [gap] = gaps(shelf);
       expect(gap!.fromZ).toBeCloseTo(20, 0);
       expect(gap!.area).toBeGreaterThan(300);
@@ -292,6 +308,16 @@ describe("reading a mesh", () => {
       expect(turned!.min[2]).toBeCloseTo(5, 0);
       expect(turned!.max[0]).toBeGreaterThan(38);
       expect(turned!.min[0]).toBeLessThan(23);
+    });
+
+    it("lets a roof bridge between two walls, if it's short enough, but not hang from one", () => {
+      // Two posts 3 mm apart, then 10 or 14, joined over the top: a bridge, then too long for one.
+      const arch = (span: number) => box([0, 0, 0], [3, 10, 10]).fuse(box([3 + span, 0, 0], [6 + span, 10, 10])).fuse(box([0, 0, 10], [6 + span, 10, 12]));
+      expect(gaps(arch(10))).toEqual([]);
+      expect(gaps(arch(14))[0]!.area).toBeGreaterThan(50);
+      // A hole's flat roof is held all round, but a ledge from one wall isn't, however short.
+      expect(gaps(box([0, 0, 0], [20, 20, 12]).cut(box([5, 5, -1], [15, 15, 8])))).toEqual([]);
+      expect(gaps(box([0, 0, 0], [3, 10, 12]).fuse(box([3, 0, 8], [9, 10, 12])))[0]!.area).toBeGreaterThan(20);
     });
 
     it("lets a gentle slope go up without a gap", () => {

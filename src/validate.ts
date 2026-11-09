@@ -13,7 +13,7 @@ import { textOutline, unsupportedCharacters } from "./lettering.js";
 import { planPins, type PinBudget } from "./pins.js";
 import { DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
 import { BARB_REACH, holderBlocks, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
-import { BOSS_DIAMETER, bossProblem, choosePlateJoint, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
+import { BOSS_DIAMETER, bossProblem, chosenBossLift, shortBossTop, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, choosePlateJoint, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
 
 export const PART_CLEARANCE = 1; // between the bodies of neighbouring parts
 export const SMALL_HOLE = 2; // holes below this rarely print round
@@ -152,6 +152,7 @@ export interface PlatePlan {
   jointX: number | null;
   screws: Point2[];
   shortBosses: boolean[]; // for each screw, whether its boss stops just past the insert
+  lifts: number[]; // for each screw, how far up its insert is, over a sloped underside on an upright shell: see bossLift
   supports: PlannedSupport[];
   weights: PlannedWeight[];
   feet: PlannedFoot[];
@@ -355,7 +356,7 @@ export function validateConfig(input: unknown): ValidationResult {
     holderBlocks: holderBlockList,
     printedParts,
     cutouts: cutouts.filter((c) => !c.notch).map((c) => c.cutout),
-    hardware: listHardware(config, seams, plate, posts, topScrews, creases, holderBlockList),
+    hardware: listHardware(config, profile, seams, plate, posts, topScrews, creases, holderBlockList),
     assembly: steps.map((step) => step.text),
     steps: steps.map(({ text, kinds, parts = [] }) => ({ text, parts: printedParts.filter((part) => kinds.includes(part.kind) || parts.includes(part.index)).map((part) => part.index) })),
   });
@@ -976,8 +977,9 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
   };
   const crowds = (a: TopScrew, b: TopScrew) => a.piece === b.piece && Math.hypot(a.x - b.x, a.y - b.y) < MIN_TOP_SCREW_SPACING;
 
+  const FALLBACK_SCREW_RANGE = 45; // a third of the most a top panel should have between screws
   // A screw at this spot, or why it can't go there given the ones already taken.
-  const trySpot = (pieceIndex: number, wall: TopScrew["wall"], x: number, y: number, taken: TakenScrew[]): TakenScrew | string => {
+  const trySpot = (pieceIndex: number, wall: TopScrew["wall"], x: number, y: number, taken: TakenScrew[], wholeGusset = false): TakenScrew | string => {
     const piece = pieces[pieceIndex]!;
     const surface = surfaceOf(piece);
     if (x < piece.xMin + r || x > piece.xMax - r) return "it's past the end of its piece of the panel";
@@ -994,6 +996,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
       rearWallY: wall === "rear" ? surface.y1 + 3 : rearWallY,
       seamXs: seams.map((seam) => seam.x),
       onSide: shellPrintsOnSide(seams.length),
+      wholeGusset,
     };
     const problem = topScrewProblem(profile, obstacles, surface.id, candidate, sizes, { u: x, v });
     if (problem) return problem;
@@ -1009,8 +1012,8 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
   pieces.forEach((piece, pieceIndex) => {
     const surface = surfaceOf(piece);
     const { yLow, yHigh } = edgeSpan(surface);
-    const attempt = (wall: TopScrew["wall"], x: number, y: number): boolean => {
-      const spot = trySpot(pieceIndex, wall, x, y, taken);
+    const attempt = (wall: TopScrew["wall"], x: number, y: number, wholeGusset: boolean): boolean => {
+      const spot = trySpot(pieceIndex, wall, x, y, taken, wholeGusset);
       if (typeof spot === "string") return false;
       taken.push(spot);
       return true;
@@ -1020,29 +1023,34 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
       if (span <= 0) return;
       fasteners.edges.push({ kind: "top", surface: surface.id, wall, along: vertical ? "y" : "x", fixed, from: x0, to: x1 });
       const stops = Math.max(3, Math.ceil(span / 90) + 1);
-      for (let i = 0; i < stops; i++) {
-        const target = x0 + (span * i) / (stops - 1);
+      // Each spot near a stop, first only where a tab's whole gusset fits, then anywhere.
+      const near = (target: number, wholeGusset: boolean): boolean => {
         for (let offset = 0; offset <= 20; offset += 2) {
-          const signs = offset === 0 ? [1] : [1, -1];
-          let placedHere = false;
-          for (const sign of signs) {
+          for (const sign of offset === 0 ? [1] : [1, -1]) {
             const position = target + sign * offset;
             if (position < x0 - 0.01 || position > x1 + 0.01) continue;
-            if (vertical ? attempt(wall, fixed, position) : attempt(wall, position, fixed)) {
-              placedHere = true;
-              break;
-            }
+            if (vertical ? attempt(wall, fixed, position, wholeGusset) : attempt(wall, position, fixed, wholeGusset)) return true;
           }
-          if (placedHere) break;
         }
+        return false;
+      };
+      for (let i = 0; i < stops; i++) {
+        const target = x0 + (span * i) / (stops - 1);
+        if (!near(target, true)) fallbacks.push({ at: vertical ? [fixed, target] : [target, fixed], place: () => near(target, false) });
       }
     };
+    // A tab whose gusset can't reach the wall needs a little support, so one only goes where no
+    // other screw is near enough to make up for leaving it out.
+    const fallbacks: { at: Point2; place: () => boolean }[] = [];
     if (piece.xMin <= 0.01) along("left", yLow, yHigh, near, true);
     if (piece.xMax >= e.width - 0.01) along("right", yLow, yHigh, e.width - near, true);
     const xFrom = piece.xMin + r + 1;
     const xTo = piece.xMax - r - 1;
     if (surface.y0 <= 0.01) along("front", xFrom, xTo, frontY, false);
     if (rearEdge(surface)) along("rear", xFrom, xTo, yHigh, false);
+    for (const { at: [x, y], place } of fallbacks) {
+      if (!taken.some(({ screw }) => screw.piece === pieceIndex && Math.hypot(screw.x - x, screw.y - y) < FALLBACK_SCREW_RANGE)) place();
+    }
   });
 
   const atOf = (screw: Pick<TopScrew, "x" | "y" | "wall">) => (screw.wall === "left" || screw.wall === "right" ? screw.y : screw.x);
@@ -1903,7 +1911,7 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     else feet.push({ x, y, diameter });
   });
   const rib = config.plate.joint === "rib" && jointX !== null ? planPlateRib(config, profile, seams, placed, fixtures, jointX, screws, supports, weights, issues) : null;
-  return { clearance: config.plate.clearance, jointX, screws, shortBosses: screws.map(([x, y]) => isShortBoss(input, obstacles, x, y)), supports, weights, feet, rib };
+  return { clearance: config.plate.clearance, jointX, screws, shortBosses: screws.map(([x, y]) => isShortBoss(input, obstacles, x, y)), lifts: screws.map(([x, y]) => chosenBossLift(input, profile, obstacles, x, y)), supports, weights, feet, rib };
 }
 
 // Joins each top piece to the one behind it at a crease, where its panel asks for it. The flange
@@ -1959,7 +1967,7 @@ function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], 
       ...[...reservedBoxes(config), ...fixtures.holeBoxes].map((b) => ({ xLow: b.xMin, xHigh: b.xMax, yLow: b.yMin, yHigh: b.yMax, top: b.top })),
       ...fixtures.blocks.map((b) => ({ xLow: b.xLow, xHigh: b.xHigh, yLow: b.yLow, yHigh: b.yHigh, top: e.floorThickness + b.top })),
       ...(plate?.supports ?? []).map((s) => ({ xLow: s.x - s.diameter / 2, xHigh: s.x + s.diameter / 2, yLow: s.y - s.diameter / 2, yHigh: s.y + s.diameter / 2, top: s.top })),
-      ...(plate?.screws ?? []).map(([x, y], i) => ({ xLow: x - BOSS_DIAMETER / 2, xHigh: x + BOSS_DIAMETER / 2, yLow: y - BOSS_DIAMETER / 2, yHigh: y + BOSS_DIAMETER / 2, top: plate!.shortBosses[i] ? e.floorThickness + SHORT_BOSS_HEIGHT : profile.maxHeight })),
+      ...(plate?.screws ?? []).map(([x, y], i) => ({ xLow: x - BOSS_DIAMETER / 2, xHigh: x + BOSS_DIAMETER / 2, yLow: y - BOSS_DIAMETER / 2, yHigh: y + BOSS_DIAMETER / 2, top: plate!.shortBosses[i] ? shortBossTop(e, plate!.lifts[i]!) : profile.maxHeight })),
     ];
     for (const b of standing) if (b.top > g.flangeBottom && b.yHigh > zoneLow && b.yLow < zoneHigh) block(b.xLow, b.xHigh);
     for (const f of pieces.filter((p) => p.surface === front.id)) {
@@ -2050,6 +2058,8 @@ function planPlateParts(config: Config, profile: Profile, plate: PlatePlan | nul
       ...plate.supports.filter((support) => support.x > xMin && support.x < xMax).map((support) => support.top - e.floorThickness),
       ...plate.weights.filter((weight) => weight.x > xMin && weight.x < xMax).map((weight) => weight.height),
       ...(plate.rib ? [PLATE_RIB_HEIGHT] : []),
+      // Upright, the wedges under the bosses, as high as their slopes reach at a boss's far side.
+      ...plate.screws.map(([x], i) => (x > xMin && x < xMax && plate.lifts[i]! > 0 ? plate.lifts[i]! - INSERT_HOLE_DIAMETER / 2 + BOSS_DIAMETER / 2 : 0)),
     );
     // The rib's tongue sticks out past the right piece.
     const tongue = plate.rib && i === 1 ? PLATE_RIB_TONGUE : 0;
@@ -2112,11 +2122,23 @@ export function standoffScrew(holeDiameter: number, height: number): string {
   return `${size} x ${length} screw, for the boards' standoffs`;
 }
 
-function listHardware(config: Config, seams: PlannedSeam[], plate: PlatePlan | null, posts: PlacedPost[], topScrews: TopScrew[], creases: CreaseJoint[], blocks: HolderBlock[]): HardwareItem[] {
+// A plate screw reaches through the plate, and on an upright shell through the wedge under its
+// boss too, to as far into the insert as it can go without bottoming out.
+const PLATE_SCREW_LENGTHS = [8, 10, 12, 14, 16];
+function plateScrewLength(config: Config, lift: number): number {
+  if (lift === 0) return 8;
+  const room = config.enclosure.floorThickness + lift + INSERT_HOLE_DEPTH - 0.5;
+  return [...PLATE_SCREW_LENGTHS].reverse().find((l) => l <= room + 1e-9) ?? 8;
+}
+
+function listHardware(config: Config, profile: Profile, seams: PlannedSeam[], plate: PlatePlan | null, posts: PlacedPost[], topScrews: TopScrew[], creases: CreaseJoint[], blocks: HolderBlock[]): HardwareItem[] {
   const items: HardwareItem[] = [];
   if (plate?.screws.length) {
     items.push({ name: "M3 brass heat-set insert", count: plate.screws.length });
-    items.push({ name: "M3 x 8 flat-head screw", count: plate.screws.length });
+    const lengths = plate.lifts.map((lift) => plateScrewLength(config, lift));
+    for (const length of [...new Set(lengths)].sort((a, b) => a - b)) {
+      items.push({ name: `M3 x ${length} flat-head screw`, count: lengths.filter((l) => l === length).length });
+    }
   }
   if (plate?.rib) {
     items.push({ name: "M3 brass heat-set insert, for the plate's joint", count: plate.rib.bolts.length });
@@ -2129,7 +2151,7 @@ function listHardware(config: Config, seams: PlannedSeam[], plate: PlatePlan | n
   }
   if (topScrews.length) {
     items.push({ name: "M3 brass heat-set insert, for the top panels", count: topScrews.length });
-    items.push({ name: "M3 x 8 screw, for the top panels", count: topScrews.length });
+    items.push({ name: shellPrintsOnSide(seams.length) ? "M3 x 8 screw, for the top panels" : "M3 x 8 flat-head screw, for the top panels", count: topScrews.length });
   }
   const creaseScrews = creases.reduce((sum, crease) => sum + crease.screws.length, 0);
   if (creaseScrews) {
