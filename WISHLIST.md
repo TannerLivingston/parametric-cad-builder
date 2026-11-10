@@ -7,6 +7,41 @@ proven the numbers. Move an item to the done list once it's built.
 
 - [ ] Describing a design in words, with the validator still judging the result.
 
+## Ease of use
+
+The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
+click or drag in the view.
+
+- [ ] **Click in the view to choose where something goes.** Adding a label, hole, vent, seam, support, foot, weight pocket or
+  cable tie asks for a click on a surface, wall or the plate, and puts it there, with the surface or wall filled in from what
+  was clicked.
+- [ ] **Click anything in the view to select it,** not only parts: a surface, wall, label, hole, vent, seam, screw or foot. The
+  sidebar opens to its fields, on whichever tab they're on, and scrolls to them.
+- [ ] **The other way round:** resting on or focusing a field lights up what it controls in the view, such as a surface's
+  edge for its depth and height, a round, or a seam's line.
+- [ ] **Add a part by clicking where it goes,** or by dragging it out of the library list onto a surface, a wall or the floor.
+- [ ] **Drag a part from one surface to another,** or onto a wall or the floor where it can go, without the Surface list.
+- [ ] **Handles on the shape itself:** drag a crease to move a surface's end, a wall to change the width or depth, a seam or
+  a plate joint along the width, the middle of a curve to set its bulge, and a bowed wall to set its bow.
+- [ ] **Drag the rest as parts are dragged:** labels, wall holes, vents, supports, feet, weight pockets and cable ties.
+- [ ] **A right-click menu** on anything in the view: rotate, duplicate, delete, add a label, make an array, move to another
+  surface.
+- [ ] **Keys for a selection:** arrows to nudge by a step, R to rotate, Delete to remove, Ctrl+D to duplicate, Escape to let go.
+  Delete only acts when the view has the focus, never from a text field.
+- [ ] **Select several parts,** with Shift-click or a dragged box, to move, line up, space evenly or delete together.
+- [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
+  and to equal spacing in a row.
+- [ ] **Type a size onto the view:** click a dimension shown beside a selection, such as its distance to an edge or a
+  neighbour, and type what it should be.
+- [ ] **Click a problem to fix it:** a problem's box selects what it's about and looks at it, and offers the fix where there
+  is one, such as moving a part the distance the message asks for.
+- [ ] **Hover to see what something is,** with its name and main sizes, before clicking.
+- [ ] **Look at what's selected:** a key or double-click turns the view to face a surface or wall squarely, or zooms to a part.
+- [ ] **Copy and paste parts,** with their knobs and labels, within a design and between designs.
+- [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
+- [ ] **Plain names and units in the fields,** with a short note on hover saying what each one changes, and a small drawing
+  for the less obvious ones, such as u and v, bulge and bow.
+
 ## Shape
 
 - [ ] A true arc for a curve in the STEP file, and lettering placed on a curve by itself.
