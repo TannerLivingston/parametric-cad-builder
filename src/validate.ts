@@ -6,7 +6,7 @@ import { configSchema, type Config, type Cutout, type FloorPart, type PanelPart,
 import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
 import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
-import { curveFlat, curveLength, flatId, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
+import { flatFor, LABEL_GAP, curveLength, flatId, flatStart, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
 import { bowAt, bowRise, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
 import { shellPrintsOnSide } from "./printing.js";
 import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, creaseGeometry, layoutCreaseScrews, type CreaseJoint } from "./crease.js";
@@ -28,7 +28,6 @@ export const LIP_GAP = 0.2; // round a seam's lip, in the step it fits over
 export const MIN_LIP = 1;
 export const MIN_LABEL_SIZE = 3.5;
 const MIN_STANDOFF_WALL = 0.8; // two lines from a 0.4 mm nozzle
-const LABEL_GAP = 1.5; // from a part or hole it's for
 const LABEL_CLEAR = 0.6; // from any hole, or another label
 export const MAX_SURFACE_ANGLE = 75;
 const FLAT_END = 1; // from a flat let into a curve to either end of the curve
@@ -783,7 +782,6 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
         return [a + (label.side === "right" ? reads : -reads) * (halfA + LABEL_GAP + across / 2), b];
       };
       const inWall = wallFit(item, config);
-      if (item.part.mount === "panel" && item.surface?.flatOf) return fail(`is for "${item.id}", which is on a curve, where there's no flat beside it for lettering.`);
       if (item.part.mount === "panel") {
         const shape = item.shape("above");
         const [hu, hv] = halfExtents(shape);
@@ -1759,7 +1757,7 @@ function planFlats(config: Config, parts: Record<string, Part>, profile: Profile
     if (!curve || !isCurved(profile, curve) || part?.mount !== "panel") return;
     const path = `components[${index}]`;
     const fail = (message: string) => issues.error("SURFACE_CURVED", `"${component.id}" ${message}`, path, [component.id]);
-    const flat = curveFlat(profile.surfaces, curve, component.id, component.u, component.v, partReach(part, component.rotationDeg as Rotation));
+    const flat = flatFor(profile.surfaces, curve, component, part, config.labels);
     const length = curveLength(profile.surfaces, curve);
     const t = flat.surface.thickness;
     const span = `It needs a flat from v ${mm(flat.vLow)} to ${mm(flat.vHigh)} let into "${curve}", which`;
@@ -1767,7 +1765,7 @@ function planFlats(config: Config, parts: Record<string, Part>, profile: Profile
     if (flat.sink > MAX_FLAT_SINK) return fail(`is too big for the curve it's on. ${span} would sit ${mm(flat.sink)} from the curve at its middle, and the most is ${mm(MAX_FLAT_SINK)}. Curve the surface less, or move the part to a flat one.`);
     // The flat's sides slope out through the skin, as far as it's thick.
     const side = Math.max(e.wall, e.cornerRadius) + minWeb + t;
-    const ys = [flat.surface.y1, surfacePoint(flat.surface, 2 * component.v - flat.surface.length, 0)[0]];
+    const ys = [flat.surface.y1, surfacePoint(flat.surface, flatStart(flat), 0)[0]];
     if (flat.uLow < side || flat.uHigh > e.width - side || Math.min(...ys) < e.wall + minWeb + t || Math.max(...ys) > profile.depth - e.wall - minWeb - t) {
       return fail(`is too near a wall. Its flat let into "${curve}" needs ${mm(side)} to the sides and ${mm(e.wall + minWeb + t)} to the front and rear.`);
     }
@@ -2927,7 +2925,8 @@ function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: 
     const path = `components[${item.index}]`;
     if (item.part.above.height > 0) {
       // A flat is let into its curve, whose own short flats pass over it there.
-      const [from, to] = [surfacePoint(item.surface, 2 * item.shape("above").cy - item.surface.length, 0)[0], item.surface.y1];
+      const own = flatOf(item);
+      const [from, to] = [own ? surfacePoint(item.surface, flatStart(own), 0)[0] : 0, item.surface.y1];
       const others = profile.surfaces.filter((s) => s !== item.surface && !(item.surface.flatOf && s.curveOf === item.surface.flatOf && s.y1 > from - 0.01 && s.y0 < to + 0.01));
       const hit = others.find((s) => polygonCrossesChain(section(item, "above"), [[s.y0, s.z0], [s.y1, s.z1]]));
       if (hit) {

@@ -16,7 +16,7 @@ import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTa
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
-import type { CurveFlat } from "./flats.js";
+import { flatStart, type CurveFlat } from "./flats.js";
 import { bowedOuterPath, bowRise, hasBow, planOutline } from "./bow.js";
 import { findSurface, buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
@@ -80,7 +80,7 @@ function bowReach(plan: BuildPlan): number {
 // degrees are what keep a flat from needing support when its shell piece prints on its side.
 function flatSlice(flat: CurveFlat, low: number, lowMore: number, high: number, highMore: number): Shape3D {
   const { surface, uLow, uHigh } = flat;
-  const start = 2 * ((flat.vLow + flat.vHigh) / 2) - surface.length;
+  const start = flatStart(flat);
   const [y, z] = surfacePoint(surface, start, 0);
   // Drawn across the width and along the normal, which this plane has pointing down, then pulled
   // along the flat.

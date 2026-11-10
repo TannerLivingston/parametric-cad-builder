@@ -7,7 +7,7 @@ import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { surfacePoint, type Surface } from "../profile.js";
 import type { FastenerEdge, PlannedFastener, WiringPlan } from "../validate.js";
 import type { BedView, PartKind, PartMesh } from "./engineClient.js";
-import { explodeOffset, sectionPlane, surfaceCoordinates, type Box2, type Section, type SceneComponent, type SceneModel } from "./sceneModel.js";
+import { curveCoordinates, explodeOffset, sectionPlane, surfaceCoordinates, type Box2, type Section, type SceneComponent, type SceneModel } from "./sceneModel.js";
 
 export type ViewPreset = "iso" | "top" | "front" | "under";
 
@@ -836,6 +836,12 @@ export class Scene3D {
 
   // Where a ray meets a component's plane, as (u, v) or (x, y), ignoring any separation.
   private planePosition(ray: THREE.Ray, plane: THREE.Plane, component: SceneComponent): [number, number] | null {
+    // On a curve, it follows the curve itself, since its own flat moves and turns with it.
+    if (component.curve && this.model) {
+      const shift = this.offsetOf(component.printedPart);
+      const on = curveCoordinates(this.model.surfaces, component.curve, [ray.origin.x - shift, ray.origin.y, ray.origin.z], [ray.direction.x, ray.direction.y, ray.direction.z]);
+      if (on) return [on.u, on.v];
+    }
     const hit = ray.intersectPlane(plane, new THREE.Vector3());
     if (!hit) return null;
     const x = hit.x - (component.onTopPanel ? 0 : this.offsetOf(component.printedPart));
@@ -932,7 +938,8 @@ export class Scene3D {
     const model = this.model!;
     const REACH = 30;
     const last = model.surfaces.at(-1);
-    const bLimit = component.surface ? component.surface.length : (last?.y1 ?? 0);
+    const along = component.curve ? model.surfaces.filter((s) => s.curveOf === component.curve).reduce((sum, s) => sum + s.length, 0) : component.surface?.length;
+    const bLimit = along ?? last?.y1 ?? 0;
     return [THREE.MathUtils.clamp(a, -REACH, model.width + REACH), THREE.MathUtils.clamp(b, -REACH, bLimit + REACH)];
   }
 

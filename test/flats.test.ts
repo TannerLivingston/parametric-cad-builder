@@ -4,6 +4,7 @@ import { buildEnclosure, initEngine, planPrint, validateConfig, type BuildPlan }
 import { chainHeight, surfacePoint } from "../src/profile.js";
 import { FLAT_MARGIN, FLAT_STEP, partReach } from "../src/flats.js";
 import { library } from "../src/library.js";
+import { buildSceneModel, curveCoordinates } from "../src/app/sceneModel.js";
 import { buildProblems } from "./buildChecks.js";
 import { errors } from "./helpers.js";
 
@@ -73,8 +74,51 @@ describe("a flat let into a curve, planned", () => {
     expect(at({ u: 95 })).toMatch(/each needs a flat of its own/);
     expect(at({ u: 10 })).toMatch(/too near a wall/);
     expect(at({ type: "arcade-24mm" }, 20)).toMatch(/too big for the curve|slopes/);
-    const label = hooded({ labels: [{ text: "VOL", component: "dial" }] });
-    expect(errors(label).map((e) => e.message).join()).toMatch(/on a curve/);
+  });
+});
+
+describe("a part's label on a curve", () => {
+  it("makes the flat bigger on its side, and is engraved on the flat", () => {
+    const plain = plan(hooded()).flats[0]!;
+    const built = plan(hooded({ labels: [{ text: "VOL", component: "dial", side: "above", size: 4 }] }));
+    const flat = built.flats[0]!;
+    expect(flat.vLow).toBeCloseTo(plain.vLow);
+    expect(flat.vHigh - plain.vHigh).toBeCloseTo(1.5 + 4, 1);
+    const label = built.labels[0]!;
+    expect(label.on).toMatchObject({ kind: "surface", surface: flat.surface.id });
+    if (label.on.kind !== "surface") throw new Error("not on a surface");
+    expect(label.on.v + label.up / 2).toBeLessThanOrEqual(flat.vHigh - 1.9);
+    expect(label.on.v - label.up / 2).toBeGreaterThan(28);
+    // A wide one, beside it, widens the flat that way only.
+    const wide = plan(hooded({ labels: [{ text: "VOLUME", component: "dial", side: "left", size: 4 }] })).flats[0]!;
+    expect(wide.uHigh).toBeCloseTo(plain.uHigh);
+    expect(plain.uLow - wide.uLow).toBeGreaterThan(15);
+  });
+});
+
+describe("dragging over a curve", () => {
+  it("finds where a ray meets it, as u and how far along it", () => {
+    const { surfaces } = plan(hooded()).profile;
+    const flats = surfaces.filter((s) => s.curveOf === "hood");
+    // Straight down onto the middle of the third short flat.
+    const third = flats[2]!;
+    const before = flats[0]!.length + flats[1]!.length;
+    const [y, z] = surfacePoint(third, third.length / 2, 0);
+    const on = curveCoordinates(surfaces, "hood", [120, y, z + 50], [0, 0, -1])!;
+    expect(on.u).toBeCloseTo(120);
+    expect(on.v).toBeCloseTo(before + third.length / 2);
+    // Past its front end, it carries on along the first one.
+    const first = flats[0]!;
+    const [fy, fz] = surfacePoint(first, -5, 0);
+    expect(curveCoordinates(surfaces, "hood", [10, fy, fz + 30], [0, 0, -1])!.v).toBeCloseTo(-5);
+    expect(curveCoordinates(surfaces, "deck", [10, 40, 90], [0, 0, -1])).toBeNull();
+  });
+
+  it("shows a part on a curve on its own flat, and says which curve", () => {
+    const model = buildSceneModel(hooded())!;
+    const dial = model.components.find((c) => c.id === "dial")!;
+    expect(dial.curve).toBe("hood");
+    expect(dial.surface).toEqual(plan(hooded()).flats[0]!.surface);
   });
 });
 
@@ -91,6 +135,16 @@ describe("a flat let into a curve, built", () => {
     for (const part of built.printedParts.filter((p) => p.kind === "shell")) {
       expect(reports[part.index]!.needsSupport, `${part.name}: ${reports[part.index]!.notes.join(" ")}`).toBe(false);
     }
+  }, 240_000);
+
+  it("builds with a label engraved on the flat", async () => {
+    const built = plan(hooded({ labels: [{ text: "VOL", component: "dial", side: "above", size: 4 }] }));
+    // Sound, and with a little more taken out of the dial's half than its hole alone: the letters.
+    const problems = await buildProblems(built, buildEnclosure(built));
+    expect(problems.filter((problem) => !problem.includes("removed"))).toEqual([]);
+    const [, removed, expected] = problems[0]!.match(/removed ([\d.]+) mm3, expected ([\d.]+)/)!.map(Number);
+    expect(removed! - expected!).toBeGreaterThan(3);
+    expect(removed! - expected!).toBeLessThan(15);
   }, 240_000);
 
   it("builds on a curve that dips", async () => {

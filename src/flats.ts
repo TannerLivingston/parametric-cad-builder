@@ -4,8 +4,10 @@
 // match. Each part on a curve gets its own, just big enough for it.
 import { rotateOffset, type Rotation } from "./geometry.js";
 import type { Point2, Surface } from "./profile.js";
-import type { PanelPart } from "./schema.js";
+import type { Config, PanelPart } from "./schema.js";
+import { textOutline } from "./lettering.js";
 
+export const LABEL_GAP = 1.5; // from a part or hole to the label that's for it
 export const FLAT_MARGIN = 2; // round what the part takes up
 export const FLAT_STEP = 0.2; // past the curve at the flat's ends, so that it never just touches it
 export const MAX_FLAT_SINK = 4; // how far a flat can be from its curve at the middle
@@ -74,10 +76,15 @@ function along(surfaces: Surface[], curve: string, from: number, to: number): { 
   return { start: at(from), end: at(to), between };
 }
 
-// The flat for a part at u and v on a curve, reaching hu and hv each way from it.
-export function curveFlat(surfaces: Surface[], curve: string, componentId: string, u: number, v: number, [hu, hv]: [number, number]): CurveFlat {
-  const vLow = v - hv - FLAT_MARGIN;
-  const vHigh = v + hv + FLAT_MARGIN;
+// Where a flat's own v starts, which is the curve's at the flat's middle, less half its length.
+export const flatStart = (flat: CurveFlat) => flat.vLow + flat.vHigh - flat.surface.length;
+
+// The flat for a part at u and v on a curve, reaching hu and hv each way from it, and `more` on one
+// side or another for its label.
+export function curveFlat(surfaces: Surface[], curve: string, componentId: string, u: number, v: number, [hu, hv]: [number, number], more: { left?: number; right?: number; below?: number; above?: number } = {}): CurveFlat {
+  const vLow = v - hv - (more.below ?? 0) - FLAT_MARGIN;
+  const vHigh = v + hv + (more.above ?? 0) + FLAT_MARGIN;
+  const mid = (vLow + vHigh) / 2;
   const { start, end, between } = along(surfaces, curve, vLow, vHigh);
   const dy = end[0] - start[0];
   const dz = end[1] - start[1];
@@ -94,16 +101,36 @@ export function curveFlat(surfaces: Surface[], curve: string, componentId: strin
   const surface: Surface = {
     id: flatId(curve, componentId),
     index: -1,
-    y0: middle[0] - v * cos,
-    z0: middle[1] - v * sin,
+    y0: middle[0] - mid * cos,
+    z0: middle[1] - mid * sin,
     y1: middle[0] + (chord / 2) * cos,
     z1: middle[1] + (chord / 2) * sin,
     thickness,
-    length: v + chord / 2,
+    length: mid + chord / 2,
     angle: Math.atan2(dz, dy),
     cos,
     sin,
     flatOf: curve,
   };
-  return { componentId, curve, surface, uLow: u - hu - FLAT_MARGIN, uHigh: u + hu + FLAT_MARGIN, vLow, vHigh, rises, sink: (rises ? high : -low) + FLAT_STEP };
+  return { componentId, curve, surface, uLow: u - hu - (more.left ?? 0) - FLAT_MARGIN, uHigh: u + hu + (more.right ?? 0) + FLAT_MARGIN, vLow, vHigh, rises, sink: (rises ? high : -low) + FLAT_STEP };
+}
+
+// The flat for a part on a curve, with room for what goes on its shafts or stems, which can be
+// wider than it, and for its own label beside all of that.
+export function flatFor(surfaces: Surface[], curve: string, component: Extract<Config["components"][number], { u: number }>, part: PanelPart, labels: Config["labels"]): CurveFlat {
+  let [hu, hv] = partReach(part, component.rotationDeg as Rotation);
+  const knob = "knob" in component && component.knob ? component.knob.diameter / 2 : 0;
+  const cap = "cap" in component && component.cap ? Math.max(component.cap.width, component.cap.depth) / 2 : 0;
+  [hu, hv] = [Math.max(hu, knob, cap), Math.max(hv, knob, cap)];
+  const more: { left?: number; right?: number; below?: number; above?: number } = {};
+  for (const label of labels) {
+    if (!("component" in label) || label.component !== component.id) continue;
+    const outline = textOutline(label.text, label.size);
+    const upright = label.side === "below" || label.side === "above";
+    more[label.side] = Math.max(more[label.side] ?? 0, LABEL_GAP + (upright ? outline.height : outline.width));
+    // It's centred on the part, and may be wider than it.
+    if (upright) [more.left, more.right] = [Math.max(more.left ?? 0, outline.width / 2 - hu), Math.max(more.right ?? 0, outline.width / 2 - hu)];
+    else [more.below, more.above] = [Math.max(more.below ?? 0, outline.height / 2 - hv), Math.max(more.above ?? 0, outline.height / 2 - hv)];
+  }
+  return curveFlat(surfaces, curve, component.id, component.u, component.v, [hu, hv], more);
 }

@@ -1,7 +1,7 @@
 // What the viewport draws for each component, worked out from the config alone. This
 // runs on every change, even for invalid layouts, so parts can follow the pointer
 // while the engine only ever sees valid plans.
-import { curveFlat, partReach } from "../flats.js";
+import { flatFor } from "../flats.js";
 import { configSchema, type Config, type Footprint, type Part } from "../schema.js";
 import { footprintShape, gap, halfExtents, type Rotation, type Shape } from "../geometry.js";
 import { buildSurfaces, surfacePoint, type Surface } from "../profile.js";
@@ -21,6 +21,7 @@ export interface SceneComponent {
   a: number; // u or x, or along a wall
   b: number; // v or y, or up a wall
   surface: Surface | null;
+  curve?: string; // the curved surface it's on, where `surface` is its own flat let into that
   printedPart: number;
   onTopPanel: boolean;
   above: (Box2 & { height: number }) | null;
@@ -78,7 +79,7 @@ export function buildSceneModel(raw: RawConfig): SceneModel | null {
       const curve = component.surface ?? surfaces[0]?.curveOf;
       const onCurve = curve !== undefined && surfaces.some((s) => s.curveOf === curve);
       const surface = onCurve
-        ? curveFlat(surfaces, curve, component.id, component.u, component.v, partReach(part, rotation)).surface
+        ? flatFor(surfaces, curve, component, part, config.labels).surface
         : (surfaces.find((s) => s.id === component.surface) ?? surfaces[0] ?? null);
       components.push({
         ...placed,
@@ -86,6 +87,7 @@ export function buildSceneModel(raw: RawConfig): SceneModel | null {
         a: component.u,
         b: component.v,
         surface,
+        ...(onCurve && { curve }),
         printedPart: printedPartAt(component.u),
         onTopPanel: config.topPanels.some((panel) => panel.surface === surface?.id),
         above: { ...box(part.above.footprint, rotation), height: part.above.height },
@@ -154,6 +156,23 @@ export function sectionRange(model: Pick<SceneModel, "width" | "surfaces">, axis
 // Where a world point falls on a surface, the inverse of surfacePoint at normal 0.
 export function surfaceCoordinates(surface: Surface, [x, y, z]: readonly [number, number, number]): { u: number; v: number } {
   return { u: x, v: (y - surface.y0) * surface.cos + (z - surface.z0) * surface.sin };
+}
+
+// Where a ray meets a curved surface, as u and how far along the curve, for dragging a part over
+// it. The curve's first and last short flats carry on past its ends, so a drag can leave it.
+export function curveCoordinates(surfaces: Surface[], curve: string, origin: readonly [number, number, number], direction: readonly [number, number, number]): { u: number; v: number } | null {
+  const flats = surfaces.filter((s) => s.curveOf === curve);
+  let best: { t: number; u: number; v: number } | null = null;
+  let passed = 0;
+  flats.forEach((s, i) => {
+    const facing = -direction[1] * s.sin + direction[2] * s.cos;
+    const t = Math.abs(facing) < 1e-9 ? -1 : (-(s.y0 - origin[1]) * s.sin + (s.z0 - origin[2]) * s.cos) / facing;
+    const along = (origin[1] + t * direction[1] - s.y0) * s.cos + (origin[2] + t * direction[2] - s.z0) * s.sin;
+    const within = (i === 0 || along >= -1e-6) && (i === flats.length - 1 || along <= s.length + 1e-6);
+    if (t > 0 && within && (!best || t < best.t)) best = { t, u: origin[0] + t * direction[0], v: passed + along };
+    passed += s.length;
+  });
+  return best && { u: (best as { u: number }).u, v: (best as { v: number }).v };
 }
 
 // How far apart printed parts sit when the view separates them.

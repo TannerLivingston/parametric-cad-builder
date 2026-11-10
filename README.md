@@ -788,7 +788,9 @@ A part on a curve gets a flat of its own let into it, because it needs a flat fa
 up, and as thick as the surface: sunk into a curve that rises, with a pad underneath, or standing proud of one that dips,
 over a pocket. Its ends are a 0.2 mm step from the curve, and its sides slope at 45 degrees, so it needs no support. A flat
 has to stay 1 mm inside the curve's ends, clear of the walls, seams and other flats, and within 4 mm of the curve at its
-middle, so a big part needs a gentle curve. A curve still can't carry lettering, a part's own label, or a top panel. It has to curve by at least 0.5 mm and at most 0.4 of its length,
+middle, so a big part needs a gentle curve. A part's own label goes on its flat, which grows on that side to take it, and
+so does a knob or key cap wider than the part. Dragging a part in the view follows the curve. A curve still can't carry
+lettering placed on its own, or be a top panel. It has to curve by at least 0.5 mm and at most 0.4 of its length,
 stay under the slope limit all along, and can't end in a rear top round.
 
 **`bow`** makes the `front` or `rear` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
@@ -804,7 +806,7 @@ Both are in the Shape tab: **Curve** on each surface, and **Front wall bow** and
 ## Limits for now
 
 - Seams run straight across the width.
-- A curved surface is short flats, not a true arc, and carries parts but no lettering. A bowed wall is solid, with a square
+- A curved surface is short flats, not a true arc, and carries parts and their labels but no other lettering. A bowed wall is solid, with a square
   inside, and only the front and rear can bow.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
