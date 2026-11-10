@@ -181,7 +181,9 @@ export const componentSchema = z.union([
 // A surface runs from the end of the previous one (or the top of the front wall) to
 // this y and z. The last one's y sets the enclosure's depth.
 // `thickness` is its own, where it differs from the enclosure's `panelThickness`.
-export const surfaceSchema = z.strictObject({ id: z.string().min(1), y: offset, z: offset, thickness: length.optional() });
+// `bulge` makes it a curve: an arc that rises this far above the straight line between its ends at
+// the middle, or dips below it if negative. Nothing can be mounted on a curve.
+export const surfaceSchema = z.strictObject({ id: z.string().min(1), y: offset, z: offset, thickness: length.optional(), bulge: offset.optional() });
 
 // Changes to the screws placed automatically, which keep adapting around them. Removing one
 // names where it was, and moving one is removing it and adding another.
@@ -289,6 +291,9 @@ export const configSchema = z.strictObject({
         rearBottom: z.number().nonnegative().default(0),
       })
       .prefault({}),
+    // The front or rear wall bowing outward, seen from above, by this much at its middle. Only the
+    // outside curves, and the wall is solid out to it, so nothing can go through one.
+    bow: z.strictObject({ front: z.number().nonnegative().default(0), rear: z.number().nonnegative().default(0) }).prefault({}),
     color: z.string().min(1).default("#cfc7b4"),
   }),
   topPanels: z.array(topPanelSchema).default([]),

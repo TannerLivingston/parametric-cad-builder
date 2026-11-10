@@ -119,7 +119,7 @@ export function orientationsFor(plan: BuildPlan, part: PrintedPart): Orientation
   // A knob stands along its surface's normal, so its top is parallel to that surface.
   const knob = part.kind === "knob" ? plan.knobs.find((k) => k.printedPart === part.index) : undefined;
   const ownSurface = piece?.surface ?? knob?.surface;
-  const own = ownSurface ? surfaces.filter((s) => s.id === ownSurface) : part.kind === "shell" ? surfaces : [];
+  const own = ownSurface ? surfaces.filter((s) => s.id === ownSurface) : part.kind === "shell" ? surfaces.filter((s) => !s.curveOf) : [];
   const faces = own.map((surface): Orientation => ({ id: `face-${surface.id}`, label: knob ? "Its top on the bed" : `The ${surface.id} surface on the bed`, matrix: faceDown(surface), planned: false }));
   const all = [...faces, ...AXES].filter((option, i, list) => list.findIndex((other) => isSame(other.matrix, option.matrix)) === i);
   const planned = plannedOrientation(plan, part, faces);

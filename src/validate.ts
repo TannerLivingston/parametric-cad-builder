@@ -6,6 +6,7 @@ import { configSchema, type Config, type Cutout, type FloorPart, type PanelPart,
 import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
 import { highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
+import { bowAt, bowRise, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
 import { shellPrintsOnSide } from "./printing.js";
 import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, creaseGeometry, layoutCreaseScrews, type CreaseJoint } from "./crease.js";
 import { blocksTopDriver, tabGussetDepth, TOP_TAB_LENGTH, TOP_TAB_THICKNESS, MIN_TOP_SCREWS, MIN_TOP_SCREW_SPACING, TOP_POST_DIAMETER, postBottomAt, topScrewProblem, topTabExtent, type TopJoint, type TopObstacles, type TopPiece, type TopScrew, type TopScrewWall, GROOVE_DEPTH, MIN_TONGUE_ROOT, TONGUE_FIT, TONGUE_INSET, TONGUE_ROOT } from "./top.js";
@@ -29,6 +30,9 @@ const MIN_STANDOFF_WALL = 0.8; // two lines from a 0.4 mm nozzle
 const LABEL_GAP = 1.5; // from a part or hole it's for
 const LABEL_CLEAR = 0.6; // from any hole, or another label
 export const MAX_SURFACE_ANGLE = 75;
+const MIN_BOW_HEIGHT = 5; // of room left inside at a bowed wall's lowest
+export const MIN_BULGE = 0.5; // a curve flatter than this is left flat
+export const MAX_BULGE = 0.4; // of its length from end to end, which is most of a half circle
 export const MIN_CREASE_ANGLE = 1; // below this, two surfaces should just be one
 export const TOOL_OVERSHOOT_ABOVE = 0.2; // how far cut tools extend past each surface
 export const TOOL_OVERSHOOT_BELOW = 0.5;
@@ -51,6 +55,8 @@ export type IssueCode =
   | "UNKNOWN_PART"
   | "FIT_TEST_PART_INVALID"
   | "UNKNOWN_SURFACE"
+  | "SURFACE_CURVED"
+  | "BOW_INVALID"
   | "WRONG_MOUNT"
   | "SURFACE_INVALID"
   | "GEOMETRY_IMPOSSIBLE"
@@ -304,13 +310,14 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
   const profile = planProfile(config, issues);
   if (!profile) return issues.failure();
   checkProfileRadii(config, profile, issues);
+  checkBow(config, profile, issues);
   const shellParts = planPrintedParts(config, profile, issues);
   checkOpening(config, profile, issues);
   const topPieces = planTopPieces(config, profile, shellParts.length, limits, issues);
 
   const parts = withFittedHoles({ ...library, ...config.customParts }, config.fabrication.fit.partHoles);
   checkComponentReferences(config, parts, profile, issues);
-  if (issues.hasError("DUPLICATE_ID", "UNKNOWN_PART", "UNKNOWN_SURFACE", "WRONG_MOUNT", "TOP_PANEL_INVALID")) return issues.failure();
+  if (issues.hasError("DUPLICATE_ID", "UNKNOWN_PART", "UNKNOWN_SURFACE", "SURFACE_CURVED", "WRONG_MOUNT", "TOP_PANEL_INVALID")) return issues.failure();
 
   const placed = placeComponents(config, parts, profile);
   const partFor = printedPartFinder(shellParts, topPieces);
@@ -319,6 +326,7 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
   const seams = planSeams(config, profile, placed, cutouts, limits.minWeb, issues);
   const wallHoles = planWallHoles(config, profile, placed, issues);
   checkWallHoles(wallHoles, config, profile, seams, limits, issues);
+  checkBowedWalls(config, wallHoles, issues);
   const holderBlockList = planHolders(config, placed, issues);
   checkPartSuitability(placed, config, limits, issues);
   checkErgonomics(placed, issues);
@@ -787,6 +795,8 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
       on = { kind: "wall", wall: label.wall, at: label.at, z: label.z };
     } else {
       const surface = label.surface ? profile.surfaces.find((s) => s.id === label.surface) : profile.surfaces[0];
+      if (label.surface && isCurved(profile, label.surface)) return fail(`is on surface "${label.surface}", which is curved, and lettering needs a flat one.`);
+      if (surface?.curveOf) return fail(`needs a surface, because the first one, "${surface.curveOf}", is curved.`);
       if (!surface) return fail(`is on surface "${label.surface}", which doesn't exist.`);
       on = { kind: "surface", surface: surface.id, u: label.u, v: label.v };
     }
@@ -1012,6 +1022,10 @@ function planTopPieces(config: Config, profile: Profile, firstIndex: number, lim
   const seen = new Set<string>();
   config.topPanels.forEach((panel, i) => {
     const surface = profile.surfaces.find((s) => s.id === panel.surface);
+    if (isCurved(profile, panel.surface)) {
+      issues.error("TOP_PANEL_INVALID", `Surface "${panel.surface}" is curved, so it can't be a separate top panel, which prints flat.`, `topPanels[${i}].surface`);
+      return;
+    }
     if (!surface) {
       issues.error("TOP_PANEL_INVALID", `Top panel ${i + 1} is on surface "${panel.surface}", which doesn't exist.`, `topPanels[${i}].surface`);
       return;
@@ -1066,7 +1080,11 @@ function topPrintedPart(piece: TopPiece, config: Config, profile: Profile): Prin
   const surface = profile.surfaces.find((s) => s.id === piece.surface)!;
   const color = topPanelFor(config, piece.surface)!.color;
   // A tongue sticks out past its piece.
-  const size: [number, number, number] = [piece.xMax - piece.xMin + (piece.tongue?.root ?? 0), surface.length, Math.abs(surface.z1 - surface.z0) + surface.thickness];
+  // Over a bowed wall, it carries on out to the curve, along its slope.
+  const e = config.enclosure;
+  const nearest = Math.min(Math.max(e.width / 2, piece.xMin), piece.xMax);
+  const out = (surface.index === 0 ? bowAt(e.width, e.bow.front, nearest) : 0) + (surface.index === profile.surfaces.length - 1 ? bowAt(e.width, e.bow.rear, nearest) : 0);
+  const size: [number, number, number] = [piece.xMax - piece.xMin + (piece.tongue?.root ?? 0), surface.length + out / surface.cos, Math.abs(surface.z1 - surface.z0) + Math.abs((out * surface.sin) / surface.cos) + surface.thickness];
   return { index: piece.printedPart, kind: "top", name: piece.name, color, xMin: piece.xMin, xMax: piece.xMax, size };
 }
 
@@ -1393,7 +1411,9 @@ function checkRounds(config: Config, surfaces: Surface[], issues: Issues) {
   }
   if (frontBottom >= surfaces[0]!.z0) fail("frontBottom", `A ${mm(frontBottom)} round is taller than the ${mm(surfaces[0]!.z0)} front wall.`);
   if (frontBottom + rearBottom >= last.y1 - MIN_FLAT_BASE) fail("rearBottom", `The bottom rounds leave less than ${mm(MIN_FLAT_BASE)} of flat base in the ${mm(last.y1)} depth.`);
-  if (rearTop > 0) {
+  if (rearTop > 0 && last.curveOf) {
+    fail("rearTop", `Surface "${last.curveOf}" is curved, so it can't end in a round as well. Set the round to 0, or add a flat surface behind it.`);
+  } else if (rearTop > 0) {
     const tangent = rearTangentLength(last, rearTop);
     if (tangent >= last.length) fail("rearTop", `A ${mm(rearTop)} round takes ${mm(tangent)} of surface "${last.id}", which is only ${mm(last.length)} long.`);
     if (tangent + rearBottom > last.z1) fail("rearTop", `The rear rounds need ${mm(tangent + rearBottom)} of wall, and it's only ${mm(last.z1)} high.`);
@@ -1420,19 +1440,33 @@ function planProfile(config: Config, issues: Issues): Profile | null {
       issues.error("SURFACE_INVALID", `Surface "${s.id}" ends at y = ${mm(s.y)}, but surfaces must run from front to rear, past y = ${mm(previousY)}.`, `${path}.y`);
       sound = false;
     }
+    const chord = Math.hypot(s.y - previousY, s.z - (e.surfaces[i - 1]?.z ?? e.frontHeight));
+    if (s.bulge !== undefined && s.bulge !== 0 && s.y > previousY) {
+      if (Math.abs(s.bulge) < MIN_BULGE) {
+        issues.error("SURFACE_INVALID", `Surface "${s.id}" curves by ${mm(Math.abs(s.bulge))}, and less than ${mm(MIN_BULGE)} is as good as flat. Set it to 0.`, `${path}.bulge`);
+        sound = false;
+      } else if (Math.abs(s.bulge) >= chord * MAX_BULGE) {
+        issues.error("SURFACE_INVALID", `Surface "${s.id}" curves by ${mm(Math.abs(s.bulge))}, and the most a ${mm(chord)} one can is ${mm(chord * MAX_BULGE)}.`, `${path}.bulge`);
+        sound = false;
+      }
+    }
     previousY = s.y;
   });
   if (!sound) return null;
 
   const surfaces = buildSurfaces(e.frontHeight, e.surfaces, e.panelThickness);
+  const steep = new Set<string>();
   surfaces.forEach((s, i) => {
-    const path = `enclosure.surfaces[${i}]`;
-    if (Math.abs(degrees(s.angle)) > MAX_SURFACE_ANGLE) {
-      issues.error("SURFACE_INVALID", `Surface "${s.id}" slopes at ${Math.round(degrees(s.angle))}°, and the limit is ${MAX_SURFACE_ANGLE}°.`, path);
+    const name = s.curveOf ?? s.id;
+    const path = `enclosure.surfaces[${e.surfaces.findIndex((input) => input.id === name)}]`;
+    if (Math.abs(degrees(s.angle)) > MAX_SURFACE_ANGLE && !steep.has(name)) {
+      steep.add(name);
+      issues.error("SURFACE_INVALID", `Surface "${name}" slopes at ${Math.round(degrees(s.angle))}°${s.curveOf ? " along its curve" : ""}, and the limit is ${MAX_SURFACE_ANGLE}°.`, path);
       sound = false;
     }
     const next = surfaces[i + 1];
-    if (next && Math.abs(degrees(next.angle - s.angle)) < MIN_CREASE_ANGLE) {
+    // A curve can run smoothly into its neighbour, and its own short flats always do.
+    if (next && !s.curveOf && !next.curveOf && Math.abs(degrees(next.angle - s.angle)) < MIN_CREASE_ANGLE) {
       issues.error("SURFACE_INVALID", `Surfaces "${s.id}" and "${next.id}" meet at under ${MIN_CREASE_ANGLE}°. Merge them into one surface.`, `enclosure.surfaces[${i + 1}]`);
       sound = false;
     }
@@ -1470,6 +1504,48 @@ function checkProfileRadii(config: Config, profile: Profile, issues: Issues) {
   if (e.topEdgeFillet > 0 && profile.surfaces.length > 1) {
     issues.error("GEOMETRY_IMPOSSIBLE", "A top edge fillet only works with a single surface so far. Set it to 0.", "enclosure.topEdgeFillet");
   }
+}
+
+// A wall that bows out is solid out to its curve, and its top carries on along the slope it meets.
+function checkBow(config: Config, profile: Profile, issues: Issues) {
+  const e = config.enclosure;
+  const rise = bowRise(profile, e.bow);
+  for (const side of ["front", "rear"] as const) {
+    const bow = e.bow[side];
+    if (bow <= 0) continue;
+    const fail = (message: string) => issues.error("BOW_INVALID", message, `enclosure.bow.${side}`);
+    const most = Math.min(MAX_BOW, e.width * MAX_BOW_OF_WIDTH);
+    if (bow < MIN_BOW) fail(`The ${side} wall bows by ${mm(bow)}, and less than ${mm(MIN_BOW)} is as good as straight. Set it to 0.`);
+    else if (bow > most) fail(`The ${side} wall bows by ${mm(bow)}, and the most a ${mm(e.width)} wide one can is ${mm(most)}, because it's solid out to its curve.`);
+    const rounds = side === "front" ? e.rounds.frontBottom : Math.max(e.rounds.rearTop, e.rounds.rearBottom);
+    if (rounds > 0) fail(`The ${side} wall can't bow and have a round on the side profile as well. Set one of them to 0.`);
+    if (e.topEdgeFillet > 0) fail("A top edge fillet can't be used with a bowed wall yet. Set it to 0.");
+    if (side === "front" && config.opening) fail("The front wall can't bow with an opening in it.");
+    const surface = side === "front" ? profile.surfaces[0]! : profile.surfaces.at(-1)!;
+    const height = (side === "front" ? surface.z0 : surface.z1) + rise[side];
+    const least = e.floorThickness + surface.thickness + MIN_BOW_HEIGHT;
+    if (height < least) fail(`Bowing the ${side} wall by ${mm(bow)} carries the top down its slope to ${mm(height)} at the middle, and it needs ${mm(least)}. Bow it less, or raise that end.`);
+  }
+}
+
+// Nothing goes through a bowed wall, which is too thick, or is lettered on one, which isn't flat.
+function checkBowedWalls(config: Config, wallHoles: PlannedWallHole[], issues: Issues) {
+  const bowed = (wall: string): wall is "front" | "rear" => (wall === "front" || wall === "rear") && config.enclosure.bow[wall] > 0;
+  const why = (wall: string) => `the ${wall} wall bows, so it's solid out to its curve. Move it to another wall, or set that bow to 0.`;
+  config.components.forEach((component, i) => {
+    if ("wall" in component && bowed(component.wall)) issues.error("BOW_INVALID", `"${component.id}" can't go through the ${component.wall} wall, because ${why(component.wall)}`, `components[${i}].wall`, [component.id]);
+  });
+  const seen = new Set<string>();
+  for (const hole of wallHoles) {
+    const key = `${hole.wall} ${hole.componentId ?? ""}`;
+    if (!bowed(hole.wall) || seen.has(key)) continue;
+    seen.add(key);
+    const what = hole.componentId ? `The hole for "${hole.componentId}"` : "A hole";
+    issues.error("BOW_INVALID", `${what} can't go through the ${hole.wall} wall, because ${why(hole.wall)}`, `enclosure.bow.${hole.wall}`, hole.componentId ? [hole.componentId] : []);
+  }
+  config.labels.forEach((label, i) => {
+    if ("wall" in label && bowed(label.wall)) issues.error("BOW_INVALID", `"${label.text}" can't be lettered on the ${label.wall} wall, because it bows. Move it to another wall, or set that bow to 0.`, `labels[${i}].wall`);
+  });
 }
 
 // Whether an opening takes away a wall a seam tab would use.
@@ -1631,9 +1707,19 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
     const seam = [...config.seams].sort((a, b) => a.x - b.x)[index];
     // A lip's end slopes on past its length, by half of the thickest skin it's in.
     const skins = [e.wall, ...profile.surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness)];
-    const lip = seam && seam.lip > 0 ? seam.lip + Math.max(...skins) / 2 : 0;
+    // And where a wall bows, on through all of that as well.
+    const lip = seam && seam.lip > 0 ? seam.lip + Math.max(...skins) / 2 + Math.max(e.bow.front, e.bow.rear) : 0;
     const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip) : 0;
-    const size: [number, number, number] = [xMax - xMin + pins, profile.depth, profile.maxHeight];
+    // A bowed wall is furthest out at the middle, or at whichever end of this piece is nearest it.
+    // Right of a lip, its skin starts past the step, further on the further out the wall is.
+    const before = [...config.seams].sort((a, b) => a.x - b.x)[index - 1];
+    const rise = bowRise(profile, e.bow);
+    const out = (side: "front" | "rear") => {
+      const from = xMin + (before && before.lip > 0 ? before.lip + e.wall / 2 + e.bow[side] : 0);
+      return bowAt(e.width, e.bow[side], Math.min(Math.max(e.width / 2, from), xMax));
+    };
+    const height = Math.max(profile.maxHeight, ...(["front", "rear"] as const).filter((side) => e.bow[side] > 0).map((side) => (side === "front" ? profile.surfaces[0]!.z0 : profile.surfaces.at(-1)!.z1) + (rise[side] * out(side)) / e.bow[side]));
+    const size: [number, number, number] = [xMax - xMin + pins, profile.depth + out("front") + out("rear"), height];
     const name = bounds.length > 2 ? `Shell ${index + 1}` : "Shell";
     parts.push({ index, kind: "shell", name, color: e.color, xMin, xMax, size });
     const fitsFlat = size[0] <= bedX && size[1] <= bedY;
@@ -1654,9 +1740,15 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
   return parts;
 }
 
+// Whether a surface of the design is a curve, which the profile holds as short flats.
+function isCurved(profile: Profile, id: string): boolean {
+  return profile.surfaces.some((s) => s.curveOf === id);
+}
+
 function checkComponentReferences(config: Config, parts: Record<string, Part>, profile: Profile, issues: Issues) {
   const seen = new Map<string, number>();
-  const names = profile.surfaces.map((s) => `"${s.id}"`).join(", ");
+  const names = profile.surfaces.filter((s) => !s.curveOf).map((s) => `"${s.id}"`).join(", ");
+  const curved = (id: string | undefined) => (id === undefined ? profile.surfaces[0]!.curveOf !== undefined && profile.surfaces.every((s) => s.curveOf === profile.surfaces[0]!.curveOf) : isCurved(profile, id));
   config.components.forEach((component, i) => {
     const path = `components[${i}]`;
     const first = seen.get(component.id);
@@ -1675,7 +1767,9 @@ function checkComponentReferences(config: Config, parts: Record<string, Part>, p
       issues.error("WRONG_MOUNT", `"${component.id}" goes through a wall, so it's placed with wall, at and z.`, path, [component.id]);
     }
     if ("u" in component) {
-      if (component.surface === undefined && profile.surfaces.length > 1) {
+      if (curved(component.surface)) {
+        issues.error("SURFACE_CURVED", `"${component.id}" is on surface "${component.surface ?? profile.surfaces[0]!.curveOf}", which is curved, and a part needs a flat one.`, `${path}.surface`, [component.id]);
+      } else if (component.surface === undefined && profile.surfaces.length > 1) {
         issues.error("UNKNOWN_SURFACE", `"${component.id}" needs a surface, because this enclosure has several: ${names}.`, path, [component.id]);
       } else if (component.surface !== undefined && !profile.surfaces.some((s) => s.id === component.surface)) {
         issues.error("UNKNOWN_SURFACE", `"${component.id}" is on surface "${component.surface}", but the surfaces are ${names}.`, `${path}.surface`, [component.id]);

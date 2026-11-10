@@ -16,6 +16,7 @@ export interface Surface {
   angle: number;
   cos: number;
   sin: number;
+  curveOf?: string; // the curved surface this is one short flat of
 }
 
 export interface Profile {
@@ -51,6 +52,35 @@ export interface SurfaceInput {
   y: number;
   z: number;
   thickness?: number | undefined;
+  bulge?: number | undefined; // how far its arc rises above the straight line between its ends
+}
+
+export const CURVE_FLATNESS = 0.05; // how far a curve's short flats may cut inside its arc
+const CURVE_LEVELS = [2, 5] as const; // halvings: 4 flats at least, 32 at most
+
+// The id of a curved surface's flat, counted from the front.
+export const curveFlatId = (id: string, n: number) => `${id} curve ${n + 1}`;
+
+// A curved surface's arc as points from its front to its rear, both included. Halved until the flats
+// are close enough to the arc, and without trig: see buildSurfaces.
+export function curvePoints(a: Point2, b: Point2, bulge: number): Point2[] {
+  const dy = b[0] - a[0];
+  const dz = b[1] - a[1];
+  const chord = Math.sqrt(dy * dy + dz * dz);
+  const rise = Math.abs(bulge);
+  const radius = (chord * chord / 4 + rise * rise) / (2 * rise);
+  // Towards the arc's middle from the chord's, which is the outward normal for a bulge.
+  const toward = bulge - Math.sign(bulge) * radius;
+  const center: Point2 = [(a[0] + b[0]) / 2 - (dz / chord) * toward, (a[1] + b[1]) / 2 + (dy / chord) * toward];
+  let levels = 0;
+  let span = chord;
+  let sag = rise;
+  while (levels < CURVE_LEVELS[0] || (sag > CURVE_FLATNESS && levels < CURVE_LEVELS[1])) {
+    span = Math.sqrt(span * span / 4 + sag * sag);
+    sag = radius - Math.sqrt(radius * radius - span * span / 4);
+    levels++;
+  }
+  return [a, ...arcLines(center, radius, a, b, levels)];
 }
 
 // How far in from each surface: the same for all, or a surface's own.
@@ -61,31 +91,41 @@ export const ownThickness = (surface: Surface) => surface.thickness;
 export function buildSurfaces(frontHeight: number, inputs: SurfaceInput[], panelThickness = 3): Surface[] {
   let y0 = 0;
   let z0 = frontHeight;
-  return inputs.map((input, index) => {
+  const surfaces: Surface[] = [];
+  const add = (id: string, y: number, z: number, thickness: number, curveOf?: string) => {
     // Division and sqrt give the same bits on every platform, but trig functions don't:
     // Node and Chromium differ in the last bit, which is enough to change a mesh. Anything
     // that shapes the geometry must come from these, so that a config gives identical
     // files everywhere. The angle is only for validation messages and limits.
-    const dy = input.y - y0;
-    const dz = input.z - z0;
+    const dy = y - y0;
+    const dz = z - z0;
     const length = Math.sqrt(dy * dy + dz * dz);
-    const surface: Surface = {
-      id: input.id,
-      index,
+    surfaces.push({
+      id,
+      index: surfaces.length,
       y0,
       z0,
-      y1: input.y,
-      z1: input.z,
-      thickness: input.thickness ?? panelThickness,
+      y1: y,
+      z1: z,
+      thickness,
       length,
       angle: Math.atan2(dz, dy),
       cos: dy / length,
       sin: dz / length,
-    };
-    y0 = input.y;
-    z0 = input.z;
-    return surface;
-  });
+      ...(curveOf === undefined ? {} : { curveOf }),
+    });
+    y0 = y;
+    z0 = z;
+  };
+  for (const input of inputs) {
+    const thickness = input.thickness ?? panelThickness;
+    // A curve is a run of short flats, so that everything made for flat surfaces follows it.
+    if (input.bulge) {
+      const points = curvePoints([y0, z0], [input.y, input.z], input.bulge);
+      points.slice(1).forEach(([y, z], n) => add(curveFlatId(input.id, n), n === points.length - 2 ? input.y : y, n === points.length - 2 ? input.z : z, thickness, input.id));
+    } else add(input.id, input.y, input.z, thickness);
+  }
+  return surfaces;
 }
 
 // A point `v` along a surface from its front edge, `normal` mm along its outward normal.
@@ -93,8 +133,9 @@ export function surfacePoint(surface: Surface, v: number, normal: number): Point
   return [surface.y0 + v * surface.cos - normal * surface.sin, surface.z0 + v * surface.sin + normal * surface.cos];
 }
 
-// The chain of surfaces moved `thickness` inward, trimmed to run from frontY to rearY.
-// Returns null if a surface is too short to survive the offset.
+// The chain of surfaces moved `thickness` inward, trimmed to run from frontY to rearY. A point for
+// each end of each surface, so a surface that's wholly past either end has both of its at that end.
+// Returns null if a surface in between is too short to survive the offset.
 export function offsetChain(surfaces: Surface[], thickness: Inset, frontY: number, rearY: number): Point2[] | null {
   const anchors = surfaces.map((s) => surfacePoint(s, 0, -insetOf(thickness, s)));
   const at = (i: number, y: number): Point2 => {
@@ -102,24 +143,39 @@ export function offsetChain(surfaces: Surface[], thickness: Inset, frontY: numbe
     const [py, pz] = anchors[i]!;
     return [y, pz + ((y - py) * s.sin) / s.cos];
   };
-  const points: Point2[] = [at(0, frontY)];
-  for (let i = 0; i < surfaces.length - 1; i++) {
+  const count = surfaces.length;
+  const joints: Point2[] = [];
+  for (let i = 0; i < count - 1; i++) {
     const a = surfaces[i]!;
     const b = surfaces[i + 1]!;
     const [ay, az] = anchors[i]!;
     const [by, bz] = anchors[i + 1]!;
     const denominator = a.cos * b.sin - a.sin * b.cos;
     const t = ((by - ay) * b.sin - (bz - az) * b.cos) / denominator;
-    points.push([ay + t * a.cos, az + t * a.sin]);
+    joints.push([ay + t * a.cos, az + t * a.sin]);
   }
-  points.push(at(surfaces.length - 1, rearY));
-  for (let i = 0; i < surfaces.length; i++) {
+  // The surfaces that the two ends fall on.
+  let first = 0;
+  while (first < count - 1 && joints[first]![0] <= frontY) first++;
+  let last = count - 1;
+  while (last > 0 && joints[last - 1]![0] >= rearY) last--;
+  if (first > last) return null;
+  const front = at(first, frontY);
+  const rear = at(last, rearY);
+  const points: Point2[] = [];
+  for (let i = 0; i <= count; i++) points.push(i <= first ? front : i > last ? rear : joints[i - 1]!);
+  for (let i = first; i <= last; i++) {
     const s = surfaces[i]!;
     const [y0, z0] = points[i]!;
     const [y1, z1] = points[i + 1]!;
     if ((y1 - y0) * s.cos + (z1 - z0) * s.sin <= 1e-6) return null;
   }
   return points;
+}
+
+// A chain without the points that repeat the one before, which a trimmed chain can have.
+export function distinct(chain: Point2[]): Point2[] {
+  return chain.filter(([y, z], i) => i === 0 || y !== chain[i - 1]![0] || z !== chain[i - 1]![1]);
 }
 
 // Height of a chain at a world y, holding its end values beyond either end.
@@ -188,8 +244,9 @@ export function buildProfile(
 ): Profile | null {
   const last = surfaces.at(-1)!;
   const depth = last.y1;
-  const chain = offsetChain(surfaces, panelThickness, wall, depth - wall);
-  if (!chain) return null;
+  const trimmed = offsetChain(surfaces, panelThickness, wall, depth - wall);
+  if (!trimmed) return null;
+  const chain = distinct(trimmed);
   const { frontBottom: rf, rearTop: rt, rearBottom: rb } = rounds;
   const frontZ = surfaces[0]!.z0;
   const corner: Point2 = [depth, last.z1];

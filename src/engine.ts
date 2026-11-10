@@ -16,6 +16,7 @@ import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTa
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
+import { bowedOuterPath, bowRise, hasBow, planOutline } from "./bow.js";
 import { buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
 export const BOLT_DIAMETER = 3.4; // M3 clearance, as used in the Desk Synth shell
@@ -57,6 +58,20 @@ function extrudedPath(path: PathStep[], x0: number, x1: number): Shape3D {
 function roundedPlan(x0: number, x1: number, y0: number, y1: number, radius: number, z0: number, z1: number): Shape3D {
   const plan = radius > 0 ? drawRoundedRectangle(x1 - x0, y1 - y0, radius) : drawRectangle(x1 - x0, y1 - y0);
   return plan.translate((x0 + x1) / 2, (y0 + y1) / 2).sketchOnPlane("XY", z0).extrude(z1 - z0) as Shape3D;
+}
+
+// The outline seen from above with any bowed walls, as a solid to intersect with.
+function bowedPlan(plan: BuildPlan, z0: number, z1: number): Shape3D {
+  const e = plan.config.enclosure;
+  const path = planOutline(e.width, plan.profile.depth, e.cornerRadius, e.bow);
+  let pen = draw(path.at(-1)!.to);
+  for (const { to, via } of path) pen = via ? pen.threePointsArcTo(to, via) : pen.lineTo(to);
+  return pen.close().sketchOnPlane("XY", z0).extrude(z1 - z0) as Shape3D;
+}
+
+// How far past the front and rear walls anything that follows the outside has to reach.
+function bowReach(plan: BuildPlan): number {
+  return Math.max(plan.config.enclosure.bow.front, plan.config.enclosure.bow.rear);
 }
 
 function hasRounds(plan: BuildPlan): boolean {
@@ -105,18 +120,21 @@ interface OuterForms {
 function surfaceSlab(plan: BuildPlan, surface: Surface): Shape3D {
   const e = plan.config.enclosure;
   const { surfaces, depth } = plan.profile;
-  const inner = offsetChain(surfaces, ownThickness, -1, depth + 1)!;
+  // Out past a bowed wall, where the top carries on along its slope.
+  const before = e.bow.front + 1;
+  const after = e.bow.rear + 1;
+  const inner = offsetChain(surfaces, ownThickness, -before, depth + after)!;
   const raise = 1;
-  const y0 = surface.index === 0 ? -1 : surface.y0;
-  const y1 = surface.index === surfaces.length - 1 ? depth + 1 : surface.y1;
-  const z0 = surface.z0;
+  const y0 = surface.index === 0 ? -before : surface.y0;
+  const y1 = surface.index === surfaces.length - 1 ? depth + after : surface.y1;
+  const zAt = (y: number) => surface.z0 + ((y - surface.y0) * surface.sin) / surface.cos;
   const points: Point2[] = [
-    [y0, z0 + raise],
-    [y1, surface.z1 + raise],
-    [y1, surface.z1],
+    [y0, zAt(y0) + raise],
+    [y1, zAt(y1) + raise],
+    [y1, zAt(y1)],
     inner[surface.index + 1]!,
     inner[surface.index]!,
-    [y0, z0],
+    [y0, zAt(y0)],
   ];
   let pen = draw(points[0]!);
   for (const point of points.slice(1)) pen = pen.lineTo(point);
@@ -131,9 +149,12 @@ function outerForms(plan: BuildPlan): OuterForms {
   const e = plan.config.enclosure;
   const { outer, surfaces, maxHeight } = plan.profile;
   const { depth } = plan.profile;
-  let body = hasRounds(plan)
-    ? extrudedPath(plan.profile.outerPath, 0, e.width).intersect(roundedPlan(0, e.width, 0, depth, e.cornerRadius, -1, maxHeight + 1))
-    : roundedVerticals(extrudedProfile(outer, 0, 0, e.width), e.cornerRadius, e.cornerRadius);
+  const rise = bowRise(plan.profile, e.bow);
+  let body = hasBow(e.bow)
+    ? extrudedPath(bowedOuterPath(plan.profile, e.bow), 0, e.width).intersect(bowedPlan(plan, -1, maxHeight + Math.max(rise.front, rise.rear, 0) + 1))
+    : hasRounds(plan)
+      ? extrudedPath(plan.profile.outerPath, 0, e.width).intersect(roundedPlan(0, e.width, 0, depth, e.cornerRadius, -1, maxHeight + 1))
+      : roundedVerticals(extrudedProfile(outer, 0, 0, e.width), e.cornerRadius, e.cornerRadius);
   if (e.topEdgeFillet > 0) {
     body = body.fillet(e.topEdgeFillet, (edge) => edge.inPlane(surfacePlane(surfaces[0]!, 0)));
   }
@@ -538,7 +559,7 @@ function tongueSolid(surface: Surface, joint: TopJoint, grow: number): Shape3D {
 function topBlank(plan: BuildPlan, forms: OuterForms, pieceIndex: number): Shape3D {
   const piece = plan.topPieces[pieceIndex]!;
   const slab = forms.slabs.get(piece.surface)!;
-  let solid = forms.body.intersect(slab).intersect(boxSolid([piece.xMin, piece.xMax], [-2, plan.profile.depth + 2], [-1, plan.profile.maxHeight + 3]));
+  let solid = forms.body.intersect(slab).intersect(boxSolid([piece.xMin, piece.xMax], [-2 - bowReach(plan), plan.profile.depth + 2 + bowReach(plan)], [-1, plan.profile.maxHeight + 3 + bowReach(plan)]));
   // The opening comes out after, tongue and all, and the groove comes out last of all.
   const surface = plan.profile.surfaces.find((s) => s.id === piece.surface)!;
   if (piece.tongue) solid = solid.fuse(forms.body.intersect(slab).intersect(tongueSolid(surface, piece.tongue, 0)));
@@ -816,8 +837,10 @@ function skinBand(plan: BuildPlan, more: number, from: number, to: number): Shap
   const wall = plan.config.enclosure.wall / 2 + more;
   const panel = (less: number): Inset => (surface) => surface.thickness / 2 + more - less;
   // On to just outside the shell, so the slope runs right through the skin.
-  const run = Math.max(wall, ...plan.profile.surfaces.map((surface) => surface.thickness / 2 + more)) + 0.5;
-  const span = makeBox([from, -2, -3], [to + run, depth + 2, height + 2]) as Shape3D;
+  // And on through a bowed wall, which is solid out to its curve.
+  const reach = bowReach(plan);
+  const run = Math.max(wall, ...plan.profile.surfaces.map((surface) => surface.thickness / 2 + more)) + 0.5 + reach;
+  const span = makeBox([from, -2 - reach, -3], [to + run, depth + 2 + reach, height + 2 + reach]) as Shape3D;
   const straight = cavityOutline(plan, wall, panel(0), from - 1).extrude(to - from + 1) as Shape3D;
   const slope = cavityOutline(plan, wall, panel(0), to).loftWith(cavityOutline(plan, wall - run, panel(run), to + run), { ruled: true });
   return span.cut(straight.fuse(slope));

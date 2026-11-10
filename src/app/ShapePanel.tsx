@@ -32,6 +32,7 @@ import {
   removeWallHole,
   renameSurface,
   setBed,
+  setBow,
   setOpening,
   setPlateJoint,
   setPlateSplit,
@@ -39,6 +40,7 @@ import {
   setRailScrew,
   setRound,
   setSeam,
+  setSurfaceBulge,
   setSurfaceThickness,
   addSeam,
   removeSeam,
@@ -110,6 +112,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
                 <NumberField label="Depth" value={surface.y} onCommit={number((y) => updateSurface(config, surface.id, { y }))} />
                 <NumberField label="Height" value={surface.z} onCommit={number((z) => updateSurface(config, surface.id, { z }))} />
                 <TextField label="Thickness" placeholder={String(e.panelThickness)} value={surface.thickness === undefined ? "" : String(surface.thickness)} onCommit={optional((thickness) => setSurfaceThickness(config, surface.id, thickness))} />
+                <TextField label="Curve" placeholder="flat" value={surface.bulge === undefined ? "" : String(surface.bulge)} onCommit={optional((bulge) => setSurfaceBulge(config, surface.id, bulge))} />
               </div>
               <label className="check">
                 <input
@@ -167,6 +170,8 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
           <NumberField label="Front bottom round" value={e.rounds.frontBottom} onCommit={number((radius) => setRound(config, "frontBottom", radius))} />
           <NumberField label="Rear top round" value={e.rounds.rearTop} onCommit={number((radius) => setRound(config, "rearTop", radius))} />
           <NumberField label="Rear bottom round" value={e.rounds.rearBottom} onCommit={number((radius) => setRound(config, "rearBottom", radius))} />
+          <NumberField label="Front wall bow" value={e.bow.front} onCommit={number((bow) => setBow(config, "front", bow))} />
+          <NumberField label="Rear wall bow" value={e.bow.rear} onCommit={number((bow) => setBow(config, "rear", bow))} />
         </div>
       </section>
 

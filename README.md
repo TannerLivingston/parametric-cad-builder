@@ -768,9 +768,38 @@ and 1 g each, and its wall section 45 minutes and 10 g.
 It doesn't cover pins on the plate, because what they fit into isn't in the design, or the holes in a board's standoffs. Nothing has
 been printed yet, including this.
 
+### Curved surfaces and bowed walls
+
+```json
+"enclosure": {
+  "surfaces": [{ "id": "deck", "y": 80, "z": 40 }, { "id": "hood", "y": 130, "z": 60, "bulge": 8 }, { "id": "back", "y": 190, "z": 55 }],
+  "bow": { "front": 8, "rear": 5 }
+}
+```
+
+A surface's **`bulge`** makes it a curve, seen from the side: an arc between its two ends that rises that many mm above the
+straight line between them at its middle, or dips below it if negative. It's built as a run of 4 to 32 short flats, as many
+as keep them within 0.05 mm of the arc, so the STL and STEP files have flats rather than a true arc, and the view shows a line
+at each one. The wall under it follows at the surface's thickness, and seams, lips, the plate and wiring all work under it.
+Nothing can be mounted on a curve: no parts, lettering or top panel, because each needs a flat face. A curve can run
+smoothly into its neighbour, which two flat surfaces can't. It has to curve by at least 0.5 mm and at most 0.4 of its length,
+stay under the slope limit all along, and can't end in a rear top round.
+
+**`bow`** makes the `front` or `rear` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
+to corner that runs smoothly into each corner's round. Only the outside curves. The inside stays square, so everything in
+the enclosure is placed and checked exactly as before, and the wall is solid out to its curve, which costs plastic: about two
+thirds of width x bow x height. The top carries on out along the slope of the surface it meets, and a top panel there
+follows the curve. A bow is at least 0.5 mm, and at most 20 mm or an eighth of the width. A bowed wall can't have a hole,
+vent, wall part, connector or lettering, and can't be used with a round on that end of the side profile, a top edge fillet,
+or, at the front, an opening. The side walls can't bow, because the shell's pieces print standing on them.
+
+Both are in the Shape tab: **Curve** on each surface, and **Front wall bow** and **Rear wall bow** under Edges.
+
 ## Limits for now
 
 - Seams run straight across the width.
+- A curved surface is short flats, not a true arc, and carries nothing. A bowed wall is solid, with a square inside, and
+  only the front and rear can bow.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.

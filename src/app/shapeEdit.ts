@@ -51,6 +51,7 @@ export function shapeValues(config: RawConfig): ShapeValues {
       ...e,
       surfaces: e.surfaces ?? [],
       rounds: { ...DEFAULTS.enclosure.rounds, ...e.rounds },
+      bow: { ...DEFAULTS.enclosure.bow, ...e.bow },
     },
     fabrication: {
       ...DEFAULTS.fabrication,
@@ -79,6 +80,14 @@ export function setRound(config: RawConfig, key: "frontBottom" | "rearTop" | "re
   return { ...config, enclosure: Object.keys(next).length ? { ...enclosure, rounds: next } : enclosure };
 }
 
+// A bow of 0 is the same as none, so it leaves the file.
+export function setBow(config: RawConfig, side: "front" | "rear", bow: number): RawConfig {
+  const { bow: old = {}, ...enclosure } = config.enclosure ?? {};
+  const { [side]: _old, ...others } = old;
+  const next = bow > 0 ? { ...others, [side]: tidy(bow) } : others;
+  return { ...config, enclosure: Object.keys(next).length ? { ...enclosure, bow: next } : enclosure };
+}
+
 export function updateFabrication(config: RawConfig, patch: RawConfig): RawConfig {
   return { ...config, fabrication: { ...config.fabrication, ...patch } };
 }
@@ -99,6 +108,16 @@ export function setSurfaceThickness(config: RawConfig, id: string, thickness: nu
     if (s.id !== id) return s;
     const { thickness: _old, ...rest } = s;
     return thickness === undefined ? rest : { ...rest, thickness: tidy(thickness) };
+  });
+  return updateEnclosure(config, { surfaces });
+}
+
+// A surface's curve, as how far its arc rises above the line between its ends. None makes it flat.
+export function setSurfaceBulge(config: RawConfig, id: string, bulge: number | undefined): RawConfig {
+  const surfaces = (config.enclosure?.surfaces ?? []).map((s: RawConfig) => {
+    if (s.id !== id) return s;
+    const { bulge: _old, ...rest } = s;
+    return bulge === undefined || bulge === 0 ? rest : { ...rest, bulge: tidy(bulge) };
   });
   return updateEnclosure(config, { surfaces });
 }

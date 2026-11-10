@@ -132,7 +132,7 @@ export function addComponent(config: RawConfig, type: string, surfaceId?: string
   }
 
   const surfaces = buildSurfaces(Number(enclosure.frontHeight) || 0, enclosure.surfaces ?? []);
-  const ordered = [...surfaces].sort((a, b) => (a.id === surfaceId ? -1 : b.id === surfaceId ? 1 : a.index - b.index));
+  const ordered = surfaces.filter((s) => !s.curveOf).sort((a, b) => (a.id === surfaceId ? -1 : b.id === surfaceId ? 1 : a.index - b.index));
   for (const surface of ordered) {
     for (let v = STEP; v < surface.length; v += STEP) {
       for (let u = STEP; u < width; u += STEP) {
@@ -141,6 +141,6 @@ export function addComponent(config: RawConfig, type: string, surfaceId?: string
       }
     }
   }
-  const fallback = surfaces[0];
+  const fallback = ordered[0];
   return { config: withComponent({ id, type, surface: surfaceId ?? fallback?.id, u: tidy(width / 2), v: tidy((fallback?.length ?? 40) / 2) }), id };
 }
