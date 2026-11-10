@@ -9,7 +9,7 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Shape
 
-- [ ] Parts on a curved surface, on a flat let into it. A true arc for a curve in the STEP file, and no lines along it in the view.
+- [ ] A true arc for a curve in the STEP file. Lettering on a curve, and dragging a part along one in the view, which is untried.
 - [ ] A bowed wall that's hollow, with the inside following it, and bowed side walls.
 - [ ] A tongue and groove along the seam, with keys, as the real Desk Synth has. It needs a wall of 4 mm or more there, and the
   seam's lip does the same job in a thinner one, so this only matters for matching the real shell.
@@ -21,6 +21,8 @@ proven the numbers. Move an item to the done list once it's built.
 
 ## Done
 
+- [x] **Parts on a curved surface,** each on a flat of its own let into the curve, as thick as the surface, with sloped
+  sides so it needs no support. And the view no longer draws a line at each of a curve's short flats.
 - [x] **Curved outlines.** A surface's `bulge` makes it an arc seen from the side, built as short flats within 0.05 mm of
   it, which nothing can be mounted on. `bow` makes the front or rear wall bow outward seen from above, solid out to its curve
   with the inside left square, so nothing goes through one. Both build with seams and lips, and need no support by the app's

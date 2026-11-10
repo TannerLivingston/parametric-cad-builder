@@ -779,10 +779,16 @@ been printed yet, including this.
 
 A surface's **`bulge`** makes it a curve, seen from the side: an arc between its two ends that rises that many mm above the
 straight line between them at its middle, or dips below it if negative. It's built as a run of 4 to 32 short flats, as many
-as keep them within 0.05 mm of the arc, so the STL and STEP files have flats rather than a true arc, and the view shows a line
-at each one. The wall under it follows at the surface's thickness, and seams, lips, the plate and wiring all work under it.
-Nothing can be mounted on a curve: no parts, lettering or top panel, because each needs a flat face. A curve can run
-smoothly into its neighbour, which two flat surfaces can't. It has to curve by at least 0.5 mm and at most 0.4 of its length,
+as keep them within 0.05 mm of the arc, so the STL and STEP files have flats rather than a true arc. The view leaves out
+the lines where they meet. The wall under it follows at the surface's thickness, and seams, lips, the plate and wiring all
+work under it. A curve can run smoothly into its neighbour, which two flat surfaces can't.
+
+A part on a curve gets a flat of its own let into it, because it needs a flat face above and below. It's placed with `u` and
+`v` as on any surface, with `v` measured along the curve. The flat is 2 mm bigger all round than everything the part takes
+up, and as thick as the surface: sunk into a curve that rises, with a pad underneath, or standing proud of one that dips,
+over a pocket. Its ends are a 0.2 mm step from the curve, and its sides slope at 45 degrees, so it needs no support. A flat
+has to stay 1 mm inside the curve's ends, clear of the walls, seams and other flats, and within 4 mm of the curve at its
+middle, so a big part needs a gentle curve. A curve still can't carry lettering, a part's own label, or a top panel. It has to curve by at least 0.5 mm and at most 0.4 of its length,
 stay under the slope limit all along, and can't end in a rear top round.
 
 **`bow`** makes the `front` or `rear` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
@@ -798,8 +804,8 @@ Both are in the Shape tab: **Curve** on each surface, and **Front wall bow** and
 ## Limits for now
 
 - Seams run straight across the width.
-- A curved surface is short flats, not a true arc, and carries nothing. A bowed wall is solid, with a square inside, and
-  only the front and rear can bow.
+- A curved surface is short flats, not a true arc, and carries parts but no lettering. A bowed wall is solid, with a square
+  inside, and only the front and rear can bow.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.

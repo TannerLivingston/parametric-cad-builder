@@ -1,6 +1,7 @@
 // What the viewport draws for each component, worked out from the config alone. This
 // runs on every change, even for invalid layouts, so parts can follow the pointer
 // while the engine only ever sees valid plans.
+import { curveFlat, partReach } from "../flats.js";
 import { configSchema, type Config, type Footprint, type Part } from "../schema.js";
 import { footprintShape, gap, halfExtents, type Rotation, type Shape } from "../geometry.js";
 import { buildSurfaces, surfacePoint, type Surface } from "../profile.js";
@@ -73,7 +74,12 @@ export function buildSceneModel(raw: RawConfig): SceneModel | null {
       inWall: null,
     };
     if ("u" in component && part.mount === "panel") {
-      const surface = surfaces.find((s) => s.id === component.surface) ?? surfaces[0] ?? null;
+      // On a curve, it sits on the flat let into it there.
+      const curve = component.surface ?? surfaces[0]?.curveOf;
+      const onCurve = curve !== undefined && surfaces.some((s) => s.curveOf === curve);
+      const surface = onCurve
+        ? curveFlat(surfaces, curve, component.id, component.u, component.v, partReach(part, rotation)).surface
+        : (surfaces.find((s) => s.id === component.surface) ?? surfaces[0] ?? null);
       components.push({
         ...placed,
         mount: "panel",

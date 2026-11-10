@@ -9,7 +9,7 @@ import { BARB_REACH, CLIP_GAP, CLIP_THICKNESS } from "./fixtures.js";
 import { library } from "./library.js";
 import { BOSS_DIAMETER, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PIN_SOCKET_DIAMETER, SCREW_CLEARANCE_DIAMETER } from "./plate.js";
 import { orientationsFor, type Matrix } from "./printing.js";
-import { tabSection } from "./profile.js";
+import { findSurface, tabSection } from "./profile.js";
 import type { FloorPart, PanelPart, WallPart } from "./schema.js";
 import type { BuildPlan } from "./validate.js";
 
@@ -465,7 +465,7 @@ function planSeamJoint(plan: BuildPlan): [FitWallSection, FitWallSection] | null
   const tab = seam.tabs.find((candidate) => !candidate.surface) ?? seam.tabs[0];
   if (!tab) return null;
   const { wall } = plan.config.enclosure;
-  const panelThickness = plan.profile.surfaces.find((surface) => surface.id === tab.surface)?.thickness ?? 0;
+  const panelThickness = findSurface(plan.profile, tab.surface)?.thickness ?? 0;
   const corners = tabSection(tab);
   const ys = corners.map(([y]) => y);
   const zs = corners.map(([, z]) => z);

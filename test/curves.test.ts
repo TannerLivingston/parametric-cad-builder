@@ -5,6 +5,7 @@ import { buildSurfaces, chainHeight, CURVE_FLATNESS, curvePoints } from "../src/
 import { buildProblems } from "./buildChecks.js";
 import { errors } from "./helpers.js";
 import { setSurfaceBulge } from "../src/app/shapeEdit.js";
+import { withoutCurveCreases } from "../src/app/curveEdges.js";
 import { addComponent } from "../src/app/configEdit.js";
 
 // A flat deck, a hood that arcs up and over, and a flat back.
@@ -87,10 +88,7 @@ describe("a curved surface, planned", () => {
     expect(chainHeight(built.profile.outer, 40)).toBeCloseTo(40);
   });
 
-  it("can't carry a part, lettering or a top panel", () => {
-    const part = hooded();
-    part.components.push({ id: "d", type: "ttp223", surface: "hood", u: 150, v: 20 });
-    expect(errors(part).map((e) => e.code)).toEqual(["SURFACE_CURVED"]);
+  it("can't carry lettering or a top panel", () => {
     const label = hooded({ labels: [{ text: "HI", surface: "hood", u: 150, v: 20 }] });
     expect(errors(label).map((e) => e.message).join()).toMatch(/curved/);
     const panel = hooded({ topPanels: [{ surface: "hood" }] });
@@ -142,6 +140,28 @@ describe("a curved surface, built", () => {
     expect(await buildProblems(built, buildEnclosure(built))).toEqual([]);
   }, 120_000);
 
+  it("leaves the joins between its flats out of the view's edges, and nothing else", () => {
+    const built = plan(hooded());
+    const { parts } = buildEnclosure(built);
+    const flats = built.profile.surfaces.filter((s) => s.curveOf).length;
+    for (const part of parts.filter((p) => p.kind === "shell")) {
+      const all = Float32Array.from(part.shape.meshEdges({ tolerance: 0.1, angularTolerance: 0.3 }).lines);
+      const shown = withoutCurveCreases(all, built.profile.surfaces);
+      // At each join, one edge outside and one underneath at least.
+      expect((all.length - shown.length) / 6).toBeGreaterThanOrEqual(2 * (flats - 1));
+      // What's left has none running across the width over the curve, between its ends.
+      let over = 0;
+      for (let i = 0; i < shown.length; i += 6) {
+        const [y0, z0, y1, z1] = [shown[i + 1]!, shown[i + 2]!, shown[i + 4]!, shown[i + 5]!];
+        if (Math.abs(y1 - y0) < 1e-4 && Math.abs(z1 - z0) < 1e-4 && y0 > 82 && y0 < 128 && z0 > 43 && Math.abs(shown[i + 3]! - shown[i]!) > 20) over++;
+      }
+      expect(over).toBe(0);
+    }
+    const flat = plan(hooded({}, 0));
+    const edges = Float32Array.from([0, 80, 40, 150, 80, 40]);
+    expect(withoutCurveCreases(edges, flat.profile.surfaces)).toBe(edges);
+  }, 120_000);
+
   it("builds dipping in, in one piece", async () => {
     const built = plan(hooded({ seams: [], enclosure: { ...hooded().enclosure, width: 200 }, components: [] }, -5));
     expect(await buildProblems(built, buildEnclosure(built))).toEqual([]);
@@ -156,7 +176,7 @@ describe("a curved surface, in the form", () => {
     expect(setSurfaceBulge(set, "deck", undefined).enclosure.surfaces[0]).toEqual({ id: "deck", y: 80, z: 40 });
   });
 
-  it("puts a new part on a flat surface, even when the curve is asked for", () => {
+  it("puts a new part on a flat surface first, even when the curve is asked for", () => {
     const { config, id } = addComponent(hooded(), "ttp223", "hood");
     expect(["deck", "back"]).toContain(config.components.find((c: any) => c.id === id).surface);
   });

@@ -16,8 +16,9 @@ import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTa
 import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
+import type { CurveFlat } from "./flats.js";
 import { bowedOuterPath, bowRise, hasBow, planOutline } from "./bow.js";
-import { buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
+import { findSurface, buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
 export const BOLT_DIAMETER = 3.4; // M3 clearance, as used in the Desk Synth shell
 const FRAME_OVERLAP = 0.5; // tabs reach this far into the walls, so the fuse is clean
@@ -72,6 +73,47 @@ function bowedPlan(plan: BuildPlan, z0: number, z1: number): Shape3D {
 // How far past the front and rear walls anything that follows the outside has to reach.
 function bowReach(plan: BuildPlan): number {
   return Math.max(plan.config.enclosure.bow.front, plan.config.enclosure.bow.rear);
+}
+
+// A slice of a flat let into a curve, from `low` to `high` along its normal from its face, as wide
+// as the flat at `low` plus `lowMore` each side, and at `high` plus `highMore`. Sloping sides at 45
+// degrees are what keep a flat from needing support when its shell piece prints on its side.
+function flatSlice(flat: CurveFlat, low: number, lowMore: number, high: number, highMore: number): Shape3D {
+  const { surface, uLow, uHigh } = flat;
+  const start = 2 * ((flat.vLow + flat.vHigh) / 2) - surface.length;
+  const [y, z] = surfacePoint(surface, start, 0);
+  // Drawn across the width and along the normal, which this plane has pointing down, then pulled
+  // along the flat.
+  const plane = new Plane([0, y, z], [1, 0, 0], [0, surface.cos, surface.sin]);
+  return draw([uLow - lowMore, -low])
+    .lineTo([uHigh + lowMore, -low])
+    .lineTo([uHigh + highMore, -high])
+    .lineTo([uLow - highMore, -high])
+    .close()
+    .sketchOnPlane(plane)
+    .extrude(surface.length - start) as Shape3D;
+}
+
+// The outside with its flats: a curve that rises has each cut down into it, and one that dips has
+// each standing on it.
+function withFlatsOutside(body: Shape3D, plan: BuildPlan): Shape3D {
+  for (const flat of plan.flats) {
+    const t = flat.surface.thickness;
+    const over = flat.sink + 1;
+    body = flat.rises ? body.cut(flatSlice(flat, 0, 0, over, over)) : body.fuse(flatSlice(flat, -t, t, 0, 0));
+  }
+  return body;
+}
+
+// And the space inside: under a sunk flat it stops at the flat's underside, and under a raised one
+// it reaches up to it.
+function withFlatsInside(cavity: Shape3D, plan: BuildPlan): Shape3D {
+  for (const flat of plan.flats) {
+    const t = flat.surface.thickness;
+    const under = flat.sink + 0.5;
+    cavity = flat.rises ? cavity.cut(flatSlice(flat, -t, 0, 0, t)) : cavity.fuse(flatSlice(flat, -t - under, under, -t, 0));
+  }
+  return cavity;
 }
 
 function hasRounds(plan: BuildPlan): boolean {
@@ -158,6 +200,7 @@ function outerForms(plan: BuildPlan): OuterForms {
   if (e.topEdgeFillet > 0) {
     body = body.fillet(e.topEdgeFillet, (edge) => edge.inPlane(surfacePlane(surfaces[0]!, 0)));
   }
+  body = withFlatsOutside(body, plan);
   const slabs = new Map<string, Shape3D>();
   for (const panel of plan.config.topPanels) {
     const surface = surfaces.find((s) => s.id === panel.surface)!;
@@ -267,7 +310,7 @@ function teardropPoint(screw: Pick<TopScrew, "x" | "y" | "wall">, r: number, zBo
 // What a top screw needs on the shell: a tab to bear on, with a clearance hole.
 function topScrewTab(plan: BuildPlan, screw: TopScrew, envelope: Shape3D): Shape3D {
   const e = plan.config.enclosure;
-  const surface = plan.profile.surfaces.find((s) => s.id === plan.topPieces[screw.piece]!.surface)!;
+  const surface = findSurface(plan.profile, plan.topPieces[screw.piece]!.surface)!;
   const rearWallY = surface.y1 + 3;
   const tab = topTabExtent(screw, e.wall, e.width, screw.wall === "rear" ? rearWallY : plan.profile.depth - e.wall, plan.shellOnSide);
   let solid: Shape3D;
@@ -416,7 +459,7 @@ function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
   const cavity = hasRounds(plan)
     ? extrudedPath(plan.profile.cavityPath, e.wall, e.width - e.wall).intersect(roundedPlan(e.wall, e.width - e.wall, e.wall, plan.profile.depth - e.wall, e.cornerRadius > 0 ? innerRadius : 0, -2, plan.profile.maxHeight + 1))
     : roundedVerticals(extrudedProfile(inner, -1, e.wall, e.width - e.wall), e.cornerRadius, innerRadius);
-  let shell = envelope.cut(cavity);
+  let shell = envelope.cut(withFlatsInside(cavity, plan));
 
   for (const seam of plan.seams) {
     for (const tab of seam.tabs) shell = shell.fuse(envelope.intersect(seamTabSolid(tab, seam)));
@@ -561,7 +604,7 @@ function topBlank(plan: BuildPlan, forms: OuterForms, pieceIndex: number): Shape
   const slab = forms.slabs.get(piece.surface)!;
   let solid = forms.body.intersect(slab).intersect(boxSolid([piece.xMin, piece.xMax], [-2 - bowReach(plan), plan.profile.depth + 2 + bowReach(plan)], [-1, plan.profile.maxHeight + 3 + bowReach(plan)]));
   // The opening comes out after, tongue and all, and the groove comes out last of all.
-  const surface = plan.profile.surfaces.find((s) => s.id === piece.surface)!;
+  const surface = findSurface(plan.profile, piece.surface)!;
   if (piece.tongue) solid = solid.fuse(forms.body.intersect(slab).intersect(tongueSolid(surface, piece.tongue, 0)));
   if (forms.openingTool) solid = solid.cut(forms.openingTool);
   for (const crease of plan.creases) {
@@ -619,7 +662,7 @@ function plateBlanks(plan: BuildPlan): Shape3D[] {
       const footprint = outline.translate(e.width / 2, (yFront + yRear) / 2).sketchOnPlane("XY").extrude(e.floorThickness + BOSS_DIAMETER + 4) as Shape3D;
       // A gusset that reaches under a boss fills that part of the space itself.
       const gussets = plan.topScrews.flatMap((screw) => {
-        const surface = plan.profile.surfaces.find((s) => s.id === plan.topPieces[screw.piece]!.surface)!;
+        const surface = findSurface(plan.profile, plan.topPieces[screw.piece]!.surface)!;
         const tab = topTabExtent(screw, e.wall, e.width, screw.wall === "rear" ? surface.y1 + 3 : plan.profile.depth - e.wall, false);
         const depth = tabGussetDepth(tab, screw.wall, e.floorThickness);
         return depth > 0 ? [{ tab, solid: () => topTabGusset(tab, screw.wall, depth) }] : [];
@@ -1047,7 +1090,7 @@ export function cutoutVolume(cutout: PlacedCutout, thickness: number, up: 1 | -1
 function labelPlane(label: PlacedLabel, plan: BuildPlan, normal: number): Plane {
   const { on } = label;
   if (on.kind === "surface") {
-    const surface = plan.profile.surfaces.find((s) => s.id === on.surface)!;
+    const surface = findSurface(plan.profile, on.surface)!;
     const [y, z] = surfacePoint(surface, on.v, normal);
     return new Plane([on.u, y, z], [1, 0, 0], [0, -surface.sin, surface.cos]);
   }
@@ -1093,7 +1136,7 @@ function cutPart(blank: Shape3D, index: number, plan: BuildPlan): Shape3D {
   const cutouts = plan.cutouts.filter((c) => c.printedPart === index);
   const labels = plan.labels.filter((label) => label.printedPart === index);
   if (cutouts.length === 0 && labels.length === 0) return blank;
-  const surfaceOf = (id: string) => plan.profile.surfaces.find((s) => s.id === id)!;
+  const surfaceOf = (id: string) => findSurface(plan.profile, id)!;
   const tools = [
     ...cutouts.map((c) => cutoutTool(c, surfaceOf(c.surface), surfaceOf(c.surface).thickness, cutoutUp(plan, c))),
     ...labels.flatMap((label) => labelTools(label, plan)),
@@ -1137,10 +1180,10 @@ export function withPosts(shape: Shape3D, posts: Pick<PlacedPost, "u" | "v" | "d
 // piece's tongue goes after those, so that no post or screw boss fills it.
 function addPosts(shape: Shape3D, index: number, plan: BuildPlan): Shape3D {
   const posts = plan.posts.filter((p) => p.printedPart === index);
-  const posted = withPosts(shape, posts, (i) => plan.profile.surfaces.find((s) => s.id === posts[i]!.surface)!);
+  const posted = withPosts(shape, posts, (i) => findSurface(plan.profile, posts[i]!.surface)!);
   const piece = plan.topPieces.find((p) => p.printedPart === index);
   if (!piece?.groove) return posted;
-  return posted.cut(tongueSolid(plan.profile.surfaces.find((s) => s.id === piece.surface)!, piece.groove, TONGUE_FIT));
+  return posted.cut(tongueSolid(findSurface(plan.profile, piece.surface)!, piece.groove, TONGUE_FIT));
 }
 
 export function buildEnclosure(plan: BuildPlan): Enclosure {
@@ -1165,7 +1208,7 @@ export function buildEnclosure(plan: BuildPlan): Enclosure {
   timed("top", () => plan.topPieces.forEach((_, i) => add(topBlank(plan, forms, i))));
   timed("plate", () => plateBlanks(plan).forEach(add));
   if (plan.config.opening?.rail) timed("rail", () => add(railPart(plan, forms.body)));
-  timed("knobs", () => plan.knobs.forEach((knob) => add(knobSolid(knob, plan.profile.surfaces.find((surface) => surface.id === knob.surface)!))));
+  timed("knobs", () => plan.knobs.forEach((knob) => add(knobSolid(knob, findSurface(plan.profile, knob.surface)!))));
   return { parts, stagesMs };
 }
 

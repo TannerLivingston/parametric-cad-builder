@@ -17,6 +17,7 @@ export interface Surface {
   cos: number;
   sin: number;
   curveOf?: string; // the curved surface this is one short flat of
+  flatOf?: string; // the curved surface this is a flat let into, for one part
 }
 
 export interface Profile {
@@ -31,6 +32,7 @@ export interface Profile {
   rearTangent: number; // how much of the last surface the rear top round takes
   plateFront: number; // where the flat base starts and ends, between any bottom rounds
   plateRear: number;
+  flats?: Surface[]; // let into curves for the parts on them, and not part of the chain
   outerPath: PathStep[]; // the closed outlines with their true arcs, for the engine
   cavityPath: PathStep[];
 }
@@ -126,6 +128,11 @@ export function buildSurfaces(frontHeight: number, inputs: SurfaceInput[], panel
     } else add(input.id, input.y, input.z, thickness);
   }
   return surfaces;
+}
+
+// A surface by its id, among the chain's and the flats let into its curves.
+export function findSurface(profile: Pick<Profile, "surfaces" | "flats">, id: string | null | undefined): Surface | undefined {
+  return profile.surfaces.find((s) => s.id === id) ?? profile.flats?.find((s) => s.id === id);
 }
 
 // A point `v` along a surface from its front edge, `normal` mm along its outward normal.

@@ -1,5 +1,6 @@
 // Runs the engine off the main thread. Holding the WASM instance here means the page can
 // throw the whole thing away to reclaim memory, or after a crash.
+import { withoutCurveCreases } from "./curveEdges.js";
 import wasmUrl from "replicad-opencascadejs/wasm?url";
 import { importSTEP, type Shape3D } from "replicad";
 import { buildEnclosure, initEngine, labelInlays, placedOnBed, recutPart, type Enclosure } from "../engine.js";
@@ -124,7 +125,10 @@ function build(plan: BuildPlan): { result: BuildResult; transfer: ArrayBuffer[] 
   }
   keys = next;
   const changed = recut ? enclosure.parts.filter((p) => recut.includes(p.index)) : enclosure.parts;
-  const meshes = changed.map((part) => packMesh(part.index, part.shape));
+  const meshes = changed.map((part) => {
+    const mesh = packMesh(part.index, part.shape);
+    return part.kind === "shell" ? { ...mesh, edges: withoutCurveCreases(mesh.edges, plan.profile.surfaces) } : mesh;
+  });
   return {
     result: {
       meshes,

@@ -4,8 +4,9 @@
 // crossings produce wrong geometry with no error at all.
 import { configSchema, type Config, type Cutout, type FloorPart, type PanelPart, type Part } from "./schema.js";
 import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
-import { highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
+import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
+import { curveFlat, curveLength, flatId, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
 import { bowAt, bowRise, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
 import { shellPrintsOnSide } from "./printing.js";
 import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, creaseGeometry, layoutCreaseScrews, type CreaseJoint } from "./crease.js";
@@ -30,6 +31,7 @@ const MIN_STANDOFF_WALL = 0.8; // two lines from a 0.4 mm nozzle
 const LABEL_GAP = 1.5; // from a part or hole it's for
 const LABEL_CLEAR = 0.6; // from any hole, or another label
 export const MAX_SURFACE_ANGLE = 75;
+const FLAT_END = 1; // from a flat let into a curve to either end of the curve
 const MIN_BOW_HEIGHT = 5; // of room left inside at a bowed wall's lowest
 export const MIN_BULGE = 0.5; // a curve flatter than this is left flat
 export const MAX_BULGE = 0.4; // of its length from end to end, which is most of a half circle
@@ -243,6 +245,7 @@ export interface BuildPlan {
   topPieces: TopPiece[];
   topScrews: TopScrew[];
   creases: CreaseJoint[];
+  flats: CurveFlat[]; // let into curved surfaces, one for each part on one
   shellOnSide: boolean; // which its features are shaped for
   fasteners: PlannedFasteners;
   printedParts: PrintedPart[];
@@ -319,6 +322,8 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
   checkComponentReferences(config, parts, profile, issues);
   if (issues.hasError("DUPLICATE_ID", "UNKNOWN_PART", "UNKNOWN_SURFACE", "SURFACE_CURVED", "WRONG_MOUNT", "TOP_PANEL_INVALID")) return issues.failure();
 
+  const flats = planFlats(config, parts, profile, limits.minWeb, issues);
+  profile.flats = flats.map((flat) => flat.surface);
   const placed = placeComponents(config, parts, profile);
   const partFor = printedPartFinder(shellParts, topPieces);
   const cutouts = placeCutouts(placed, partFor, config, issues);
@@ -335,7 +340,7 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
   checkCutoutSpacing(cutouts, limits.minWeb, issues);
   checkCutoutsOnSurfaces(cutouts, config, profile, limits.minWeb, issues);
   checkCutoutsAgainstSeams(cutouts, config, topPieces, limits.minWeb, issues);
-  checkBodies(placed, config, profile, seams, issues);
+  checkBodies(placed, config, profile, seams, flats, issues);
   const labels = planLabels(config, profile, placed, cutouts, wallHoles, shellParts, topPieces, partFor, limits, issues);
   checkWallParts(placed, config, profile, seams, holderBlockList, issues);
   const fixtures = {
@@ -374,6 +379,7 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
     topPieces,
     topScrews,
     creases,
+    flats,
     shellOnSide: shellPrintsOnSide(seams.length),
     fasteners,
     wallHoles,
@@ -434,7 +440,7 @@ function wiringObstacles(config: Config, profile: Profile, placed: Placed[], sea
     obstacles.push(box("a top screw's tab", [tab.xLow - tab.spread, tab.xHigh + tab.spread], [tab.yLow, tab.yHigh], [tab.zLow - under, tab.zHigh]));
   }
   for (const post of posts) {
-    const surface = profile.surfaces.find((s) => s.id === post.surface)!;
+    const surface = findSurface(profile, post.surface)!;
     const r = post.diameter / 2;
     const [y0, z0] = surfacePoint(surface, post.v, -post.reach);
     obstacles.push(column(`a screw post for "${post.componentId}"`, post.u, y0, r, z0, top));
@@ -777,6 +783,7 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
         return [a + (label.side === "right" ? reads : -reads) * (halfA + LABEL_GAP + across / 2), b];
       };
       const inWall = wallFit(item, config);
+      if (item.part.mount === "panel" && item.surface?.flatOf) return fail(`is for "${item.id}", which is on a curve, where there's no flat beside it for lettering.`);
       if (item.part.mount === "panel") {
         const shape = item.shape("above");
         const [hu, hv] = halfExtents(shape);
@@ -794,7 +801,7 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
     } else if ("wall" in label) {
       on = { kind: "wall", wall: label.wall, at: label.at, z: label.z };
     } else {
-      const surface = label.surface ? profile.surfaces.find((s) => s.id === label.surface) : profile.surfaces[0];
+      const surface = label.surface ? findSurface(profile, label.surface) : profile.surfaces[0];
       if (label.surface && isCurved(profile, label.surface)) return fail(`is on surface "${label.surface}", which is curved, and lettering needs a flat one.`);
       if (surface?.curveOf) return fail(`needs a surface, because the first one, "${surface.curveOf}", is curved.`);
       if (!surface) return fail(`is on surface "${label.surface}", which doesn't exist.`);
@@ -803,7 +810,7 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
 
     if (on.kind === "surface") {
       const { surface: surfaceId, u, v } = on;
-      const surface = profile.surfaces.find((s) => s.id === surfaceId)!;
+      const surface = findSurface(profile, surfaceId)!;
       const low = { u: u - across / 2, v: v - up / 2 };
       const high = { u: u + across / 2, v: v + up / 2 };
       const [yLow, zLow] = surfacePoint(surface, low.v, 0);
@@ -1021,7 +1028,7 @@ function planTopPieces(config: Config, profile: Profile, firstIndex: number, lim
   const pieces: TopPiece[] = [];
   const seen = new Set<string>();
   config.topPanels.forEach((panel, i) => {
-    const surface = profile.surfaces.find((s) => s.id === panel.surface);
+    const surface = findSurface(profile, panel.surface);
     if (isCurved(profile, panel.surface)) {
       issues.error("TOP_PANEL_INVALID", `Surface "${panel.surface}" is curved, so it can't be a separate top panel, which prints flat.`, `topPanels[${i}].surface`);
       return;
@@ -1077,7 +1084,7 @@ function planTopPieces(config: Config, profile: Profile, firstIndex: number, lim
 }
 
 function topPrintedPart(piece: TopPiece, config: Config, profile: Profile): PrintedPart {
-  const surface = profile.surfaces.find((s) => s.id === piece.surface)!;
+  const surface = findSurface(profile, piece.surface)!;
   const color = topPanelFor(config, piece.surface)!.color;
   // A tongue sticks out past its piece.
   // Over a bowed wall, it carries on out to the curve, along its slope.
@@ -1140,7 +1147,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
   const frontY = Math.max(near, profile.plateFront + driver);
   type TakenScrew = { screw: TopScrew; tab: { xLow: number; xHigh: number; yLow: number; yHigh: number } };
   const opening = config.opening;
-  const surfaceOf = (piece: TopPiece) => profile.surfaces.find((s) => s.id === piece.surface)!;
+  const surfaceOf = (piece: TopPiece) => findSurface(profile, piece.surface)!;
   const rearEdge = (surface: Surface) => {
     const next = profile.surfaces[surface.index + 1];
     return next !== undefined && !topPanelFor(config, next.id);
@@ -1235,7 +1242,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
   // Changes in the config come after, so that changing one screw leaves the others where they are.
   const added: { spot: TakenScrew | string; panel: number; index: number; x: number; y: number; wall: TopScrew["wall"]; surface: string }[] = [];
   config.topPanels.forEach((panel, panelIndex) => {
-    const surface = profile.surfaces.find((s) => s.id === panel.surface);
+    const surface = findSurface(profile, panel.surface);
     if (!surface) return;
     const isThisPanel = (i: number) => pieces[i]!.surface === panel.surface;
     panel.fasteners.remove.forEach((removal, i) => {
@@ -1248,7 +1255,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
   });
   const placedAdds: TakenScrew[] = [];
   config.topPanels.forEach((panel, panelIndex) => {
-    const surface = profile.surfaces.find((s) => s.id === panel.surface);
+    const surface = findSurface(profile, panel.surface);
     if (!surface) return;
     const { yLow, yHigh } = edgeSpan(surface);
     panel.fasteners.add.forEach(({ wall, at }, index) => {
@@ -1740,6 +1747,44 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
   return parts;
 }
 
+// A flat let into a curve for each part on one, checked against the curve's ends, the walls, the
+// seams and each other.
+function planFlats(config: Config, parts: Record<string, Part>, profile: Profile, minWeb: number, issues: Issues): CurveFlat[] {
+  const e = config.enclosure;
+  const flats: CurveFlat[] = [];
+  config.components.forEach((component, index) => {
+    if (!("u" in component)) return;
+    const curve = component.surface ?? profile.surfaces[0]!.curveOf;
+    const part = parts[component.type];
+    if (!curve || !isCurved(profile, curve) || part?.mount !== "panel") return;
+    const path = `components[${index}]`;
+    const fail = (message: string) => issues.error("SURFACE_CURVED", `"${component.id}" ${message}`, path, [component.id]);
+    const flat = curveFlat(profile.surfaces, curve, component.id, component.u, component.v, partReach(part, component.rotationDeg as Rotation));
+    const length = curveLength(profile.surfaces, curve);
+    const t = flat.surface.thickness;
+    const span = `It needs a flat from v ${mm(flat.vLow)} to ${mm(flat.vHigh)} let into "${curve}", which`;
+    if (flat.vLow < FLAT_END || flat.vHigh > length - FLAT_END) return fail(`is too near an end of the curve. ${span} runs from 0 to ${mm(length)}, and the flat has to stay ${mm(FLAT_END)} inside.`);
+    if (flat.sink > MAX_FLAT_SINK) return fail(`is too big for the curve it's on. ${span} would sit ${mm(flat.sink)} from the curve at its middle, and the most is ${mm(MAX_FLAT_SINK)}. Curve the surface less, or move the part to a flat one.`);
+    // The flat's sides slope out through the skin, as far as it's thick.
+    const side = Math.max(e.wall, e.cornerRadius) + minWeb + t;
+    const ys = [flat.surface.y1, surfacePoint(flat.surface, 2 * component.v - flat.surface.length, 0)[0]];
+    if (flat.uLow < side || flat.uHigh > e.width - side || Math.min(...ys) < e.wall + minWeb + t || Math.max(...ys) > profile.depth - e.wall - minWeb - t) {
+      return fail(`is too near a wall. Its flat let into "${curve}" needs ${mm(side)} to the sides and ${mm(e.wall + minWeb + t)} to the front and rear.`);
+    }
+    for (const seam of config.seams) {
+      const needs = Math.max(seam.lip, seam.ribHalfThickness) + t + minWeb;
+      if (flat.uLow - t < seam.x + needs && flat.uHigh + t > seam.x - needs) return fail(`is too near the seam at x = ${mm(seam.x)}. Its flat let into "${curve}" has to stay ${mm(needs + t)} from it.`);
+    }
+    const other = flats.find((o) => o.curve === curve && o.uLow - t < flat.uHigh + t + minWeb && o.uHigh + t > flat.uLow - t - minWeb && o.vLow < flat.vHigh + minWeb && o.vHigh > flat.vLow - minWeb);
+    if (other) {
+      issues.error("SURFACE_CURVED", `"${component.id}" and "${other.componentId}" are too close on the curve of "${curve}", where each needs a flat of its own. Move them ${mm(2 * t + minWeb)} apart across it, or ${mm(minWeb)} along it, past what each takes up.`, path, [component.id, other.componentId]);
+      return;
+    }
+    flats.push(flat);
+  });
+  return flats;
+}
+
 // Whether a surface of the design is a curve, which the profile holds as short flats.
 function isCurved(profile: Profile, id: string): boolean {
   return profile.surfaces.some((s) => s.curveOf === id);
@@ -1768,7 +1813,7 @@ function checkComponentReferences(config: Config, parts: Record<string, Part>, p
     }
     if ("u" in component) {
       if (curved(component.surface)) {
-        issues.error("SURFACE_CURVED", `"${component.id}" is on surface "${component.surface ?? profile.surfaces[0]!.curveOf}", which is curved, and a part needs a flat one.`, `${path}.surface`, [component.id]);
+        // It gets a flat of its own, let into the curve: see planFlats.
       } else if (component.surface === undefined && profile.surfaces.length > 1) {
         issues.error("UNKNOWN_SURFACE", `"${component.id}" needs a surface, because this enclosure has several: ${names}.`, path, [component.id]);
       } else if (component.surface !== undefined && !profile.surfaces.some((s) => s.id === component.surface)) {
@@ -1783,8 +1828,9 @@ function placeComponents(config: Config, parts: Record<string, Part>, profile: P
     const part = parts[component.type]!;
     const onSurface = "u" in component;
     const rotation = component.rotationDeg as Rotation;
+    const curve = onSurface ? component.surface ?? profile.surfaces[0]!.curveOf : undefined;
     const surface = onSurface
-      ? profile.surfaces.find((s) => s.id === component.surface) ?? profile.surfaces[0]!
+      ? profile.flats?.find((flat) => flat.id === flatId(curve ?? "", component.id)) ?? findSurface(profile, component.surface) ?? profile.surfaces[0]!
       : null;
     if ("wall" in component) {
       // Its body, as seen from above, standing in for a footprint.
@@ -2085,7 +2131,7 @@ function planPlate(config: Config, profile: Profile, seams: PlannedSeam[], place
     partClearance: PART_CLEARANCE,
     driverColumns: topScrews.map(({ x, y }) => ({ x, y })),
     gussets: seams.length ? [] : topScrews.map((screw) => {
-      const surface = profile.surfaces.find((s) => s.id === topPieces[screw.piece]!.surface)!;
+      const surface = findSurface(profile, topPieces[screw.piece]!.surface)!;
       const tab = topTabExtent(screw, e.wall, e.width, screw.wall === "rear" ? surface.y1 + 3 : profile.depth - e.wall, false);
       return { xLow: tab.xLow, xHigh: tab.xHigh, yLow: tab.yLow, yHigh: tab.yHigh, zLow: tab.zLow - tabGussetDepth(tab, screw.wall, e.floorThickness), zHigh: tab.zHigh };
     }),
@@ -2228,7 +2274,7 @@ function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], 
   const joints: CreaseJoint[] = [];
   config.topPanels.forEach((panel, panelIndex) => {
     if (panel.crease !== "screws") return;
-    const front = profile.surfaces.find((s) => s.id === panel.surface);
+    const front = findSurface(profile, panel.surface);
     const rear = front && profile.surfaces[front.index + 1];
     if (!front || !rear || !topPanelFor(config, rear.id)) {
       issues.error("TOP_PANEL_INVALID", `The ${panel.surface} panel's crease can only be screwed to a top panel on the surface behind it.`, `topPanels[${panelIndex}].crease`);
@@ -2254,7 +2300,7 @@ function planCreaseJoints(config: Config, profile: Profile, pieces: TopPiece[], 
       }
     }
     for (const post of posts) {
-      const surface = profile.surfaces.find((s) => s.id === post.surface)!;
+      const surface = findSurface(profile, post.surface)!;
       const r = post.diameter / 2;
       if (polygonsOverlap(section(surface, post.v - r, post.v + r, -surface.thickness, -post.reach), zone)) block(post.u - r, post.u + r);
     }
@@ -2731,6 +2777,8 @@ function usableSurface(surface: Surface, config: Config, profile: Profile, minWe
   const margin = Math.max(e.wall, e.topEdgeFillet) + minWeb;
   // A slope makes the top and underside of a surface reach different ys, so an
   // end wall limits whichever of the two reaches furthest.
+  // A flat let into a curve was made to fit its part, and checked against everything then.
+  if (surface.flatOf) return { margin, vMin: -Infinity, vMax: Infinity };
   const previous = profile.surfaces[surface.index - 1];
   const next = profile.surfaces[surface.index + 1];
   const vMin = previous
@@ -2814,7 +2862,7 @@ function checkCutoutsAgainstSeams(cutouts: PlacedShape[], config: Config, topPie
   }
 }
 
-function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: PlannedSeam[], issues: Issues) {
+function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: PlannedSeam[], flats: CurveFlat[], issues: Issues) {
   const e = config.enclosure;
   const panel = placed.filter((p): p is PanelPlaced => p.part.mount === "panel" && p.surface !== null);
   const floor = placed.filter((p): p is FloorPlaced => p.part.mount === "floor");
@@ -2824,12 +2872,15 @@ function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: 
     const shape = item.shape(which);
     const [, hv] = halfExtents(shape);
     const t = item.surface.thickness;
-    const near = which === "below" ? -t - SKIMMING : SKIMMING;
+    // Where a curve dips, its flat stands proud, over a pocket underneath that the body starts in.
+    const pocket = item.surface.flatOf ? (flatOf(item)?.rises ? 0 : (flatOf(item)?.sink ?? 0)) : 0;
+    const near = which === "below" ? -t - pocket - SKIMMING : SKIMMING;
     const far = which === "below" ? -t - item.part.below.depth : item.part.above.height;
     const point = (v: number, n: number) => surfacePoint(item.surface, v, n);
     return [point(shape.cy - hv, near), point(shape.cy + hv, near), point(shape.cy + hv, far), point(shape.cy - hv, far)];
   };
 
+  const flatOf = (item: PanelPlaced) => flats.find((flat) => flat.surface === item.surface);
   const report = (a: Placed, b: Placed, where: string, detail: string) => {
     issues.error("BODIES_COLLIDE", `"${a.id}" and "${b.id}" ${where} ${detail}. They need ${mm(PART_CLEARANCE)}.`, `components[${b.index}]`, [a.id, b.id]);
   };
@@ -2875,7 +2926,9 @@ function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: 
   for (const item of panel) {
     const path = `components[${item.index}]`;
     if (item.part.above.height > 0) {
-      const others = profile.surfaces.filter((s) => s !== item.surface);
+      // A flat is let into its curve, whose own short flats pass over it there.
+      const [from, to] = [surfacePoint(item.surface, 2 * item.shape("above").cy - item.surface.length, 0)[0], item.surface.y1];
+      const others = profile.surfaces.filter((s) => s !== item.surface && !(item.surface.flatOf && s.curveOf === item.surface.flatOf && s.y1 > from - 0.01 && s.y0 < to + 0.01));
       const hit = others.find((s) => polygonCrossesChain(section(item, "above"), [[s.y0, s.z0], [s.y1, s.z1]]));
       if (hit) {
         issues.error("BODY_HITS_ENCLOSURE", `The part of "${item.id}" above "${item.surface.id}" runs into surface "${hit.id}". Move it further from the crease.`, path, [item.id]);
