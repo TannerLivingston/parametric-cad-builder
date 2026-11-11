@@ -19,14 +19,14 @@ import { PartForm } from "./PartForm.js";
 import { PrintCost } from "./PrintCost.js";
 import { loadPrinted, markPrinted, reprintStatus, savePrinted, type PrintedRecord } from "./reprint.js";
 import { applyProfile, loadProfile } from "./printerProfile.js";
-import { Scene3D, type SceneColors, type ViewPreset } from "./Scene3D.js";
+import { Scene3D, type PickedFace, type SceneColors, type ViewPreset } from "./Scene3D.js";
 import { buildSceneModel, issueSpot, measureBetween, nearestNeighbour, sectionRange, snap, type SectionAxis } from "./sceneModel.js";
 import { ScrewsPanel } from "./ScrewsPanel.js";
 import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
 import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
-import { nameOfThing, thingAt } from "./pickThing.js";
+import { FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } from "./pickThing.js";
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "./thingKeys.js";
@@ -203,10 +203,42 @@ export function App() {
 
   // Dragging reads the latest state through a ref, because the scene's callbacks are
   // set once. Each move replaces the text, and only the release joins the undo history.
-  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked });
-  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked };
+  const plan = result?.ok ? result.plan : null;
+  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked, plan });
+  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked, plan };
 
   useEffect(() => {
+    // What's under a click, with what the validator worked out: where labels went, the screws and
+    // the plate's joints.
+    const whatsAt = (faces: PickedFace[]) => {
+      const { config: current, model: scene3d, seeThrough: through, plan } = latest.current;
+      const spots = faces.map((face) => (scene3d ? spotAt(scene3d, face.point, face.normal) : null));
+      const extras: PickExtras = {
+        points: faces.map((face) => face.point),
+        fasteners: latest.current.fasteners.items,
+        ...(plan && { labels: plan.labels, plateJoints: plan.plate?.joints ?? [] }),
+        ...(scene3d && { floorThickness: scene3d.floorThickness }),
+      };
+      return { path: thingAt(current, spots, through, extras), spots };
+    };
+    // Selects it where its fields are: a screw on the Screws tab, a part's own label as its part on
+    // the Layout tab, and the rest on the Shape tab.
+    const selectThing = (path: string) => {
+      const owner = partOfLabel(latest.current.config, path);
+      if (path.startsWith(FASTENER_PREFIX)) {
+        setPicked(null);
+        setTab("screws");
+        setSelectedFastener(path.slice(FASTENER_PREFIX.length));
+      } else if (owner) {
+        setPicked(null);
+        setTab("layout");
+        setSelected(owner);
+      } else {
+        setSelected(null);
+        setPicked(path);
+        setTab("shape");
+      }
+    };
     const scene = new Scene3D(
       viewportRef.current!,
       {
@@ -222,18 +254,18 @@ export function App() {
         onDragEnd: () => latest.current.commit(latest.current.text),
         onMeasure: setMeasured,
         onClick: (faces) => {
-          const { config: current, model: scene3d, seeThrough: through, tab: on } = latest.current;
+          const { model: scene3d, tab: on } = latest.current;
           if (!scene3d || (on !== "shape" && on !== "layout")) return;
-          const path = thingAt(current, faces.map((face) => spotAt(scene3d, face.point, face.normal)), through);
+          const { path } = whatsAt(faces);
           // From the Layout tab, where a click on the model is how a part is let go of, only
           // something in particular is worth leaving for, not the bare surface or wall.
           const bare = path !== null && /^enclosure\./.test(path);
           const wanted = on === "layout" && bare ? null : path;
-          setPicked(wanted);
-          if (wanted) setTab("shape");
+          if (wanted) selectThing(wanted);
+          else setPicked(null);
         },
         onMenu: (at, part, faces) => {
-          const { config: current, model: scene3d, seeThrough: through } = latest.current;
+          const { config: current, model: scene3d } = latest.current;
           setMenu(null);
           if (!scene3d) return;
           let target: MenuTarget | null = null;
@@ -243,15 +275,20 @@ export function App() {
             title = part;
             setSelected(part);
           } else {
-            const spots = faces.map((face) => spotAt(scene3d, face.point, face.normal));
-            const path = thingAt(current, spots, through);
+            const { path, spots } = whatsAt(faces);
             const spot = spots.find((s) => s !== null);
-            if (path && !/^enclosure\./.test(path)) {
+            // A part's own label stands for its part, and a screw has only its removal.
+            const owner = path ? partOfLabel(current, path) : null;
+            const screw = path?.startsWith(FASTENER_PREFIX) ? latest.current.fasteners.items.find((f) => `${FASTENER_PREFIX}${f.id}` === path) : undefined;
+            if (path) selectThing(path);
+            if (owner) {
+              target = { part: owner };
+              title = owner;
+            } else if (screw) {
+              return setMenu({ x: at.x, y: at.y, title: "The screw", choices: [{ label: "Delete", danger: true, run: (c) => ({ config: removeFastener(c, screw) }) }] });
+            } else if (path && !/^enclosure\./.test(path) && menuFor(current, { path }).length) {
               target = { path };
               title = `The ${nameOfThing(path)}`;
-              setSelected(null);
-              setPicked(path);
-              setTab("shape");
             } else if (spot) {
               target = { spot };
               title = spot.kind === "surface" ? `On ${spot.surface}` : spot.kind === "wall" ? `On the ${spot.wall} wall` : spot.kind === "floor" ? "On the floor inside" : "On the underside";

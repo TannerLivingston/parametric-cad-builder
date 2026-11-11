@@ -1,6 +1,7 @@
 // What's at a click in the view, as its path in the config: a label, a hole or vent in a wall, a
-// seam, something on the plate, or failing those the surface or wall itself. Parts aren't here,
-// since they have markers of their own to click.
+// seam, something on the plate, a screw, the plate's split, the opening or a box of room kept in
+// it, or failing those the surface or wall itself. Parts aren't here, since they have markers of
+// their own to click, but a part's own label is, as `labels[i]` with a `component`.
 import { textOutline } from "../lettering.js";
 import type { RawConfig } from "./configEdit.js";
 import type { Spot } from "./pickSpot.js";
@@ -8,6 +9,20 @@ import type { Spot } from "./pickSpot.js";
 const AROUND = 1.5; // how far outside something a click still counts as on it
 const SEAM_REACH = 2; // either side of a seam's line
 export const WALLS_PATH = "enclosure.wall"; // what a click on a bare wall selects: the walls' own settings
+
+const SCREW_REACH = 4.5; // from a screw's centre
+export const FASTENER_PREFIX = "fastener:"; // a screw, by its id on the Screws tab
+
+// What the validator worked out that the config alone doesn't say: where each label went, a part's
+// own included, where the screws are, and where the plate splits. And for each spot, the point
+// clicked, to find a screw by.
+export interface PickExtras {
+  labels?: { source: number; across: number; up: number; on: { kind: "surface"; surface: string; u: number; v: number } | { kind: "wall"; wall: string; at: number; z: number } }[];
+  fasteners?: { id: string; kind: "plate" | "top"; x: number; y: number; z: number; surface: string | null }[];
+  plateJoints?: number[];
+  floorThickness?: number;
+  points?: (readonly [number, number, number])[];
+}
 
 const within = (a: number, b: number, half: number) => Math.abs(a - b) <= half + AROUND;
 const list = (value: unknown): RawConfig[] => (Array.isArray(value) ? value : []);
@@ -23,18 +38,25 @@ function labelSize(label: RawConfig): [number, number] {
 }
 
 // Something in particular at a spot, or null where there's only the surface, wall or plate.
-function itemAt(config: RawConfig, spot: Spot): string | null {
+function itemAt(config: RawConfig, spot: Spot, point: readonly [number, number, number] | undefined, extras: PickExtras): string | null {
   const labels = list(config.labels);
   const seams = list(config.seams);
   const plate: RawConfig = config.plate ?? {};
   const seamAt = (x: number) => firstIndex(seams, (seam) => Math.abs(seam.x - x) <= SEAM_REACH, "seams");
+  // Where the validator put them, if it has, so that a part's own label is found too.
+  const placedLabel = (test: (on: NonNullable<PickExtras["labels"]>[number]["on"], across: number, up: number) => boolean) => {
+    const found = extras.labels?.find((l) => test(l.on, l.across, l.up));
+    return found ? `labels[${found.source}]` : null;
+  };
   if (spot.kind === "surface") {
     const first = config.enclosure?.surfaces?.[0]?.id;
-    const label = firstIndex(labels, (l) => {
-      if (typeof l.u !== "number" || (l.surface ?? first) !== spot.surface) return false;
-      const [across, up] = labelSize(l);
-      return within(spot.u, l.u, across / 2) && within(spot.v, l.v, up / 2);
-    }, "labels");
+    const label = extras.labels
+      ? placedLabel((on, across, up) => on.kind === "surface" && on.surface === spot.surface && within(spot.u, on.u, across / 2) && within(spot.v, on.v, up / 2))
+      : firstIndex(labels, (l) => {
+          if (typeof l.u !== "number" || (l.surface ?? first) !== spot.surface) return false;
+          const [across, up] = labelSize(l);
+          return within(spot.u, l.u, across / 2) && within(spot.v, l.v, up / 2);
+        }, "labels");
     return label ?? seamAt(spot.u);
   }
   if (spot.kind === "wall") {
@@ -42,15 +64,21 @@ function itemAt(config: RawConfig, spot: Spot): string | null {
     return (
       firstIndex(list(config.wallHoles), (hole) => onIt(hole, hole.width, hole.height), "wallHoles") ??
       firstIndex(list(config.vents), (vent) => onIt(vent, vent.width, vent.height), "vents") ??
-      firstIndex(labels, (l) => typeof l.wall === "string" && onIt(l, ...labelSize(l)), "labels") ??
-      (spot.wall === "front" || spot.wall === "rear" ? seamAt(spot.at) : null)
+      (extras.labels
+        ? placedLabel((on, across, up) => on.kind === "wall" && on.wall === spot.wall && within(spot.at, on.at, across / 2) && within(spot.z, on.z, up / 2))
+        : firstIndex(labels, (l) => typeof l.wall === "string" && onIt(l, ...labelSize(l)), "labels")) ??
+      (spot.wall === "front" || spot.wall === "rear" ? seamAt(spot.at) : null) ??
+      // The front wall that's left below the opening, its sill.
+      (spot.wall === "front" && config.opening && spot.at >= config.opening.xMin && spot.at <= config.opening.xMax ? "opening" : null)
     );
   }
+  const jointAt = (x: number) => ((extras.plateJoints ?? [plate.seamX ?? []].flat()).some((joint: number) => Math.abs(joint - x) <= SEAM_REACH) ? "plate.seamX" : null);
   const near = (item: RawConfig, reach: number) => Math.hypot(item.x - spot.x, item.y - spot.y) <= reach + AROUND;
   if (spot.kind === "under") {
     return (
       firstIndex(list(plate.feet), (foot) => near(foot, (foot.diameter ?? 10) / 2), "plate.feet") ??
-      firstIndex(list(plate.countersunkHoles), (hole) => near(hole, 4), "plate.countersunkHoles")
+      firstIndex(list(plate.countersunkHoles), (hole) => near(hole, 4), "plate.countersunkHoles") ??
+      jointAt(spot.x)
     );
   }
   return (
@@ -62,21 +90,45 @@ function itemAt(config: RawConfig, spot: Spot): string | null {
       const turned = weight.rotationDeg === 90 || weight.rotationDeg === 270;
       const [w, d] = turned ? [weight.depth, weight.width] : [weight.width, weight.depth];
       return within(spot.x, weight.x, w / 2) && within(spot.y, weight.y, d / 2);
-    }, "plate.weights")
+    }, "plate.weights") ??
+    jointAt(spot.x) ??
+    openingAt(config, spot.x, spot.y)
   );
+}
+
+// The opening's floor: a box of room kept in it, or the opening itself.
+function openingAt(config: RawConfig, x: number, y: number): string | null {
+  const opening = config.opening;
+  if (!opening || x < opening.xMin || x > opening.xMax || y > opening.yEnd) return null;
+  return firstIndex(list(opening.keepOut), (box) => x >= box.xMin && x <= box.xMax && y >= box.yMin && y <= box.yMax, "opening.keepOut") ?? "opening";
 }
 
 // The faces under a click, nearest first. Something in particular wins over the bare surface or
 // wall in front of it only where it can be seen through that: `through` is whether the view shows
 // the inside. Otherwise it's the nearest face that decides.
-export function thingAt(config: RawConfig, spots: (Spot | null)[], through: boolean): string | null {
+// A screw at the point clicked, its head or its hole, whatever face that is: one into the plate seen
+// from below it, and one into a top panel from above its post.
+function screwAt(point: readonly [number, number, number] | undefined, extras: PickExtras): string | null {
+  if (!point) return null;
+  const found = extras.fasteners?.find(
+    (f) => Math.hypot(f.x - point[0], f.y - point[1]) <= SCREW_REACH && (f.kind === "plate" ? point[2] <= f.z + SCREW_REACH : point[2] >= f.z),
+  );
+  return found ? `${FASTENER_PREFIX}${found.id}` : null;
+}
+
+export function thingAt(config: RawConfig, spots: (Spot | null)[], through: boolean, extras: PickExtras = {}): string | null {
+  const first = extras.points?.[0];
+  const screw = screwAt(first, extras);
+  if (screw) return screw;
+  // The gap between the plate's pieces is no floor or underside, but it's the split.
+  if (first && extras.plateJoints && first[2] <= (extras.floorThickness ?? 3) + 0.5 && extras.plateJoints.some((x) => Math.abs(x - first[0]) <= SEAM_REACH)) return "plate.seamX";
   // A face that's no surface, wall or floor is passed over, such as the side of an engraved letter.
-  const known = spots.filter((spot): spot is Spot => spot !== null);
-  for (const spot of through ? known : known.slice(0, 1)) {
-    const item = itemAt(config, spot);
+  const known = spots.flatMap((spot, i) => (spot ? [{ spot, point: extras.points?.[i] }] : []));
+  for (const { spot, point } of through ? known : known.slice(0, 1)) {
+    const item = itemAt(config, spot, point, extras);
     if (item) return item;
   }
-  const front = known[0];
+  const front = known[0]?.spot;
   if (!front) return null;
   if (front.kind === "surface") {
     const index = list(config.enclosure?.surfaces).findIndex((surface) => surface.id === front.surface);
@@ -99,7 +151,18 @@ export function nameOfThing(path: string): string {
     [/^plate\.countersunkHoles/, "hole in the plate"],
     [/^plate\.weights/, "weight pocket"],
     [/^enclosure\.surfaces/, "surface"],
+    [/^plate\.seamX/, "plate's split"],
+    [/^opening\.keepOut/, "room kept in the opening"],
+    [/^opening/, "opening"],
+    [new RegExp(`^${FASTENER_PREFIX}`), "screw"],
     [/^enclosure\.wall/, "walls"],
   ];
   return kinds.find(([pattern]) => pattern.test(path))?.[1] ?? "";
+}
+
+// The part whose own label is at a path, if it's one.
+export function partOfLabel(config: RawConfig, path: string): string | null {
+  const match = /^labels\[(\d+)\]$/.exec(path);
+  const label = match ? list(config.labels)[Number(match[1])] : undefined;
+  return typeof label?.component === "string" ? label.component : null;
 }

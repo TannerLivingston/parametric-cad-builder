@@ -143,6 +143,7 @@ export interface PlacedLabel {
   across: number;
   up: number;
   on: { kind: "surface"; surface: string; u: number; v: number } | { kind: "wall"; wall: PlannedWallHole["wall"]; at: number; z: number };
+  source: number; // its index in the config's labels
 }
 
 export interface PlacedPost {
@@ -879,7 +880,7 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
 
     const onWallPart = (at: number, wall: PlannedWallHole["wall"]) => (wall === "left" ? shellParts[0]! : wall === "right" ? shellParts.at(-1)! : shellParts.find((part) => at < part.xMax) ?? shellParts.at(-1)!).index;
     const printedPart = on.kind === "surface" ? partFor(on.surface, on.u) : onWallPart(on.at, on.wall);
-    labels.push({ text: label.text, size: label.size, depth: label.depth, rotationDeg, printedPart, ...(label.color && { color: label.color }), across, up, on });
+    labels.push({ text: label.text, size: label.size, depth: label.depth, rotationDeg, printedPart, ...(label.color && { color: label.color }), across, up, on, source: i });
   });
   return labels;
 }

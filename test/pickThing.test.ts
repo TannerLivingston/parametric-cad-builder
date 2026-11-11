@@ -1,6 +1,7 @@
 // Working out what's at a click in the view, as its path in the config.
 import { describe, expect, it } from "vitest";
-import { thingAt, WALLS_PATH } from "../src/app/pickThing.js";
+import { FASTENER_PREFIX, partOfLabel, thingAt, WALLS_PATH } from "../src/app/pickThing.js";
+import { validateConfig } from "../src/validate.js";
 import { buildSceneModel, issueSpot } from "../src/app/sceneModel.js";
 
 const design = (): any => ({
@@ -88,3 +89,48 @@ describe("where something picked is, to light it up", () => {
     expect(issueSpot({ path: WALLS_PATH }, design(), model, none)).toBeNull();
   });
 });
+
+describe("the rest that's found by clicking", () => {
+  const floor = (x: number, y: number) => ({ kind: "floor", x, y }) as const;
+  const under = (x: number, y: number) => ({ kind: "under", x, y }) as const;
+
+  it("finds a part's own label where the validator put it, and says whose it is", () => {
+    const { enclosure, schemaVersion, name } = design();
+    const config = { schemaVersion, name, enclosure, seams: [{ x: 150 }], labels: [{ text: "GO", component: "b" }], components: [{ id: "b", type: "arcade-24mm", surface: "deck", u: 60, v: 40 }] };
+    const result = validateConfig(config);
+    expect(result.ok).toBe(true);
+    const placed = result.ok ? result.plan.labels : [];
+    expect(placed[0]!.source).toBe(0);
+    const on = placed[0]!.on as { kind: "surface"; u: number; v: number };
+    const path = thingAt(config, [on3("deck", on.u, on.v)], false, { labels: placed });
+    expect(path).toBe("labels[0]");
+    expect(partOfLabel(config, path!)).toBe("b");
+    expect(partOfLabel(design(), "labels[0]")).toBeNull();
+  });
+
+  it("finds a screw by the point clicked, from below or on top", () => {
+    const fasteners = [{ id: "p1", kind: "plate" as const, x: 30, y: 30, z: 3, surface: null }, { id: "t1", kind: "top" as const, x: 200, y: 120, z: 30, surface: "panel" }];
+    expect(thingAt(design(), [under(31, 31)], false, { fasteners, points: [[31, 31, 0]] })).toBe(`${FASTENER_PREFIX}p1`);
+    // Its countersink is no surface, wall or floor, but it's still the screw.
+    expect(thingAt(design(), [null], false, { fasteners, points: [[31, 30, 1.5]] })).toBe(`${FASTENER_PREFIX}p1`);
+    expect(thingAt(design(), [under(40, 40)], false, { fasteners, points: [[40, 40, 0]] })).toBeNull();
+    // From above, a plate screw is out of sight under the top, and a top screw is on it.
+    expect(thingAt(design(), [on3("deck", 30, 30)], false, { fasteners, points: [[30, 30, 40]] })).toBe("enclosure.surfaces[0]");
+    expect(thingAt(design(), [on3("panel", 200, 20)], false, { fasteners, points: [[201, 121, 55]] })).toBe(`${FASTENER_PREFIX}t1`);
+    expect(thingAt(design(), [under(200, 120)], false, { fasteners, points: [[200, 120, 0]] })).toBeNull();
+  });
+
+  it("finds the plate's split, and the opening and the room kept in it", () => {
+    expect(thingAt(design(), [under(101, 50)], false, { plateJoints: [100] })).toBe("plate.seamX");
+    // The gap between its pieces, by the point.
+    expect(thingAt(design(), [null], false, { plateJoints: [100], points: [[100.3, 50, 1]], floorThickness: 3 })).toBe("plate.seamX");
+    expect(thingAt(design(), [on3("deck", 100, 20)], false, { plateJoints: [100], points: [[100, 20, 40]], floorThickness: 3 })).toBe("enclosure.surfaces[0]");
+    const opened = { ...design(), opening: { xMin: 200, xMax: 280, yEnd: 60, sill: 6, keepOut: [{ xMin: 210, xMax: 240, yMin: 5, yMax: 40, top: 20 }] } };
+    expect(thingAt(opened, [floor(220, 20)], true)).toBe("opening.keepOut[0]");
+    expect(thingAt(opened, [floor(260, 20)], true)).toBe("opening");
+    expect(thingAt(opened, [floor(260, 80)], true)).toBeNull();
+    expect(thingAt(opened, [wall("front", 250, 3)], false)).toBe("opening");
+  });
+});
+
+const on3 = (surface: string, u: number, v: number) => ({ kind: "surface", surface, u, v }) as const;

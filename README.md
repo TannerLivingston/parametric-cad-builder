@@ -29,7 +29,9 @@ which a click reaches through the top, or on the underside from below. A click o
 waiting. **Put it in the middle** adds it where it used to go, and **Cancel** or Escape leaves it out.
 
 A click in the view selects what's there, not only parts: a label, a hole or vent in a wall, a seam along its line, a foot from
-below, or failing those the surface or the walls. The Shape tab opens at its fields, outlined, and it's lit up in the view.
+below, the plate's split, the opening or a box of room kept in it, or failing those the surface or the walls. The Shape tab opens at
+its fields, outlined, and it's lit up in the view. A part's own label selects its part, on the Layout tab, and a screw, its head
+or its hole, selects it on the Screws tab.
 It works the other way too: putting the cursor in a field lights up what it's for. Things on the plate are picked through
 the top only with **Show inside** on. From the Layout tab, a click on a bare surface selects nothing, since that's how a part
 is let go of. Escape, or a click on empty space, lets go.

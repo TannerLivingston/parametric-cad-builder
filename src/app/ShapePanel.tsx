@@ -317,7 +317,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
         {opening ? (
           <>
             <p className="hint">A gap for something that reaches out of the enclosure. Below the sill the front wall stays, unless a rail replaces it.</p>
-            <div className="fields">
+            <div {...card("opening", "fields")}>
               <NumberField label="From x" value={opening.xMin} onCommit={number((xMin) => updateOpening(config, { xMin }))} />
               <NumberField label="To x" value={opening.xMax} onCommit={number((xMax) => updateOpening(config, { xMax }))} />
               <NumberField label="Back to depth" value={opening.yEnd} onCommit={number((yEnd) => updateOpening(config, { yEnd }))} />
@@ -502,7 +502,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
             <button onClick={() => place(PLACING.seam)}>Add a seam</button>
           </>
         ) : null}
-        <div className="fields">
+        <div {...card("plate.seamX", "fields")}>
           <TextField
             label="Split the plate at x"
             placeholder="Automatic"

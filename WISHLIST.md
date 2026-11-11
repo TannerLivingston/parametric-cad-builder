@@ -12,9 +12,8 @@ proven the numbers. Move an item to the done list once it's built.
 The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
 click or drag in the view.
 
-- [ ] **Select the rest by clicking:** a part's own label, a screw outside the Screws tab, the plate and its split, an opening
-  and the rooms kept clear in it. And light up what a field is for on the other tabs, and for a single number, such as a
-  round or the corner radius, not only for a whole card.
+- [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
+  and the fields on the other tabs.
 - [ ] **Drag a part out of the library list** onto a surface, a wall or the floor.
 - [ ] **Drag a part from one surface to another,** or onto a wall or the floor where it can go, without the Surface list.
 - [ ] **Handles on the shape itself:** drag a crease to move a surface's end, a wall to change the width or depth, a seam or
@@ -31,6 +30,10 @@ click or drag in the view.
 - [ ] **Look at what's selected:** a key or double-click turns the view to face a surface or wall squarely, or zooms to a part.
 - [ ] **Copy and paste parts,** with their knobs and labels, within a design and between designs.
 - [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
+- [ ] **A built-in tutorial** that guides a newcomer step by step through making a basic synth: choosing a shape, adding
+  buttons, knobs and a screen, a board on the floor, labels, a seam if it's too wide for the bed, fixing what the problem list
+  says, and exporting the files to print. Each step points at the control to use, waits for it to be done, and can be skipped
+  or left at any point, with the design kept as an ordinary one afterwards.
 - [ ] **Plain names and units in the fields,** with a short note on hover saying what each one changes, and a small drawing
   for the less obvious ones, such as u and v, bulge and bow.
 
@@ -48,6 +51,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Select the rest by clicking:** a part's own label selects its part, a screw selects it on the Screws tab, and the plate's
+  split, the opening and the boxes of room kept in it have fields of their own to open at.
 - [x] **A right-click menu in the view:** rotate, duplicate, make an array, delete, add a label, or move to another surface, for a part; the
   same, as far as they apply, for a label, hole, vent, seam or plate item; and on a bare surface, wall or floor, add anything that
   can go there, put where it was clicked. **Make an array…** from it asks how many and how far apart, with the spacing filled in
