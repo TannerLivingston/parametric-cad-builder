@@ -1,24 +1,37 @@
 // Handles on the shape for what's selected, to drag rather than type: a seam or the plate's split
 // along the width, the walls for the width and depth and the front edge for the front height, a
-// surface's crease back and up, a curve's middle for its bulge, and a bowed wall for its bow.
+// surface's crease back and up, a curve's middle for its bulge, and a bowed wall for its bow. And one
+// in the middle of a label, hole, vent or something on the plate, to move it across its face.
 // Each changes the config from what it was when the drag began, by how far the handle has gone,
 // so the validator still judges the result.
 import type { RawConfig } from "./configEdit.js";
+import { surfacePoint, type Surface } from "../profile.js";
+import { nudgeThing } from "./thingKeys.js";
 import { WALLS_PATH } from "./pickThing.js";
 import type { ShapeHandle } from "./Scene3D.js";
 import { setBow, setPlateSplit, setSurfaceBulge, shapeValues, updateEnclosure, updateSeam, updateSurface } from "./shapeEdit.js";
 
 export interface HandleSpec extends ShapeHandle {
-  apply(config: RawConfig, delta: number): RawConfig;
+  apply(config: RawConfig, delta: number, deltaAcross?: number): RawConfig;
 }
+
+// The shape as built, for where a label on a surface is, and the floor.
+export interface HandleFrame {
+  surfaces: Surface[];
+  floorThickness: number;
+}
+
+const LIFT = 1; // how far off its face an item's handle sits
 
 const OUT = 6; // how far outside the shell a handle sits, so it's clear of it
 const STEP = 0.5; // what a dragged size rounds to
 const snap = (value: number) => Math.round(value / STEP) * STEP;
 
 // `joints` is where the plate splits, as the validator chose it if the config doesn't say.
-export function handlesFor(config: RawConfig, path: string | null, joints: number[] = []): HandleSpec[] {
+export function handlesFor(config: RawConfig, path: string | null, joints: number[] = [], frame?: HandleFrame): HandleSpec[] {
   if (!path || !config.enclosure) return [];
+  const item = itemHandle(config, path, frame);
+  if (item) return [item];
   const { enclosure: e, seams } = shapeValues(config);
   const surfaces: RawConfig[] = e.surfaces;
   const depth = Number(surfaces.at(-1)?.y ?? 0);
@@ -84,4 +97,38 @@ export function handlesFor(config: RawConfig, path: string | null, joints: numbe
     return handles;
   }
   return [];
+}
+
+// What's on a list, moved across its face by its own two numbers, to the half millimetre.
+function itemHandle(config: RawConfig, path: string, frame: HandleFrame | undefined): HandleSpec | null {
+  const match = /^(labels|wallHoles|vents|plate\.(?:supports|pins|feet|weights|cableTies|countersunkHoles))\[(\d+)\]$/.exec(path);
+  if (!match) return null;
+  const list = match[1]!.split(".").reduce<any>((at, key) => at?.[key], config);
+  const item: RawConfig | undefined = Array.isArray(list) ? list[Number(match[2])] : undefined;
+  if (!item || typeof item.component === "string") return null;
+  const { enclosure: e } = shapeValues(config);
+  const depth = Number(e.surfaces.at(-1)?.y ?? 0);
+  // Moves by however far, rounded so that where it ends up is on the half millimetre.
+  const by = (a: number, b: number) => (c: RawConfig, d: number, dAcross = 0) => nudgeThing(c, path, snap(a + d) - a, snap(b + dAcross) - b) ?? c;
+
+  if (typeof item.wall === "string") {
+    const { at, z } = item as { at: number; z: number };
+    const side = item.wall === "left" || item.wall === "right";
+    const x = item.wall === "left" ? -LIFT : item.wall === "right" ? e.width + LIFT : at;
+    const y = side ? at : item.wall === "front" ? -LIFT : depth + LIFT;
+    return { id: path, at: [x, y, z], axis: side ? [0, 1, 0] : [1, 0, 0], across: [0, 0, 1], apply: by(at, z) };
+  }
+  if (typeof item.u === "number" || match[1] === "labels") {
+    const id = item.surface ?? e.surfaces[0]?.id;
+    const surface = frame?.surfaces.find((s) => s.id === id);
+    if (!surface) return null;
+    const [u, v] = [Number(item.u), Number(item.v)];
+    const [y, z] = surfacePoint(surface, v, LIFT);
+    return { id: path, at: [u, y, z], axis: [1, 0, 0], across: [0, surface.cos, surface.sin], apply: by(u, v) };
+  }
+  const [x, y] = [Number(item.x), Number(item.y)];
+  // Feet and holes in the plate are seen from below, the rest from above.
+  const under = /feet|countersunkHoles/.test(match[1]!);
+  const z = under ? -LIFT : (frame?.floorThickness ?? 3) + LIFT;
+  return { id: path, at: [x, y, z], axis: [1, 0, 0], across: [0, 1, 0], apply: by(x, y) };
 }

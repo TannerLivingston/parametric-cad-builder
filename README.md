@@ -57,7 +57,8 @@ everything else can be too.
 
 Selected on the Shape tab, some things have round handles in the view to drag: a seam, or the plate's split, along the width;
 the walls by their width, depth and front height, and a bowed wall by its bow; and a surface by its crease, back and up, and
-from the middle of its arc, by how much it curves. Each changes its number in half millimetres, and the validator judges it as
+from the middle of its arc, by how much it curves. A label, a hole or vent in a wall, or something on the plate has one in its
+middle that moves it anywhere across its face. Each changes its numbers in half millimetres, and the validator judges it as
 it goes.
 
 A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the

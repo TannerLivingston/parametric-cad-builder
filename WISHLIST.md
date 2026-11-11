@@ -14,7 +14,6 @@ click or drag in the view.
 
 - [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
   and the fields on the other tabs.
-- [ ] **Drag the rest as parts are dragged:** labels, wall holes, vents, supports, feet, weight pockets and cable ties.
 - [ ] **Select several parts,** with Shift-click or a dragged box, to move, line up, space evenly or delete together.
 - [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
   and to equal spacing in a row.
@@ -49,6 +48,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Drag the rest:** a label, a hole or vent in a wall, a support, pin, foot, weight pocket, cable tie bridge or hole in the
+  plate, by a handle in its middle, once it's selected.
 - [x] **Handles on the shape:** for a seam or the plate's split along the width, the walls' width, depth and front height, a
   bowed wall's bow, and a surface's crease, back and up, and its curve from the middle of its arc.
 - [x] **Drag parts into place:** from the library's Add button onto a surface, wall or the floor in the view, and from one top

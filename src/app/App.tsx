@@ -255,11 +255,11 @@ export function App() {
           apply(updateComponent(current, id, patch), false);
         },
         onDragEnd: () => latest.current.commit(latest.current.text),
-        onHandleDrag: (id, delta) => {
+        onHandleDrag: (id, delta, deltaAcross) => {
           const spec = handleSpecs.current.find((h) => h.id === id);
           if (!spec) return;
           handleBase.current ??= latest.current.config;
-          latest.current.applyConfig(spec.apply(handleBase.current, delta), false);
+          latest.current.applyConfig(spec.apply(handleBase.current, delta, deltaAcross), false);
         },
         onHandleEnd: () => {
           if (!handleBase.current) return;
@@ -431,7 +431,7 @@ export function App() {
   const [handlesDropped, setHandlesDropped] = useState(0);
   useEffect(() => {
     if (handleBase.current) return;
-    handleSpecs.current = tab === "shape" && valid ? handlesFor(config, picked, plan?.plate?.joints ?? []) : [];
+    handleSpecs.current = tab === "shape" && valid ? handlesFor(config, picked, plan?.plate?.joints ?? [], model ?? undefined) : [];
     sceneRef.current?.setHandles(handleSpecs.current);
   }, [picked, text, tab, handlesDropped]); // eslint-disable-line react-hooks/exhaustive-deps
 
