@@ -26,6 +26,7 @@ import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
 import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
+import { thingAt } from "./pickThing.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -114,6 +115,9 @@ export function App() {
   // Something waiting to be put where the next click in the view lands.
   const [placing, setPlacing] = useState<Placing | null>(null);
   const [placingMissed, setPlacingMissed] = useState(false);
+  // What was last clicked in the view or focused in the Shape tab, other than a part, as its path
+  // in the config. Its fields are shown, and it's lit up in the view.
+  const [picked, setPicked] = useState<string | null>(null);
   const [reference, setReference] = useState<(LoadedReference & { mesh: ReferenceMesh }) | null>(null);
   const [referenceLoading, setReferenceLoading] = useState(false);
   const [referenceProblem, setReferenceProblem] = useState<string | null>(null);
@@ -195,8 +199,8 @@ export function App() {
 
   // Dragging reads the latest state through a ref, because the scene's callbacks are
   // set once. Each move replaces the text, and only the release joins the undo history.
-  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing });
-  latest.current = { config, applyConfig, model, text, commit, fasteners, placing };
+  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string });
+  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab };
 
   useEffect(() => {
     const scene = new Scene3D(
@@ -213,6 +217,17 @@ export function App() {
         },
         onDragEnd: () => latest.current.commit(latest.current.text),
         onMeasure: setMeasured,
+        onClick: (faces) => {
+          const { config: current, model: scene3d, seeThrough: through, tab: on } = latest.current;
+          if (!scene3d || (on !== "shape" && on !== "layout")) return;
+          const path = thingAt(current, faces.map((face) => spotAt(scene3d, face.point, face.normal)), through);
+          // From the Layout tab, where a click on the model is how a part is let go of, only
+          // something in particular is worth leaving for, not the bare surface or wall.
+          const bare = path !== null && /^enclosure\./.test(path);
+          const wanted = on === "layout" && bare ? null : path;
+          setPicked(wanted);
+          if (wanted) setTab("shape");
+        },
         onPick: (faces) => {
           const { config: current, applyConfig: apply, model: scene3d, placing: waiting } = latest.current;
           if (!waiting || !scene3d) return;
@@ -307,6 +322,17 @@ export function App() {
     const spot = shownIssue && model ? issueSpot(shownIssue, config, model, fasteners) : null;
     sceneRef.current?.setHighlight(spot);
   }, [shownIssue]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A part and something else aren't both selected.
+  useEffect(() => {
+    if (selected) setPicked(null);
+  }, [selected]);
+
+  // What's picked is lit up where it is now, so it follows as its numbers change.
+  useEffect(() => {
+    if (picked === null && shownIssue) return;
+    sceneRef.current?.setHighlight(picked && model ? issueSpot({ path: picked }, config, model, fasteners) : null, "selection");
+  }, [picked, text]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     sceneRef.current?.setMeasuring(measuring);
@@ -432,6 +458,7 @@ export function App() {
         setPlacing(null);
         return;
       }
+      if (event.key === "Escape" && !typing) setPicked(null);
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         if (typing) return;
         event.preventDefault();
@@ -747,7 +774,7 @@ export function App() {
         </div>
 
         {tab === "shape" ? (
-          <ShapePanel config={config} onChange={(next) => applyConfig(next)} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />
+          <ShapePanel config={config} onChange={(next) => applyConfig(next)} picked={picked} onPick={setPicked} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />
         ) : tab === "layout" ? (
           <div className="tab-body">
             <section className="add-part">

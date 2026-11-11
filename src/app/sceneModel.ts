@@ -1,6 +1,7 @@
 // What the viewport draws for each component, worked out from the config alone. This
 // runs on every change, even for invalid layouts, so parts can follow the pointer
 // while the engine only ever sees valid plans.
+import { textOutline } from "../lettering.js";
 import { flatFor } from "../flats.js";
 import { configSchema, type Config, type Footprint, type Part } from "../schema.js";
 import { footprintShape, gap, halfExtents, type Rotation, type Shape } from "../geometry.js";
@@ -280,6 +281,37 @@ export function issueSpot(issue: Pick<Issue, "path" | "where">, config: RawConfi
     return typeof x === "number" ? { min: [x - 1, 0, 0], max: [x + 1, depth, height] } : null;
   }
   if (path === "plate.seamX" && typeof config.plate?.seamX === "number") return { min: [config.plate.seamX - 1, 0, 0], max: [config.plate.seamX + 1, depth, floor] };
+  const label = indexed(/^labels\[(\d+)\]/);
+  if (label !== null) {
+    const l = config.labels?.[label];
+    if (!l) return null;
+    const outline = textOutline(String(l.text ?? ""), Number(l.size ?? 5));
+    const turned = l.rotationDeg === 90 || l.rotationDeg === 270;
+    const [across, up] = turned ? [outline.height / 2 + 1, outline.width / 2 + 1] : [outline.width / 2 + 1, outline.height / 2 + 1];
+    if (typeof l.u === "number") {
+      const surface = model.surfaces.find((s) => s.id === l.surface) ?? model.surfaces[0];
+      if (!surface || surface.curveOf) return null;
+      const [y0, z0] = surfacePoint(surface, l.v - up, 0);
+      const [y1, z1] = surfacePoint(surface, l.v + up, 0);
+      return { min: [l.u - across, Math.min(y0, y1), Math.min(z0, z1) - 1], max: [l.u + across, Math.max(y0, y1), Math.max(z0, z1) + 1] };
+    }
+    if (typeof l.wall === "string") {
+      if (l.wall === "left") return { min: [-1, l.at - across, l.z - up], max: [2, l.at + across, l.z + up] };
+      if (l.wall === "right") return { min: [model.width - 2, l.at - across, l.z - up], max: [model.width + 1, l.at + across, l.z + up] };
+      if (l.wall === "front") return { min: [l.at - across, -1, l.z - up], max: [l.at + across, 2, l.z + up] };
+      return { min: [l.at - across, depth - 2, l.z - up], max: [l.at + across, depth + 1, l.z + up] };
+    }
+    return null;
+  }
+  const surfaceAt = indexed(/^enclosure\.surfaces\[(\d+)\]/);
+  if (surfaceAt !== null) {
+    // All of a curve's short flats, for a curved one.
+    const id = config.enclosure?.surfaces?.[surfaceAt]?.id;
+    const own = model.surfaces.filter((s) => s.id === id || s.curveOf === id);
+    if (!own.length) return null;
+    const zs = own.flatMap((s) => [s.z0, s.z1]);
+    return { min: [0, own[0]!.y0, Math.min(...zs) - 1], max: [model.width, own.at(-1)!.y1, Math.max(...zs) + 1] };
+  }
   const reserved = indexed(/^opening\.keepOut\[(\d+)\]/);
   if (reserved !== null) {
     const box = config.opening?.keepOut?.[reserved];

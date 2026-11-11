@@ -23,6 +23,9 @@ export interface SceneEvents {
   // A click on the model while it's waiting for one: each face under it, nearest first, as where
   // it is on the design as built and which way it looks.
   onPick(faces: PickedFace[]): void;
+  // A plain click on the model, not on a part, with the faces under it the same way. With none,
+  // it was on empty space.
+  onClick(faces: PickedFace[]): void;
 }
 
 export interface PickedFace {
@@ -369,7 +372,9 @@ export class Scene3D {
   }
 
   // Marks where a problem is, seen through whatever's in front of it.
-  setHighlight(box: { min: [number, number, number]; max: [number, number, number] } | null) {
+  // A box round a problem, or round what's selected, in its own colour.
+  setHighlight(box: { min: [number, number, number]; max: [number, number, number] } | null, kind: "problem" | "selection" = "problem") {
+    const color = kind === "problem" ? this.colors.invalid : this.colors.selected;
     if (this.highlight) {
       this.highlight.traverse((object) => (object as THREE.Mesh).geometry?.dispose());
       this.scene.remove(this.highlight);
@@ -379,9 +384,9 @@ export class Scene3D {
       const size = box.max.map((value, axis) => Math.max(value - box.min[axis]!, 1)) as [number, number, number];
       const geometry = new THREE.BoxGeometry(...size);
       const group = new THREE.Group();
-      const fill = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: this.colors.invalid, transparent: true, opacity: 0.2, depthTest: false, depthWrite: false }));
+      const fill = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthTest: false, depthWrite: false }));
       fill.renderOrder = 3;
-      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color: this.colors.invalid, depthTest: false, transparent: true }));
+      const outline = new THREE.LineSegments(new THREE.EdgesGeometry(geometry), new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }));
       outline.renderOrder = 3;
       group.add(fill, outline);
       group.position.set((box.min[0] + box.max[0]) / 2, (box.min[1] + box.max[1]) / 2, (box.min[2] + box.max[2]) / 2);
@@ -1015,7 +1020,10 @@ export class Scene3D {
     }
     if (this.pressedEmpty && Math.hypot(event.clientX - this.pressedEmpty.x, event.clientY - this.pressedEmpty.y) < 4) {
       if (this.fasteners) this.events.onFastenerSelect(null);
-      else this.events.onSelect(null);
+      else {
+        this.events.onSelect(null);
+        this.events.onClick(this.pickFaces(event));
+      }
     }
     this.pressedEmpty = null;
   };

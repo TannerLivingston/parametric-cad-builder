@@ -46,10 +46,17 @@ describe("a click in the view", () => {
     expect(spotAt(shape, [100, 90, 0], [0, 0, -1])).toEqual({ kind: "under", x: 100, y: 90 });
   });
 
+  it("on the side of an engraved letter, or the edge of a hole, gives what it's cut into", () => {
+    // 0.4 mm down in the deck, on a face that looks forwards.
+    expect(spotAt(shape, [120, 30, 39.6], [0, -1, 0])).toEqual({ kind: "surface", surface: "deck", u: 120, v: 30 });
+    // And 0.5 mm into the rear wall, on a face that looks sideways.
+    expect(spotAt(shape, [140, 189.5, 25], [1, 0, 0])).toEqual({ kind: "wall", wall: "rear", at: 140, z: 25 });
+  });
+
   it("on anything else gives nothing", () => {
     // The top of a boss inside, the inner face of a wall, and the edge of a hole in the top.
     expect(spotAt(shape, [100, 90, 20], up)).toBeNull();
     expect(spotAt(shape, [3, 60, 20], [1, 0, 0])).toBeNull();
-    expect(spotAt(shape, [120, 30, 39], [1, 0, 0])).toBeNull();
+    expect(spotAt(shape, [120, 30, 38], [1, 0, 0])).toBeNull();
   });
 });

@@ -360,6 +360,13 @@ fieldset.fields legend {
   border-radius: 8px;
 }
 
+/* The fields for what was clicked in the view. */
+.shape-form .picked {
+  border-radius: 8px;
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .surface-card .fields {
   width: 100%;
 }

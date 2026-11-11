@@ -12,10 +12,9 @@ proven the numbers. Move an item to the done list once it's built.
 The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
 click or drag in the view.
 
-- [ ] **Click anything in the view to select it,** not only parts: a surface, wall, label, hole, vent, seam, screw or foot. The
-  sidebar opens to its fields, on whichever tab they're on, and scrolls to them.
-- [ ] **The other way round:** resting on or focusing a field lights up what it controls in the view, such as a surface's
-  edge for its depth and height, a round, or a seam's line.
+- [ ] **Select the rest by clicking:** a part's own label, a screw outside the Screws tab, the plate and its split, an opening
+  and the rooms kept clear in it. And light up what a field is for on the other tabs, and for a single number, such as a
+  round or the corner radius, not only for a whole card.
 - [ ] **Drag a part out of the library list** onto a surface, a wall or the floor.
 - [ ] **Drag a part from one surface to another,** or onto a wall or the floor where it can go, without the Surface list.
 - [ ] **Handles on the shape itself:** drag a crease to move a surface's end, a wall to change the width or depth, a seam or
@@ -53,6 +52,9 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Click anything in the view to select it,** not only parts: a label, a hole or vent in a wall, a seam, something on the
+  plate, or the surface or walls. The Shape tab opens at its fields, and it's lit up in the view. And the other way round:
+  putting the cursor in its fields lights it up.
 - [x] **Click in the view to choose where something goes.** Adding a part, label, hole, vent, seam, support, foot, weight
   pocket, pin or cable tie waits for a click on a surface, wall, the floor or the underside, and puts it there, with the
   surface or wall filled in from what was clicked.

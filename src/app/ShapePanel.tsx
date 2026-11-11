@@ -1,6 +1,7 @@
 // The Shape tab: the enclosure itself, as fields rather than JSON. It only writes the config,
 // so anything it can't do is still open in the Config tab, and every problem still comes from
 // the validator.
+import { useEffect, useRef, type FocusEvent } from "react";
 import type { RawConfig } from "./configEdit.js";
 import { ColorField, NumberField, TextField } from "./fields.js";
 import {
@@ -55,14 +56,30 @@ import {
 } from "./shapeEdit.js";
 import { removeLabel, updateLabel } from "./labelEdit.js";
 import { PLACING, type Placing } from "./placeEdit.js";
+import { WALLS_PATH } from "./pickThing.js";
 
 const WALLS = ["left", "right", "front", "rear"] as const;
 const LABEL_SIDES = ["below", "above", "left", "right"] as const;
 
 // `onPlace` hands something to be put where the next click in the view lands. Without it, there's
 // no view to click in, and it goes in the middle.
-export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void }) {
+// `picked` is the path in the config of what was clicked in the view, whose fields are marked and
+// scrolled to. `onPick` says which fields have the focus, so that the view can light up what they're for.
+export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; onPick?(path: string | null): void }) {
   const place = (placing: Placing) => (onPlace ? onPlace(placing) : onChange(placing.middle(config)));
+  const root = useRef<HTMLDivElement>(null);
+  // Fields for one thing in the design, marked when it's the one picked.
+  const card = (path: string, name = "surface-card") => ({ className: picked === path ? `${name} picked` : name, "data-path": path });
+  useEffect(() => {
+    if (!picked) return;
+    const fields = root.current?.querySelector(`[data-path="${picked}"]`);
+    // Not when the focus is already in them, which is how they came to be picked.
+    if (fields && !fields.contains(document.activeElement)) fields.scrollIntoView?.({ block: "center" });
+  }, [picked]);
+  const focused = (event: FocusEvent<HTMLDivElement>) => {
+    const path = (event.target as HTMLElement).closest?.("[data-path]")?.getAttribute("data-path");
+    if (path && path !== picked) onPick?.(path);
+  };
   const { enclosure: e, fabrication, topPanels, seams, wallHoles, opening, plate } = shapeValues(config);
   const labels: RawConfig[] = config.labels ?? [];
   const vents: RawConfig[] = config.vents ?? [];
@@ -80,7 +97,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
   };
 
   return (
-    <div className="tab-body shape-form">
+    <div className="tab-body shape-form" ref={root} onFocus={focused}>
       <section className="fields single">
         <TextField label="Name" value={String(config.name ?? "")} onCommit={(name) => onChange({ ...config, name })} />
       </section>
@@ -101,7 +118,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
           const next = e.surfaces[index + 1];
           const nextIsPanel = next !== undefined && topPanels.some((p) => p.surface === next.id);
           return (
-            <div className="surface-card" key={index}>
+            <div {...card(`enclosure.surfaces[${index}]`)} key={index}>
               <div className="fields">
                 <TextField label="Name" value={surface.id} onCommit={(name) => onChange(renameSurface(config, surface.id, name))} />
                 <NumberField label="Depth" value={surface.y} onCommit={number((y) => updateSurface(config, surface.id, { y }))} />
@@ -170,7 +187,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         </div>
       </section>
 
-      <section>
+      <section {...card(WALLS_PATH, "walls")}>
         <h2>Walls</h2>
         <div className="fields">
           <NumberField label="Wall" value={e.wall} step={0.1} onCommit={number((wall) => updateEnclosure(config, { wall }))} />
@@ -184,7 +201,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         <h2>Holes in the walls <span className="count">{wallHoles.length}</span></h2>
         <p className="hint">A board with a connector makes its own hole when it's against the wall.</p>
         {wallHoles.map((hole, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`wallHoles[${index}]`)} key={index}>
             <div className="fields">
               <label>
                 Wall
@@ -208,7 +225,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         <h2>Vents <span className="count">{vents.length}</span></h2>
         <p className="hint">A row of slots through a wall, for air, as many as fit its width.</p>
         {vents.map((vent, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`vents[${index}]`)} key={index}>
             <div className="fields">
               <label>
                 Wall
@@ -233,7 +250,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         <h2>Labels <span className="count">{labels.length}</span></h2>
         <p className="hint">Engraved, in capitals. A part's own label is on the Layout tab, and moves with it.</p>
         {labels.map((label, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`labels[${index}]`)} key={index}>
             <div className="fields">
               <TextField label="Text" value={label.text} onCommit={(text) => onChange(updateLabel(config, index, { text }))} />
               <NumberField label="Size" value={label.size ?? 5} onCommit={number((size) => updateLabel(config, index, { size }))} />
@@ -324,7 +341,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
             <h2>Room its contents need <span className="count">{opening.keepOut.length}</span></h2>
             <p className="hint">Boxes from the base up, which screws and parts stay out of. "Show inside" draws them. Use as many as its shape needs.</p>
             {opening.keepOut.map((box, index) => (
-              <div className="surface-card" key={index}>
+              <div {...card(`opening.keepOut[${index}]`)} key={index}>
                 <div className="fields">
                   <NumberField label="From x" value={box.xMin} onCommit={number((xMin) => updateReservedRoom(config, index, { xMin }))} />
                   <NumberField label="To x" value={box.xMax} onCommit={number((xMax) => updateReservedRoom(config, index, { xMax }))} />
@@ -344,7 +361,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         <h2>Fixings on the plate <span className="count">{plate.countersunkHoles.length + plate.pins.length + cableTies.length + plate.supports.length}</span></h2>
         <p className="hint">For mounting something inside: a hole takes a screw from below, a pin locates it from above, and a bridge holds wires with a cable tie. A support rises to just under the top, to hold up a wide stretch of it.</p>
         {plate.countersunkHoles.map((hole, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`plate.countersunkHoles[${index}]`)} key={index}>
             <div className="fields">
               <NumberField label="Hole x" value={hole.x} onCommit={number((x) => updatePlateHole(config, index, { x }))} />
               <NumberField label="Hole y" value={hole.y} onCommit={number((y) => updatePlateHole(config, index, { y }))} />
@@ -353,7 +370,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
           </div>
         ))}
         {plate.pins.map((pin, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`plate.pins[${index}]`)} key={index}>
             <div className="fields">
               <NumberField label="Pin x" value={pin.x} onCommit={number((x) => updatePlatePin(config, index, { x }))} />
               <NumberField label="Pin y" value={pin.y} onCommit={number((y) => updatePlatePin(config, index, { y }))} />
@@ -366,7 +383,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
           </div>
         ))}
         {cableTies.map((tie, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`plate.cableTies[${index}]`)} key={index}>
             <div className="fields">
               <NumberField label="Bridge x" value={tie.x} onCommit={number((x) => updateCableTie(config, index, { x }))} />
               <NumberField label="Bridge y" value={tie.y} onCommit={number((y) => updateCableTie(config, index, { y }))} />
@@ -382,7 +399,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
           </div>
         ))}
         {plate.supports.map((support, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`plate.supports[${index}]`)} key={index}>
             <div className="fields">
               <NumberField label="Support x" value={support.x} onCommit={number((x) => updateSupport(config, index, { x }))} />
               <NumberField label="Support y" value={support.y} onCommit={number((y) => updateSupport(config, index, { y }))} />
@@ -403,7 +420,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         <h2>Weight pockets <span className="count">{plate.weights.length}</span></h2>
         <p className="hint">A walled pocket on the plate, this size inside, to glue a weight into, such as steel, so that it doesn't slide.</p>
         {plate.weights.map((weight, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`plate.weights[${index}]`)} key={index}>
             <div className="fields">
               <NumberField label="Pocket x" value={weight.x} onCommit={number((x) => updateWeight(config, index, { x }))} />
               <NumberField label="Pocket y" value={weight.y} onCommit={number((y) => updateWeight(config, index, { y }))} />
@@ -423,7 +440,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
         <h2>Rubber feet <span className="count">{plate.feet.length}</span></h2>
         <p className="hint">A shallow recess under the plate for each stick-on foot, so they all go in the same place.</p>
         {plate.feet.map((foot, index) => (
-          <div className="surface-card" key={index}>
+          <div {...card(`plate.feet[${index}]`)} key={index}>
             <div className="fields">
               <NumberField label="Foot x" value={foot.x} onCommit={number((x) => updateFoot(config, index, { x }))} />
               <NumberField label="Foot y" value={foot.y} onCommit={number((y) => updateFoot(config, index, { y }))} />
@@ -473,7 +490,7 @@ export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; o
           Split the shell into pieces, for a small bed
         </label>
         {seams.map((seam, index) => (
-          <div className="fields" key={index}>
+          <div {...card(`seams[${index}]`, "fields")} key={index}>
             <NumberField label={seams.length > 1 ? `Seam ${index + 1} at x` : "Split at x"} value={seam.x} onCommit={number((x) => updateSeam(config, index, { x }))} />
             <NumberField label="Lip past it" value={seam.lip} onCommit={number((lip) => updateSeam(config, index, { lip }))} />
             {seams.length > 1 ? <button className="danger" onClick={() => onChange(removeSeam(config, index))}>Remove seam</button> : null}
