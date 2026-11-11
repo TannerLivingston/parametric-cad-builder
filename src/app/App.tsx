@@ -29,6 +29,7 @@ import { spotAt } from "./pickSpot.js";
 import { FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } from "./pickThing.js";
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { ArrayMenuForm } from "./ArrayMenuForm.js";
+import { handlesFor, type HandleSpec } from "./shapeHandles.js";
 import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -254,6 +255,18 @@ export function App() {
           apply(updateComponent(current, id, patch), false);
         },
         onDragEnd: () => latest.current.commit(latest.current.text),
+        onHandleDrag: (id, delta) => {
+          const spec = handleSpecs.current.find((h) => h.id === id);
+          if (!spec) return;
+          handleBase.current ??= latest.current.config;
+          latest.current.applyConfig(spec.apply(handleBase.current, delta), false);
+        },
+        onHandleEnd: () => {
+          if (!handleBase.current) return;
+          handleBase.current = null;
+          latest.current.commit(latest.current.text);
+          setHandlesDropped((n) => n + 1);
+        },
         onDragOnto: (id, faces) => {
           const { config: current, applyConfig: apply, model: scene3d } = latest.current;
           const component = scene3d?.components.find((c) => c.id === id);
@@ -410,6 +423,17 @@ export function App() {
   useEffect(() => {
     if (selected) setPicked(null);
   }, [selected]);
+
+  // Handles to drag for what's picked on the Shape tab. They stay as they were while one is dragged,
+  // since each changes the design from what it was when the drag began.
+  const handleSpecs = useRef<HandleSpec[]>([]);
+  const handleBase = useRef<RawConfig | null>(null);
+  const [handlesDropped, setHandlesDropped] = useState(0);
+  useEffect(() => {
+    if (handleBase.current) return;
+    handleSpecs.current = tab === "shape" && valid ? handlesFor(config, picked, plan?.plate?.joints ?? []) : [];
+    sceneRef.current?.setHandles(handleSpecs.current);
+  }, [picked, text, tab, handlesDropped]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // What's picked is lit up where it is now, so it follows as its numbers change.
   useEffect(() => {

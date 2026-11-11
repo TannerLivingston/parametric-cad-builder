@@ -12,6 +12,8 @@ import { curveCoordinates, explodeOffset, sectionPlane, surfaceCoordinates, type
 export type ViewPreset = "iso" | "top" | "front" | "under";
 
 // Which top surface a part is on: the curve, for one on a curve, rather than its own flat.
+const HANDLE_REACH_PX = 10; // how near a handle on screen a press has to be to take hold of it
+
 const surfaceKey = (component: SceneComponent) => component.curve ?? component.surface?.id ?? null;
 
 export interface SceneEvents {
@@ -34,6 +36,17 @@ export interface SceneEvents {
   // While a part on a top surface is dragged, the faces under the pointer, so that it can go onto
   // another surface. True if it did, and the part's new place is on its way.
   onDragOnto(id: string, faces: PickedFace[]): boolean;
+  // A handle on the shape dragged along its arrow, by this much from where it started, and let go.
+  onHandleDrag(id: string, delta: number): void;
+  onHandleEnd(id: string): void;
+}
+
+// A point on the shape that can be dragged along a line to change a size, such as a seam's place
+// or the width. `axis` is the way it moves, and dragging it reports how far along that it's gone.
+export interface ShapeHandle {
+  id: string;
+  at: [number, number, number];
+  axis: [number, number, number];
 }
 
 export interface PickedFace {
@@ -113,6 +126,9 @@ export class Scene3D {
   private cutMaterials = new Map<string, THREE.MeshBasicMaterial>();
   private markers: Marker[] = [];
   private markerRoot = new THREE.Group();
+  private handleRoot = new THREE.Group();
+  private handles: { handle: ShapeHandle; pick: THREE.Mesh; line: THREE.Line }[] = [];
+  private handleDrag: { id: string; start: number; origin: THREE.Vector3; axis: THREE.Vector3 } | null = null;
   private model: SceneModel | null = null;
   private selected: string | null = null;
   private invalid = new Set<string>();
@@ -160,6 +176,7 @@ export class Scene3D {
     key.position.set(-150, -300, 500);
     this.scene.add(key);
     this.scene.add(this.markerRoot);
+    this.scene.add(this.handleRoot);
     this.scene.background = new THREE.Color(colors.background);
 
     const canvas = this.renderer.domElement;
@@ -910,7 +927,79 @@ export class Scene3D {
   // The browser's own menu would cover the app's.
   private stopMenu = (event: Event) => event.preventDefault();
 
+  // Shows these handles, in place of any before, while something with sizes to drag is selected.
+  setHandles(handles: ShapeHandle[]) {
+    if (this.handleDrag) return;
+    for (const child of [...this.handleRoot.children]) {
+      child.traverse((object) => {
+        (object as THREE.Mesh).geometry?.dispose?.();
+        ((object as THREE.Mesh).material as THREE.Material | undefined)?.dispose?.();
+      });
+      this.handleRoot.remove(child);
+    }
+    this.handles = handles.map((handle) => {
+      const origin = new THREE.Vector3(...handle.at);
+      const axis = new THREE.Vector3(...handle.axis).normalize();
+      const color = this.colors.selected;
+      // Drawn over everything, so a handle behind the shell can still be found.
+      const pick = new THREE.Mesh(new THREE.SphereGeometry(3.5, 16, 12), new THREE.MeshBasicMaterial({ color, depthTest: false, transparent: true }));
+      pick.position.copy(origin);
+      pick.renderOrder = 10;
+      const line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints([origin.clone().addScaledVector(axis, -9), origin.clone().addScaledVector(axis, 9)]),
+        new THREE.LineBasicMaterial({ color, depthTest: false, transparent: true }),
+      );
+      line.renderOrder = 10;
+      this.handleRoot.add(pick, line);
+      return { handle, pick, line };
+    });
+    this.requestFrame();
+  }
+
+  // How far along a handle's line the pointer's ray comes closest to it.
+  private alongHandle(ray: THREE.Ray, origin: THREE.Vector3, axis: THREE.Vector3): number | null {
+    const w = ray.origin.clone().sub(origin);
+    const b = ray.direction.dot(axis);
+    const denominator = 1 - b * b;
+    if (denominator < 1e-6) return null;
+    return (axis.dot(w) - b * ray.direction.dot(w)) / denominator;
+  }
+
+  // The handle nearest the pointer on screen, within a few pixels, however small it's drawn.
+  private handleAt(event: PointerEvent) {
+    if (!this.handles.length) return null;
+    this.rayFrom(event);
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    let best: (typeof this.handles)[number] | null = null;
+    let nearest = HANDLE_REACH_PX;
+    for (const h of this.handles) {
+      const screen = h.pick.position.clone().project(this.camera);
+      const x = rect.left + ((screen.x + 1) / 2) * rect.width;
+      const y = rect.top + ((1 - screen.y) / 2) * rect.height;
+      const distance = Math.hypot(x - event.clientX, y - event.clientY);
+      if (screen.z < 1 && distance <= nearest) {
+        best = h;
+        nearest = distance;
+      }
+    }
+    return best;
+  }
+
   private handleDown = (event: PointerEvent) => {
+    if (event.button === 0 && !this.measuring && !this.picking && !this.preview && !this.fasteners) {
+      const found = this.handleAt(event);
+      const origin = found && new THREE.Vector3(...found.handle.at);
+      const axis = found && new THREE.Vector3(...found.handle.axis).normalize();
+      const start = found && this.alongHandle(this.raycaster.ray, origin!, axis!);
+      if (found && start !== null) {
+        event.stopImmediatePropagation();
+        this.pressedEmpty = null;
+        this.controls.enabled = false;
+        this.renderer.domElement.setPointerCapture(event.pointerId);
+        this.handleDrag = { id: found.handle.id, start: start!, origin: origin!, axis: axis! };
+        return;
+      }
+    }
     if (event.button === 2) {
       this.rightPressed = this.measuring || this.picking || this.preview || this.fasteners ? null : { x: event.clientX, y: event.clientY };
       return;
@@ -964,6 +1053,24 @@ export class Scene3D {
   private pressedEmpty: { x: number; y: number } | null = null;
 
   private handleMove = (event: PointerEvent) => {
+    if (this.handleDrag) {
+      const { id, start, origin, axis } = this.handleDrag;
+      const along = this.alongHandle(this.rayFrom(event), origin, axis);
+      if (along !== null) {
+        // The handle goes with the pointer, as what it sizes follows.
+        const dragged = this.handles.find((h) => h.handle.id === id);
+        dragged?.pick.position.copy(origin).addScaledVector(axis, along - start);
+        dragged?.line.position.copy(axis).multiplyScalar(along - start);
+        this.requestFrame();
+        this.events.onHandleDrag(id, along - start);
+      }
+      this.renderer.domElement.style.cursor = "grabbing";
+      return;
+    }
+    if (!this.drag && !this.fastenerDrag && !this.measuring && !this.picking && this.handles.length && this.handleAt(event)) {
+      this.renderer.domElement.style.cursor = "grab";
+      return;
+    }
     if (this.preview || this.measuring) return;
     if (this.fastenerDrag) {
       const { item, plane } = this.fastenerDrag;
@@ -1013,6 +1120,15 @@ export class Scene3D {
   }
 
   private handleUp = (event: PointerEvent) => {
+    if (this.handleDrag) {
+      const { id } = this.handleDrag;
+      this.handleDrag = null;
+      this.controls.enabled = true;
+      this.renderer.domElement.style.cursor = "";
+      if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
+      this.events.onHandleEnd(id);
+      return;
+    }
     if (event.type === "pointerup" && event.button === 2) {
       const pressed = this.rightPressed;
       this.rightPressed = null;

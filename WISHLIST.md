@@ -14,8 +14,6 @@ click or drag in the view.
 
 - [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
   and the fields on the other tabs.
-- [ ] **Handles on the shape itself:** drag a crease to move a surface's end, a wall to change the width or depth, a seam or
-  a plate joint along the width, the middle of a curve to set its bulge, and a bowed wall to set its bow.
 - [ ] **Drag the rest as parts are dragged:** labels, wall holes, vents, supports, feet, weight pockets and cable ties.
 - [ ] **Select several parts,** with Shift-click or a dragged box, to move, line up, space evenly or delete together.
 - [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
@@ -51,6 +49,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Handles on the shape:** for a seam or the plate's split along the width, the walls' width, depth and front height, a
+  bowed wall's bow, and a surface's crease, back and up, and its curve from the middle of its arc.
 - [x] **Drag parts into place:** from the library's Add button onto a surface, wall or the floor in the view, and from one top
   surface onto another while dragging.
 - [x] **Select the rest by clicking:** a part's own label selects its part, a screw selects it on the Screws tab, and the plate's
