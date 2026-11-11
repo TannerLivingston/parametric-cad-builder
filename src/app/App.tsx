@@ -27,6 +27,7 @@ import { ShapePanel } from "./ShapePanel.js";
 import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
 import { thingAt } from "./pickThing.js";
+import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -199,8 +200,8 @@ export function App() {
 
   // Dragging reads the latest state through a ref, because the scene's callbacks are
   // set once. Each move replaces the text, and only the release joins the undo history.
-  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string });
-  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab };
+  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked });
+  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked };
 
   useEffect(() => {
     const scene = new Scene3D(
@@ -475,18 +476,49 @@ export function App() {
         }
         return;
       }
-      if (typing || !selected) return;
+      if (typing) return;
       const step = event.shiftKey ? 0.1 : 1;
       const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
       const move = moves[event.key];
-      if (move) {
+      const duplicating = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d";
+      const { config: current, picked: thing } = latest.current;
+      // A part undone away since it was selected is no longer there to act on.
+      const part = selected && current.components?.some((c: RawConfig) => c.id === selected) ? selected : null;
+      if (!part && thing) {
+        // Something selected by clicking it, other than a part.
+        let next: RawConfig | null = null;
+        if (move) next = nudgeThing(current, thing, move[0], move[1]);
+        else if (duplicating) {
+          const copy = duplicateThing(current, thing);
+          if (copy) {
+            next = copy.config;
+            setPicked(copy.path);
+          }
+        } else if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey) next = rotateThing(current, thing);
+        else if (event.key === "Delete" || event.key === "Backspace") {
+          next = removeThing(current, thing);
+          if (next) setPicked(null);
+        }
+        if (move || duplicating || event.key === "Delete" || event.key === "Backspace") event.preventDefault();
+        if (next) applyConfig(next);
+        return;
+      }
+      if (!part) return;
+      if (duplicating) {
         event.preventDefault();
-        nudge(selected, move[0], move[1]);
-      } else if (event.key.toLowerCase() === "r") {
-        rotate(selected);
+        const copy = duplicateComponent(current, part);
+        if (copy) {
+          applyConfig(copy.config);
+          setSelected(copy.id);
+        }
+      } else if (move) {
+        event.preventDefault();
+        nudge(part, move[0], move[1]);
+      } else if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey) {
+        rotate(part);
       } else if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        applyConfig(removeComponent(latest.current.config, selected));
+        applyConfig(removeComponent(current, part));
         setSelected(null);
       } else if (event.key === "Escape") {
         setSelected(null);
@@ -774,7 +806,10 @@ export function App() {
         </div>
 
         {tab === "shape" ? (
-          <ShapePanel config={config} onChange={(next) => applyConfig(next)} picked={picked} onPick={setPicked} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />
+          <ShapePanel config={config} onChange={(next) => applyConfig(next)} picked={picked} onPick={(path) => {
+              setPicked(path);
+              if (path) setSelected(null);
+            }} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />
         ) : tab === "layout" ? (
           <div className="tab-body">
             <section className="add-part">

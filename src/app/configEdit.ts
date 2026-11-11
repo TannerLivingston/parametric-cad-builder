@@ -78,7 +78,7 @@ export function partsOf(config: RawConfig): Record<string, Part> {
   return { ...library, ...(config.customParts ?? {}) };
 }
 
-function unusedId(config: RawConfig, type: string): string {
+export function unusedId(config: RawConfig, type: string): string {
   const taken = new Set((config.components ?? []).map((c: RawComponent) => c.id));
   for (let n = 1; ; n++) {
     const id = `${type}-${n}`;
@@ -86,7 +86,7 @@ function unusedId(config: RawConfig, type: string): string {
   }
 }
 
-function errorCount(config: RawConfig): number {
+export function errorCount(config: RawConfig): number {
   const result = validateConfig(config, { wiring: false });
   return result.ok ? 0 : result.errors.length;
 }

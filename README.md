@@ -34,6 +34,11 @@ It works the other way too: putting the cursor in a field lights up what it's fo
 the top only with **Show inside** on. From the Layout tab, a click on a bare surface selects nothing, since that's how a part
 is let go of. Escape, or a click on empty space, lets go.
 
+The keys work on whatever's selected, part or not, while the focus isn't in a field: the arrows nudge it (Shift for 0.1 mm), R
+turns a part, label or weight pocket, Delete removes it, and Ctrl+D (or Cmd+D) copies it, with a part's knob, cap and labels,
+beside the original: across first, so copies make a row, the nearest spot where the copy adds no problem and is clear of the
+original. A seam moves only across, and isn't copied.
+
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
 tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for
@@ -41,7 +46,7 @@ others only once it's hosted. Parts with a connector or a recess are still edite
 everything else can be too.
 
 A selected part can be copied in rows, mirrored across the enclosure's centre, centred, or lined up with another part on the same
-surface. Drag parts in the 3D view, or use the arrow keys (Shift moves in 0.1 mm steps, R rotates, Delete removes). Changes
+surface. Drag parts in the 3D view, or use the keys above. Changes
 write back to the config, and editing the config text updates the view. Everything saves as a draft in the browser.
 
 - **Validation runs on every change**, in the page. A bad position turns red and each problem says why, while the view

@@ -22,8 +22,6 @@ click or drag in the view.
 - [ ] **Drag the rest as parts are dragged:** labels, wall holes, vents, supports, feet, weight pockets and cable ties.
 - [ ] **A right-click menu** on anything in the view: rotate, duplicate, delete, add a label, make an array, move to another
   surface.
-- [ ] **Keys for a selection:** arrows to nudge by a step, R to rotate, Delete to remove, Ctrl+D to duplicate, Escape to let go.
-  Delete only acts when the view has the focus, never from a text field.
 - [ ] **Select several parts,** with Shift-click or a dragged box, to move, line up, space evenly or delete together.
 - [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
   and to equal spacing in a row.
@@ -52,6 +50,9 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Keys for anything selected,** not only parts: the arrows nudge a label, hole, vent, seam or plate item, R turns a
+  label or weight pocket, Delete removes it, and Ctrl+D copies it, or a part with its knob, cap and labels, beside the
+  original where it adds no problem. None of them act while the focus is in a field.
 - [x] **Click anything in the view to select it,** not only parts: a label, a hole or vent in a wall, a seam, something on the
   plate, or the surface or walls. The Shape tab opens at its fields, and it's lit up in the view. And the other way round:
   putting the cursor in its fields lights it up.
