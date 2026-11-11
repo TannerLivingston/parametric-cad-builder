@@ -52,7 +52,7 @@ click or drag in the view.
 ## Done
 
 - [x] **Drag parts into place:** from the library's Add button onto a surface, wall or the floor in the view, and from one top
-  surface onto another while dragging. Not yet tried in the app.
+  surface onto another while dragging.
 - [x] **Select the rest by clicking:** a part's own label selects its part, a screw selects it on the Screws tab, and the plate's
   split, the opening and the boxes of room kept in it have fields of their own to open at.
 - [x] **A right-click menu in the view:** rotate, duplicate, make an array, delete, add a label, or move to another surface, for a part; the

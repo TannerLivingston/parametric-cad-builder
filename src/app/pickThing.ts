@@ -8,6 +8,7 @@ import type { Spot } from "./pickSpot.js";
 
 const AROUND = 1.5; // how far outside something a click still counts as on it
 const SEAM_REACH = 2; // either side of a seam's line
+const JOINT_REACH = 4; // either side of the plate's split, a thin line seen from below
 export const WALLS_PATH = "enclosure.wall"; // what a click on a bare wall selects: the walls' own settings
 
 const SCREW_REACH = 4.5; // from a screw's centre
@@ -72,7 +73,7 @@ function itemAt(config: RawConfig, spot: Spot, point: readonly [number, number, 
       (spot.wall === "front" && config.opening && spot.at >= config.opening.xMin && spot.at <= config.opening.xMax ? "opening" : null)
     );
   }
-  const jointAt = (x: number) => ((extras.plateJoints ?? [plate.seamX ?? []].flat()).some((joint: number) => Math.abs(joint - x) <= SEAM_REACH) ? "plate.seamX" : null);
+  const jointAt = (x: number) => ((extras.plateJoints ?? [plate.seamX ?? []].flat()).some((joint: number) => Math.abs(joint - x) <= JOINT_REACH) ? "plate.seamX" : null);
   const near = (item: RawConfig, reach: number) => Math.hypot(item.x - spot.x, item.y - spot.y) <= reach + AROUND;
   if (spot.kind === "under") {
     return (
@@ -121,7 +122,7 @@ export function thingAt(config: RawConfig, spots: (Spot | null)[], through: bool
   const screw = screwAt(first, extras);
   if (screw) return screw;
   // The gap between the plate's pieces is no floor or underside, but it's the split.
-  if (first && extras.plateJoints && first[2] <= (extras.floorThickness ?? 3) + 0.5 && extras.plateJoints.some((x) => Math.abs(x - first[0]) <= SEAM_REACH)) return "plate.seamX";
+  if (first && extras.plateJoints && first[2] <= (extras.floorThickness ?? 3) + 0.5 && extras.plateJoints.some((x) => Math.abs(x - first[0]) <= JOINT_REACH)) return "plate.seamX";
   // A face that's no surface, wall or floor is passed over, such as the side of an engraved letter.
   const known = spots.flatMap((spot, i) => (spot ? [{ spot, point: extras.points?.[i] }] : []));
   for (const { spot, point } of through ? known : known.slice(0, 1)) {
