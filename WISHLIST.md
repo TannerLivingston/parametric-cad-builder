@@ -32,8 +32,10 @@ click or drag in the view.
 - [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
 - [ ] **A built-in tutorial** that guides a newcomer step by step through making a basic synth: choosing a shape, adding
   buttons, knobs and a screen, a board on the floor, labels, a seam if it's too wide for the bed, fixing what the problem list
-  says, and exporting the files to print. Each step points at the control to use, waits for it to be done, and can be skipped
-  or left at any point, with the design kept as an ordinary one afterwards.
+  says, and exporting the files to print. Each step points at the control to use and checks the design to know whether it's
+  been done right, saying what's still missing, and the next step stays locked until it has. It ends on a finished screen that
+  makes it plain the tutorial is complete, with the synth shown and the design kept as an ordinary one afterwards. It can be
+  left at any point, but not skipped ahead.
 - [ ] **Plain names and units in the fields,** with a short note on hover saying what each one changes, and a small drawing
   for the less obvious ones, such as u and v, bulge and bow.
 
