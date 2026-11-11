@@ -26,7 +26,8 @@ import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
 import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
-import { thingAt } from "./pickThing.js";
+import { nameOfThing, thingAt } from "./pickThing.js";
+import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -115,6 +116,7 @@ export function App() {
   const [measuring, setMeasuring] = useState(false);
   // Something waiting to be put where the next click in the view lands.
   const [placing, setPlacing] = useState<Placing | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; title: string; choices: MenuChoice[] } | null>(null);
   const [placingMissed, setPlacingMissed] = useState(false);
   // What was last clicked in the view or focused in the Shape tab, other than a part, as its path
   // in the config. Its fields are shown, and it's lit up in the view.
@@ -228,6 +230,38 @@ export function App() {
           const wanted = on === "layout" && bare ? null : path;
           setPicked(wanted);
           if (wanted) setTab("shape");
+        },
+        onMenu: (at, part, faces) => {
+          const { config: current, model: scene3d, seeThrough: through } = latest.current;
+          setMenu(null);
+          if (!scene3d) return;
+          let target: MenuTarget | null = null;
+          let title = "";
+          if (part) {
+            target = { part };
+            title = part;
+            setSelected(part);
+          } else {
+            const spots = faces.map((face) => spotAt(scene3d, face.point, face.normal));
+            const path = thingAt(current, spots, through);
+            const spot = spots.find((s) => s !== null);
+            if (path && !/^enclosure\./.test(path)) {
+              target = { path };
+              title = `The ${nameOfThing(path)}`;
+              setSelected(null);
+              setPicked(path);
+              setTab("shape");
+            } else if (spot) {
+              target = { spot };
+              title = spot.kind === "surface" ? `On ${spot.surface}` : spot.kind === "wall" ? `On the ${spot.wall} wall` : spot.kind === "floor" ? "On the floor inside" : "On the underside";
+            }
+          }
+          if (!target) return;
+          // Each surface's length, a curve's flats together, for moving a part onto it.
+          const lengths: Record<string, number> = {};
+          for (const s of scene3d.surfaces) lengths[s.curveOf ?? s.id] = (lengths[s.curveOf ?? s.id] ?? 0) + s.length;
+          const choices = menuFor(current, target, lengths);
+          if (choices.length) setMenu({ x: at.x, y: at.y, title, choices });
         },
         onPick: (faces) => {
           const { config: current, applyConfig: apply, model: scene3d, placing: waiting } = latest.current;
@@ -437,6 +471,36 @@ export function App() {
     return () => clearTimeout(timer);
   }, [notice]);
 
+  // A choice from the right-click menu, run on the design as it is now.
+  const choose = (choice: MenuChoice) => {
+    setMenu(null);
+    const result = choice.run(latest.current.config);
+    if (!result) return;
+    applyConfig(result.config);
+    if (result.select !== undefined) setSelected(result.select);
+    if (result.pick !== undefined) setPicked(result.pick);
+    // What it picks has its fields on the Shape tab, as when it's clicked.
+    if (result.pick) {
+      setSelected(null);
+      setTab("shape");
+    }
+  };
+  const menuOpen = useRef(false);
+  menuOpen.current = menu !== null;
+  useEffect(() => {
+    if (!menu) return;
+    // A press anywhere else, or turning the view, closes it.
+    const close = (event: Event) => {
+      if (!(event.target as HTMLElement).closest?.(".view-menu")) setMenu(null);
+    };
+    window.addEventListener("pointerdown", close, true);
+    window.addEventListener("wheel", close, true);
+    return () => {
+      window.removeEventListener("pointerdown", close, true);
+      window.removeEventListener("wheel", close, true);
+    };
+  }, [menu]);
+
   const nudge = useCallback((id: string, da: number, db: number) => {
     const { config: current, applyConfig: apply } = latest.current;
     const component = current.components?.find((c: any) => c.id === id);
@@ -455,6 +519,10 @@ export function App() {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const typing = target.matches?.("input, textarea, select");
+      if (event.key === "Escape" && menuOpen.current) {
+        setMenu(null);
+        return;
+      }
       if (event.key === "Escape" && latest.current.placing) {
         setPlacing(null);
         return;
@@ -1125,6 +1193,16 @@ export function App() {
 
       <main className="stage">
         <div className="viewport" ref={viewportRef} data-testid="viewport" aria-label="3D view of the enclosure" />
+        {menu ? (
+          <div className="view-menu" role="menu" aria-label={menu.title} style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 40 - 32 * menu.choices.length) }}>
+            <p>{menu.title}</p>
+            {menu.choices.map((choice) => (
+              <button key={choice.label} role="menuitem" className={choice.danger ? "danger" : undefined} onClick={() => choose(choice)}>
+                {choice.label}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {placing ? (
           <p className="measure-readout placing" role="status">
             {placingMissed ? `That isn't ${ontoWords(placing)}. ` : ""}Click {ontoWords(placing)} to put {placing.what} there.

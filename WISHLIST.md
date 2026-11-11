@@ -20,8 +20,6 @@ click or drag in the view.
 - [ ] **Handles on the shape itself:** drag a crease to move a surface's end, a wall to change the width or depth, a seam or
   a plate joint along the width, the middle of a curve to set its bulge, and a bowed wall to set its bow.
 - [ ] **Drag the rest as parts are dragged:** labels, wall holes, vents, supports, feet, weight pockets and cable ties.
-- [ ] **A right-click menu** on anything in the view: rotate, duplicate, delete, add a label, make an array, move to another
-  surface.
 - [ ] **Select several parts,** with Shift-click or a dragged box, to move, line up, space evenly or delete together.
 - [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
   and to equal spacing in a row.
@@ -50,6 +48,9 @@ click or drag in the view.
 
 ## Done
 
+- [x] **A right-click menu in the view:** rotate, duplicate, delete, add a label, or move to another surface, for a part; the
+  same, as far as they apply, for a label, hole, vent, seam or plate item; and on a bare surface, wall or floor, add anything that
+  can go there, put where it was clicked. Making an array from it is still to do.
 - [x] **Keys for anything selected,** not only parts: the arrows nudge a label, hole, vent, seam or plate item, R turns a
   label or weight pocket, Delete removes it, and Ctrl+D copies it, or a part with its knob, cap and labels, beside the
   original where it adds no problem. None of them act while the focus is in a field.

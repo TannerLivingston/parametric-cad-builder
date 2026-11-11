@@ -792,3 +792,41 @@ fieldset.fields legend {
     width: 70px;
   }
 }
+
+/* The right-click menu in the view, where the click was. */
+.view-menu {
+  position: fixed;
+  z-index: 20;
+  min-width: 180px;
+  max-width: 220px;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.view-menu p {
+  margin: 2px 8px 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.view-menu button {
+  text-align: left;
+  border: 0;
+  background: transparent;
+  padding: 6px 8px;
+  border-radius: 5px;
+}
+
+.view-menu button:hover,
+.view-menu button:focus-visible {
+  background: var(--accent-soft);
+}
+
+.view-menu button.danger:hover {
+  background: var(--danger-soft);
+}

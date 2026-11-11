@@ -26,6 +26,8 @@ export interface SceneEvents {
   // A plain click on the model, not on a part, with the faces under it the same way. With none,
   // it was on empty space.
   onClick(faces: PickedFace[]): void;
+  // A right-click that didn't pan: where on the page, the part under it if any, and the faces.
+  onMenu(at: { x: number; y: number }, part: string | null, faces: PickedFace[]): void;
 }
 
 export interface PickedFace {
@@ -156,6 +158,7 @@ export class Scene3D {
 
     const canvas = this.renderer.domElement;
     canvas.addEventListener("pointerdown", this.handleDown);
+    canvas.addEventListener("contextmenu", this.stopMenu);
     canvas.addEventListener("pointermove", this.handleMove);
     canvas.addEventListener("pointerup", this.handleUp);
     canvas.addEventListener("pointercancel", this.handleUp);
@@ -884,7 +887,15 @@ export class Scene3D {
     return [u, v];
   }
 
+  private rightPressed: { x: number; y: number } | null = null;
+  // The browser's own menu would cover the app's.
+  private stopMenu = (event: Event) => event.preventDefault();
+
   private handleDown = (event: PointerEvent) => {
+    if (event.button === 2) {
+      this.rightPressed = this.measuring || this.picking || this.preview || this.fasteners ? null : { x: event.clientX, y: event.clientY };
+      return;
+    }
     if (event.button !== 0) return;
     if (this.measuring || this.picking) {
       this.pressedEmpty = { x: event.clientX, y: event.clientY };
@@ -977,6 +988,15 @@ export class Scene3D {
   }
 
   private handleUp = (event: PointerEvent) => {
+    if (event.type === "pointerup" && event.button === 2) {
+      const pressed = this.rightPressed;
+      this.rightPressed = null;
+      // Dragging with the right button pans, so only one that stayed put is a menu.
+      if (pressed && Math.hypot(event.clientX - pressed.x, event.clientY - pressed.y) < 4) {
+        this.events.onMenu({ x: event.clientX, y: event.clientY }, this.markerAt(event)?.component.id ?? null, this.pickFaces(event));
+      }
+      return;
+    }
     if (this.fastenerDrag) {
       const { item, x, y, moved } = this.fastenerDrag;
       this.fastenerDrag = null;

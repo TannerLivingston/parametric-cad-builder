@@ -39,6 +39,12 @@ turns a part, label or weight pocket, Delete removes it, and Ctrl+D (or Cmd+D) c
 beside the original: across first, so copies make a row, the nearest spot where the copy adds no problem and is clear of the
 original. A seam moves only across, and isn't copied.
 
+A right-click in the view (one that doesn't pan) opens a menu for what's under it. On a part: rotate, duplicate, add a label if it
+has none, move it to another top surface, halfway along it, or delete it. On a label, hole, vent, seam or something on the plate:
+whichever of rotate, duplicate and delete make sense for it. On a bare surface, wall, the floor or the underside: add a label,
+hole, vent, seam, support, pin, plate hole, cable tie bridge, weight pocket or foot there, whichever can go on it. What's added is
+selected, with the Shape tab open at its fields. Escape, or a press anywhere else, closes it.
+
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
 tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for
