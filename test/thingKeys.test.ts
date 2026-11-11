@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { validateConfig } from "../src/validate.js";
 import { errorCount } from "../src/app/configEdit.js";
-import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "../src/app/thingKeys.js";
+import { arrayPitch, arrayThing, duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "../src/app/thingKeys.js";
 
 const design = (): any => ({
   schemaVersion: 1,
@@ -72,12 +72,34 @@ describe("keys on something selected", () => {
     const start = design();
     expect(validateConfig(start).ok).toBe(true);
     const copy = duplicateComponent(start, "button-1")!;
-    expect(copy.id).toBe("arcade-24mm-1");
+    expect(copy.id).toBe("button-2");
     const made = copy.config.components.find((c: any) => c.id === copy.id);
     expect(made).toMatchObject({ type: "arcade-24mm", surface: "deck", v: 40 });
     expect(made.u).not.toBe(60);
     expect(copy.config.labels.filter((l: any) => l.text === "GO").map((l: any) => l.component)).toEqual(["button-1", copy.id]);
     expect(validateConfig(copy.config).ok).toBe(true);
     expect(duplicateComponent(start, "nothing")).toBeNull();
+  });
+});
+
+describe("arrays from the menu", () => {
+  it("start from the least spacing that adds no problem", () => {
+    const pinned = { ...design(), plate: { pins: [{ x: 100, y: 100, diameter: 3.7, height: 4 }] } };
+    expect(arrayPitch(pinned, { path: "plate.pins[0]" })).toEqual({ along: 5.7, across: 5.7 });
+    // A part's is the validator's to find, and clears the original.
+    const part = arrayPitch(design(), { part: "button-1" })!;
+    expect(part.along).toBeGreaterThan(24);
+    expect(errorCount(arrayThing(design(), { part: "button-1" }, { columns: 2, rows: 1, stepAlong: part.along, stepAcross: 0 })!)).toBe(errorCount(design()));
+    expect(arrayPitch(design(), { path: "seams[0]" })).toBeNull();
+    expect(arrayPitch(design(), { part: "nothing" })).toBeNull();
+  });
+
+  it("make rows of copies of a part or anything on a list", () => {
+    const made = arrayThing(design(), { path: "wallHoles[0]" }, { columns: 3, rows: 2, stepAlong: 20, stepAcross: 12 })!;
+    expect(made.wallHoles.map((h: any) => [h.at, h.z])).toEqual([[60, 20], [80, 20], [100, 20], [60, 32], [80, 32], [100, 32]]);
+    const parts = arrayThing(design(), { part: "button-1" }, { columns: 2, rows: 2, stepAlong: 30, stepAcross: 30 })!;
+    expect(parts.components.map((c: any) => [c.id, c.u, c.v])).toEqual([["button-1", 60, 40], ["button-2", 90, 40], ["button-3", 60, 70], ["button-4", 90, 70]]);
+    expect(arrayThing(design(), { path: "wallHoles[0]" }, { columns: 1, rows: 1, stepAlong: 20, stepAcross: 12 })).toBeNull();
+    expect(arrayThing(design(), { path: "seams[0]" }, { columns: 3, rows: 1, stepAlong: 20, stepAcross: 0 })).toBeNull();
   });
 });

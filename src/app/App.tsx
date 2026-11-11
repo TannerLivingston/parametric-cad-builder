@@ -28,6 +28,7 @@ import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
 import { nameOfThing, thingAt } from "./pickThing.js";
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
+import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -116,7 +117,7 @@ export function App() {
   const [measuring, setMeasuring] = useState(false);
   // Something waiting to be put where the next click in the view lands.
   const [placing, setPlacing] = useState<Placing | null>(null);
-  const [menu, setMenu] = useState<{ x: number; y: number; title: string; choices: MenuChoice[] } | null>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; title: string; choices: MenuChoice[]; array?: { part: string } | { path: string } } | null>(null);
   const [placingMissed, setPlacingMissed] = useState(false);
   // What was last clicked in the view or focused in the Shape tab, other than a part, as its path
   // in the config. Its fields are shown, and it's lit up in the view.
@@ -473,6 +474,8 @@ export function App() {
 
   // A choice from the right-click menu, run on the design as it is now.
   const choose = (choice: MenuChoice) => {
+    // An array asks how many first, in the menu.
+    if (choice.array) return setMenu((open) => open && { ...open, array: choice.array! });
     setMenu(null);
     const result = choice.run(latest.current.config);
     if (!result) return;
@@ -1194,9 +1197,19 @@ export function App() {
       <main className="stage">
         <div className="viewport" ref={viewportRef} data-testid="viewport" aria-label="3D view of the enclosure" />
         {menu ? (
-          <div className="view-menu" role="menu" aria-label={menu.title} style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 40 - 32 * menu.choices.length) }}>
-            <p>{menu.title}</p>
-            {menu.choices.map((choice) => (
+          <div className="view-menu" role="menu" aria-label={menu.title} style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 40 - (menu.array ? 160 : 32 * menu.choices.length)) }}>
+            <p>{menu.array ? `${menu.title}: make an array` : menu.title}</p>
+            {menu.array ? (
+              <ArrayMenuForm
+                config={config}
+                target={menu.array}
+                onMake={(next) => {
+                  setMenu(null);
+                  applyConfig(next);
+                }}
+              />
+            ) : null}
+            {menu.array ? null : menu.choices.map((choice) => (
               <button key={choice.label} role="menuitem" className={choice.danger ? "danger" : undefined} onClick={() => choose(choice)}>
                 {choice.label}
               </button>

@@ -39,9 +39,11 @@ turns a part, label or weight pocket, Delete removes it, and Ctrl+D (or Cmd+D) c
 beside the original: across first, so copies make a row, the nearest spot where the copy adds no problem and is clear of the
 original. A seam moves only across, and isn't copied.
 
-A right-click in the view (one that doesn't pan) opens a menu for what's under it. On a part: rotate, duplicate, add a label if it
-has none, move it to another top surface, halfway along it, or delete it. On a label, hole, vent, seam or something on the plate:
-whichever of rotate, duplicate and delete make sense for it. On a bare surface, wall, the floor or the underside: add a label,
+A right-click in the view (one that doesn't pan) opens a menu for what's under it. On a part: rotate, duplicate, make an array,
+add a label if it has none, move it to another top surface, halfway along it, or delete it. On a label, hole, vent, seam or something on the plate:
+whichever of rotate, duplicate, make an array and delete make sense for it. **Make an array…** asks, in the menu, how many across
+and how many rows, and how far apart, starting from the least spacing at which a copy adds no problem: for a part, worked out with
+the other parts left out, so anything already beside it shows as a problem once the copies are made. On a bare surface, wall, the floor or the underside: add a label,
 hole, vent, seam, support, pin, plate hole, cable tie bridge, weight pocket or foot there, whichever can go on it. What's added is
 selected, with the Shape tab open at its fields. Escape, or a press anywhere else, closes it.
 

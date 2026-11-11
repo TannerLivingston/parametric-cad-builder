@@ -48,9 +48,10 @@ click or drag in the view.
 
 ## Done
 
-- [x] **A right-click menu in the view:** rotate, duplicate, delete, add a label, or move to another surface, for a part; the
+- [x] **A right-click menu in the view:** rotate, duplicate, make an array, delete, add a label, or move to another surface, for a part; the
   same, as far as they apply, for a label, hole, vent, seam or plate item; and on a bare surface, wall or floor, add anything that
-  can go there, put where it was clicked. Making an array from it is still to do.
+  can go there, put where it was clicked. **Make an array…** from it asks how many and how far apart, with the spacing filled in
+  as the least that adds no problem.
 - [x] **Keys for anything selected,** not only parts: the arrows nudge a label, hole, vent, seam or plate item, R turns a
   label or weight pocket, Delete removes it, and Ctrl+D copies it, or a part with its knob, cap and labels, beside the
   original where it adds no problem. None of them act while the focus is in a field.

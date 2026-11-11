@@ -830,3 +830,33 @@ fieldset.fields legend {
 .view-menu button.danger:hover {
   background: var(--danger-soft);
 }
+
+.array-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 8px;
+  padding: 0 6px 6px;
+}
+
+.array-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.array-form input {
+  width: 100%;
+}
+
+.view-menu .array-form button {
+  grid-column: 1 / -1;
+  text-align: center;
+  background: var(--accent);
+  color: #fff;
+}
+
+.view-menu .array-form button:disabled {
+  opacity: 0.5;
+}

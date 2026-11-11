@@ -11,7 +11,7 @@ const along = (component: RawComponent) => (inWall(component) ? "at" : onFloor(c
 const across = (component: RawComponent) => (inWall(component) ? "z" : onFloor(component) ? "y" : "v");
 
 // "button-1" gives "button-2" and so on, keeping to the numbering it already has.
-function unusedIds(config: RawConfig, id: string, count: number): string[] {
+export function unusedIds(config: RawConfig, id: string, count: number): string[] {
   const base = id.replace(/-\d+$/, "");
   const taken = new Set(componentsOf(config).map((component) => component.id));
   const ids: string[] = [];

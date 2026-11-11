@@ -17,7 +17,11 @@ export interface MenuChoice {
   label: string;
   run(config: RawConfig): MenuResult | null;
   danger?: boolean;
+  // Asks how many and how far apart first, in the menu, rather than running straight away.
+  array?: { part: string } | { path: string };
 }
+
+const arrayChoice = (target: { part: string } | { path: string }): MenuChoice => ({ label: "Make an array…", array: target, run: () => null });
 
 export type MenuTarget = { part: string } | { path: string } | { spot: Spot };
 
@@ -43,6 +47,7 @@ function partMenu(config: RawConfig, id: string, lengths: Record<string, number>
       },
     },
   ];
+  choices.push(arrayChoice({ part: id }));
   if (!labelOfComponent(config, id)) choices.push({ label: "Add a label", run: (c) => ({ config: setComponentLabel(c, id, { text: "LABEL" }) }) });
   // A part on a top surface can go onto another, halfway along it.
   if ("u" in component) {
@@ -69,6 +74,7 @@ function thingMenu(config: RawConfig, path: string): MenuChoice[] {
         return copy && { config: copy.config, pick: copy.path };
       },
     });
+    choices.push(arrayChoice({ path }));
   }
   if (removeThing(config, path)) choices.push({ label: "Delete", danger: true, run: (c) => { const next = removeThing(c, path); return next && { config: next, pick: null }; } });
   return choices;

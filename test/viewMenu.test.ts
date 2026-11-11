@@ -18,11 +18,11 @@ const run = (choices: any[], label: string, config = design()) => choices.find((
 describe("the right-click menu", () => {
   it("offers a part its turns, copies, label, other surfaces and removal", () => {
     const choices = menuFor(design(), { part: "button-1" }, { deck: 80, panel: 31 });
-    expect(labels(choices)).toEqual(["Rotate 90°", "Duplicate", "Add a label", "Move to panel", "Delete"]);
+    expect(labels(choices)).toEqual(["Rotate 90°", "Duplicate", "Make an array…", "Add a label", "Move to panel", "Delete"]);
     expect(run(choices, "Rotate 90°").config.components[0].rotationDeg).toBe(90);
     expect(run(choices, "Move to panel").config.components[0]).toMatchObject({ surface: "panel", u: 60, v: 15.5 });
     expect(run(choices, "Add a label").config.labels.at(-1)).toEqual({ text: "LABEL", component: "button-1" });
-    expect(run(choices, "Duplicate").select).toBe("arcade-24mm-1");
+    expect(run(choices, "Duplicate").select).toBe("button-2");
     expect(run(choices, "Delete")).toMatchObject({ select: null, config: { components: [] } });
     // With a label already, there's none to add.
     const labelled = { ...design(), labels: [{ text: "GO", component: "button-1" }] };
@@ -31,8 +31,8 @@ describe("the right-click menu", () => {
   });
 
   it("offers something else only what makes sense for it", () => {
-    expect(labels(menuFor(design(), { path: "labels[0]" }))).toEqual(["Rotate 90°", "Duplicate", "Delete"]);
-    expect(labels(menuFor(design(), { path: "wallHoles[0]" }))).toEqual(["Duplicate", "Delete"]);
+    expect(labels(menuFor(design(), { path: "labels[0]" }))).toEqual(["Rotate 90°", "Duplicate", "Make an array…", "Delete"]);
+    expect(labels(menuFor(design(), { path: "wallHoles[0]" }))).toEqual(["Duplicate", "Make an array…", "Delete"]);
     expect(labels(menuFor(design(), { path: "seams[0]" }))).toEqual(["Delete"]);
     const copied = run(menuFor(design(), { path: "wallHoles[0]" }), "Duplicate");
     expect(copied.pick).toBe("wallHoles[1]");

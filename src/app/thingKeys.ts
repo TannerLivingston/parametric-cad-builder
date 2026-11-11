@@ -3,7 +3,8 @@
 // else by its path in the config, such as `labels[0]` or `plate.feet[2]`. Each returns null where
 // the key means nothing for that thing, such as turning a hole or deleting the walls.
 import { textOutline } from "../lettering.js";
-import { errorCount, tidy, unusedId, type RawConfig } from "./configEdit.js";
+import { errorCount, tidy, type RawConfig } from "./configEdit.js";
+import { arrayComponent, MAX_COPIES, unusedIds } from "./layoutEdit.js";
 
 type Where = { key: string; plate: boolean; index: number };
 type Axes = [string, string | null];
@@ -123,13 +124,14 @@ export function duplicateThing(config: RawConfig, path: string): { config: RawCo
   return { config: next, path: `${where.plate ? "plate." : ""}${where.key}[${items.length}]` };
 }
 
-// A copy of a part, with its knob, cap and labels, beside it. Its id is the next free one of its type.
+// A copy of a part, with its knob, cap and labels, beside it. Its id is the next free one in its
+// numbering, as a row of copies gets.
 export function duplicateComponent(config: RawConfig, id: string): { config: RawConfig; id: string } | null {
   const components: RawConfig[] = config.components ?? [];
   const original = components.find((c) => c.id === id);
   if (!original) return null;
   const axes: Axes = "wall" in original ? ["at", "z"] : "x" in original ? ["x", "y"] : ["u", "v"];
-  const copyId = unusedId(config, original.type);
+  const [copyId] = unusedIds(config, id, 1) as [string];
   const labels: RawConfig[] = config.labels ?? [];
   const copiedLabels = labels.filter((label) => label.component === id).map((label) => ({ ...label, component: copyId }));
   const next = besideOriginal(config, axes, (da, db) => ({
@@ -138,4 +140,74 @@ export function duplicateComponent(config: RawConfig, id: string): { config: Raw
     ...(copiedLabels.length ? { labels: [...labels, ...copiedLabels] } : {}),
   }));
   return { config: next, id: copyId };
+}
+
+// How far apart copies in a row (axis 0) or between rows (axis 1) can be: the least step, either
+// way, at which one copy adds no problem. Failing that, its size and a gap, or 20 mm.
+function clearPitch(config: RawConfig, place: (da: number, db: number) => RawConfig, size: number, axis: 0 | 1): number {
+  const baseline = errorCount(config);
+  for (let n = 1; n <= TRIES; n++) {
+    const offset = n * STEP + (size ? size + GAP - STEP : 0);
+    for (const way of [1, -1]) {
+      if (errorCount(axis === 0 ? place(way * offset, 0) : place(0, way * offset)) <= baseline) return tidy(offset);
+    }
+  }
+  return tidy(size ? size + GAP : 20);
+}
+
+export interface ArrayOptions {
+  columns: number;
+  rows: number;
+  stepAlong: number;
+  stepAcross: number;
+}
+
+// The spacing a row and rows of copies start from, or null for what can't be copied. Rows only
+// where it has a second number to step, which a seam hasn't.
+export function arrayPitch(config: RawConfig, target: { part: string } | { path: string }): { along: number; across: number | null } | null {
+  if ("part" in target) {
+    const components: RawConfig[] = config.components ?? [];
+    const original = components.find((c) => c.id === target.part);
+    if (!original) return null;
+    const axes: Axes = "wall" in original ? ["at", "z"] : "x" in original ? ["x", "y"] : ["u", "v"];
+    // What the part needs from its own copies, with the other parts out of the way: what's beside
+    // it now shows as a problem once the copies are made.
+    const alone = { ...config, components: [original], labels: (config.labels ?? []).filter((label: RawConfig) => label.component === original.id) };
+    const place = (da: number, db: number) => ({ ...alone, components: [original, { ...moved(original, axes, da, db), id: `${original.id}-pitch` }] });
+    return { along: clearPitch(alone, place, 0, 0), across: clearPitch(alone, place, 0, 1) };
+  }
+  const where = whereOf(target.path);
+  if (!where || where.key === "seams") return null;
+  const items = listOf(config, where);
+  const item = items[where.index];
+  const axes = item && axesOf(item, where.key);
+  if (!item || !axes) return null;
+  const size = sizeOf(item, where.key);
+  const place = (da: number, db: number) => withList(config, where, [...items, moved(item, axes, da, db)]);
+  return { along: clearPitch(config, place, size[0], 0), across: axes[1] ? clearPitch(config, place, size[1], 1) : null };
+}
+
+// Rows of copies of something on a list, or of a part, with the original as the first of the first
+// row. Rows go up, or back on a top surface or the floor.
+export function arrayThing(config: RawConfig, target: { part: string } | { path: string }, { columns, rows, stepAlong, stepAcross }: ArrayOptions): RawConfig | null {
+  if ("part" in target) {
+    const made = arrayComponent(config, target.part, { columns, rows, stepAlong, stepAcross });
+    return made.ids.length ? made.config : null;
+  }
+  const where = whereOf(target.path);
+  if (!where || where.key === "seams") return null;
+  const items = listOf(config, where);
+  const item = items[where.index];
+  const axes = item && axesOf(item, where.key);
+  if (!item || !axes) return null;
+  const across = axes[1] ? Math.max(1, Math.floor(rows)) : 1;
+  const along = Math.max(1, Math.floor(columns));
+  if (along * across <= 1 || along * across > MAX_COPIES) return null;
+  const copies: RawConfig[] = [];
+  for (let row = 0; row < across; row++) {
+    for (let column = 0; column < along; column++) {
+      if (row || column) copies.push(moved(item, axes, column * stepAlong, row * stepAcross));
+    }
+  }
+  return withList(config, where, [...items, ...copies]);
 }
