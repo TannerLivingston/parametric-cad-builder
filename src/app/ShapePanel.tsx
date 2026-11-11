@@ -4,20 +4,12 @@
 import type { RawConfig } from "./configEdit.js";
 import { ColorField, NumberField, TextField } from "./fields.js";
 import {
-  addPlateHole,
-  addCableTie,
-  addFoot,
   setShiftRegisters,
   setWiringChecks,
   tiesAlongWires,
-  addWeight,
-  addSupport,
   feetAtCorners,
-  addPlatePin,
-  addVent,
   addReservedRoom,
   addSurface,
-  addWallHole,
   DEFAULT_TOP_COLOR,
   parseSplits,
   removePlateHole,
@@ -42,7 +34,6 @@ import {
   setSeam,
   setSurfaceBulge,
   setSurfaceThickness,
-  addSeam,
   removeSeam,
   updateSeam,
   setTopPanel,
@@ -62,12 +53,16 @@ import {
   updateSurface,
   updateWallHole,
 } from "./shapeEdit.js";
-import { addSurfaceLabel, addWallLabel, removeLabel, updateLabel } from "./labelEdit.js";
+import { removeLabel, updateLabel } from "./labelEdit.js";
+import { PLACING, type Placing } from "./placeEdit.js";
 
 const WALLS = ["left", "right", "front", "rear"] as const;
 const LABEL_SIDES = ["below", "above", "left", "right"] as const;
 
-export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(next: RawConfig): void }) {
+// `onPlace` hands something to be put where the next click in the view lands. Without it, there's
+// no view to click in, and it goes in the middle.
+export function ShapePanel({ config, onChange, onPlace }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void }) {
+  const place = (placing: Placing) => (onPlace ? onPlace(placing) : onChange(placing.middle(config)));
   const { enclosure: e, fabrication, topPanels, seams, wallHoles, opening, plate } = shapeValues(config);
   const labels: RawConfig[] = config.labels ?? [];
   const vents: RawConfig[] = config.vents ?? [];
@@ -206,7 +201,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
             <button className="danger" onClick={() => onChange(removeWallHole(config, index))}>Remove hole</button>
           </div>
         ))}
-        <button onClick={() => onChange(addWallHole(config))}>Add a hole</button>
+        <button onClick={() => place(PLACING.wallHole)}>Add a hole</button>
       </section>
 
       <section>
@@ -231,7 +226,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
             <button className="danger" onClick={() => onChange(removeVent(config, index))}>Remove vent</button>
           </div>
         ))}
-        <button onClick={() => onChange(addVent(config))}>Add a vent</button>
+        <button onClick={() => place(PLACING.vent)}>Add a vent</button>
       </section>
 
       <section>
@@ -291,8 +286,8 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
           </div>
         ))}
         <div className="row">
-          <button onClick={() => onChange(addSurfaceLabel(config))}>Add to a surface</button>
-          <button onClick={() => onChange(addWallLabel(config))}>Add to a wall</button>
+          <button onClick={() => place(PLACING.surfaceLabel)}>Add to a surface</button>
+          <button onClick={() => place(PLACING.wallLabel)}>Add to a wall</button>
         </div>
       </section>
 
@@ -397,10 +392,10 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
           </div>
         ))}
         <div className="row">
-          <button onClick={() => onChange(addPlateHole(config))}>Add a hole</button>
-          <button onClick={() => onChange(addPlatePin(config))}>Add a pin</button>
-          <button onClick={() => onChange(addCableTie(config))}>Add a cable tie bridge</button>
-          <button onClick={() => onChange(addSupport(config))}>Add a support</button>
+          <button onClick={() => place(PLACING.plateHole)}>Add a hole</button>
+          <button onClick={() => place(PLACING.platePin)}>Add a pin</button>
+          <button onClick={() => place(PLACING.cableTie)}>Add a cable tie bridge</button>
+          <button onClick={() => place(PLACING.support)}>Add a support</button>
         </div>
       </section>
 
@@ -420,7 +415,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
           </div>
         ))}
         <div className="row">
-          <button onClick={() => onChange(addWeight(config))}>Add a weight pocket</button>
+          <button onClick={() => place(PLACING.weight)}>Add a weight pocket</button>
         </div>
       </section>
 
@@ -439,7 +434,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
         ))}
         <div className="row">
           <button onClick={() => onChange(feetAtCorners(config))}>Put four at the corners</button>
-          <button onClick={() => onChange(addFoot(config))}>Add a foot</button>
+          <button onClick={() => place(PLACING.foot)}>Add a foot</button>
         </div>
       </section>
 
@@ -487,7 +482,7 @@ export function ShapePanel({ config, onChange }: { config: RawConfig; onChange(n
         {seams.length ? (
           <>
             <p className="hint">A lip hides the joint and lines the pieces up: the left piece's outer skin reaches this far over a step in the right one. 0 leaves it flat.</p>
-            <button onClick={() => onChange(addSeam(config))}>Add a seam</button>
+            <button onClick={() => place(PLACING.seam)}>Add a seam</button>
           </>
         ) : null}
         <div className="fields">

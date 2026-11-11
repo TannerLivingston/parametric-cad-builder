@@ -22,6 +22,12 @@ can be done without touching JSON:
 3. **Screws:** see the screws placed automatically, and move, add or remove any you need to.
 4. **Print:** download each part, and see the hardware to buy.
 
+Adding something asks where it goes: the view waits for a click, and puts it there. A part goes on the surface, wall or
+floor that's clicked, whichever it mounts on. A label goes on the surface or wall clicked, a hole or vent in the wall, a seam
+across the width at the click, and a plate hole, pin, cable tie, support, weight pocket or foot at the spot on the floor,
+which a click reaches through the top, or on the underside from below. A click on something it can't go on says so and keeps
+waiting. **Put it in the middle** adds it where it used to go, and **Cancel** or Escape leaves it out.
+
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
 tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for

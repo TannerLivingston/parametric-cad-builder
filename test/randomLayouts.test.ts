@@ -165,5 +165,6 @@ describe("random layouts", () => {
     expect(totals.withCradle).toBeGreaterThan(5);
     expect(totals.withRounds).toBeGreaterThan(5);
     expect(totals.cutouts / totals.layouts).toBeGreaterThan(8);
-  });
+    // Some two and a half minutes by itself, and longer with the rest of the tests running beside it.
+  }, 600_000);
 });

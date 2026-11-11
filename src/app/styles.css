@@ -683,6 +683,12 @@ fieldset.fields legend {
   font-variant-numeric: tabular-nums;
 }
 
+.measure-readout.placing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .section-axis {
   width: auto;
 }

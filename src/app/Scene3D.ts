@@ -20,6 +20,14 @@ export interface SceneEvents {
   onFastenerDrag(id: string, x: number, y: number): void;
   onFastenerDrop(id: string, x: number, y: number): void;
   onMeasure(points: [number, number, number][]): void;
+  // A click on the model while it's waiting for one: each face under it, nearest first, as where
+  // it is on the design as built and which way it looks.
+  onPick(faces: PickedFace[]): void;
+}
+
+export interface PickedFace {
+  point: [number, number, number];
+  normal: [number, number, number];
 }
 
 export interface SceneColors {
@@ -108,6 +116,7 @@ export class Scene3D {
   private highlight: THREE.Group | null = null;
   private wires: THREE.Group | null = null;
   private measuring = false;
+  private picking = false;
   private measurePoints: [number, number, number][] = [];
   private measureMarks: THREE.Group | null = null;
   private section: THREE.Plane | null = null;
@@ -438,6 +447,25 @@ export class Scene3D {
     this.measurePoints = [];
     this.drawMeasure();
     this.events.onMeasure([]);
+  }
+
+  // Waits for a click on the model, to put something there, instead of selecting or dragging.
+  setPicking(on: boolean) {
+    this.picking = on;
+    this.renderer.domElement.style.cursor = on ? "crosshair" : "";
+  }
+
+  // Every face under a click, nearest first: each point with its part's separation taken off, and
+  // its normal. All of them, so that a click can reach the floor through the top.
+  private pickFaces(event: PointerEvent): PickedFace[] {
+    this.rayFrom(event);
+    const targets = [...this.parts.values()].filter((p) => p.mesh.visible).map((p) => p.mesh);
+    const hits = this.visibleHits(this.raycaster.intersectObjects(targets, false).filter((hit) => hit.face));
+    return hits.map((hit) => {
+      const point = hit.point.clone().sub(hit.object.position);
+      const normal = hit.face!.normal.clone().transformDirection(hit.object.matrixWorld);
+      return { point: [point.x, point.y, point.z], normal: [normal.x, normal.y, normal.z] };
+    });
   }
 
   private drawMeasure() {
@@ -853,7 +881,7 @@ export class Scene3D {
 
   private handleDown = (event: PointerEvent) => {
     if (event.button !== 0) return;
-    if (this.measuring) {
+    if (this.measuring || this.picking) {
       this.pressedEmpty = { x: event.clientX, y: event.clientY };
       return;
     }
@@ -919,7 +947,7 @@ export class Scene3D {
       return;
     }
     if (!this.drag) {
-      this.renderer.domElement.style.cursor = this.markerAt(event) ? "grab" : "";
+      this.renderer.domElement.style.cursor = this.picking ? "crosshair" : this.markerAt(event) ? "grab" : "";
       return;
     }
     const component = this.model?.components.find((c) => c.id === this.drag!.id);
@@ -961,6 +989,15 @@ export class Scene3D {
       this.renderer.domElement.style.cursor = "";
       if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
       this.events.onDragEnd(id);
+      return;
+    }
+    if (this.picking) {
+      if (this.pressedEmpty && Math.hypot(event.clientX - this.pressedEmpty.x, event.clientY - this.pressedEmpty.y) < 4) {
+        const faces = this.pickFaces(event);
+        // With none, it missed the model, which is worth saying.
+        this.events.onPick(faces);
+      }
+      this.pressedEmpty = null;
       return;
     }
     // A click on empty space deselects, but the end of an orbit shouldn't.

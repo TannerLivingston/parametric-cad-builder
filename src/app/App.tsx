@@ -24,6 +24,8 @@ import { buildSceneModel, issueSpot, measureBetween, nearestNeighbour, sectionRa
 import { ScrewsPanel } from "./ScrewsPanel.js";
 import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
+import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
+import { spotAt } from "./pickSpot.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -109,6 +111,9 @@ export function App() {
   const [printReports, setPrintReports] = useState<PartPrintReport[]>([]);
   const [shownIssue, setShownIssue] = useState<Issue | null>(null);
   const [measuring, setMeasuring] = useState(false);
+  // Something waiting to be put where the next click in the view lands.
+  const [placing, setPlacing] = useState<Placing | null>(null);
+  const [placingMissed, setPlacingMissed] = useState(false);
   const [reference, setReference] = useState<(LoadedReference & { mesh: ReferenceMesh }) | null>(null);
   const [referenceLoading, setReferenceLoading] = useState(false);
   const [referenceProblem, setReferenceProblem] = useState<string | null>(null);
@@ -190,8 +195,8 @@ export function App() {
 
   // Dragging reads the latest state through a ref, because the scene's callbacks are
   // set once. Each move replaces the text, and only the release joins the undo history.
-  const latest = useRef({ config, applyConfig, model, text, commit, fasteners });
-  latest.current = { config, applyConfig, model, text, commit, fasteners };
+  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing });
+  latest.current = { config, applyConfig, model, text, commit, fasteners, placing };
 
   useEffect(() => {
     const scene = new Scene3D(
@@ -208,6 +213,15 @@ export function App() {
         },
         onDragEnd: () => latest.current.commit(latest.current.text),
         onMeasure: setMeasured,
+        onPick: (faces) => {
+          const { config: current, applyConfig: apply, model: scene3d, placing: waiting } = latest.current;
+          if (!waiting || !scene3d) return;
+          const spot = spotFor(waiting, faces.map((face) => spotAt(scene3d, face.point, face.normal)));
+          if (!spot) return setPlacingMissed(true);
+          apply(waiting.at(current, spot));
+          if (waiting.selects) setSelected(waiting.selects);
+          setPlacing(null);
+        },
         onFastenerSelect: setSelectedFastener,
         onFastenerDrag: (id, x, y) => {
           // Checked as it goes, without changing the design until it's dropped.
@@ -297,6 +311,12 @@ export function App() {
   useEffect(() => {
     sceneRef.current?.setMeasuring(measuring);
   }, [measuring]);
+
+  useEffect(() => {
+    sceneRef.current?.setPicking(placing !== null);
+    setPlacingMissed(false);
+    if (placing) setMeasuring(false);
+  }, [placing]);
 
   useEffect(() => {
     if (!reference) {
@@ -408,6 +428,10 @@ export function App() {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       const typing = target.matches?.("input, textarea, select");
+      if (event.key === "Escape" && latest.current.placing) {
+        setPlacing(null);
+        return;
+      }
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
         if (typing) return;
         event.preventDefault();
@@ -562,11 +586,20 @@ export function App() {
     }
   };
 
+  // Waits for a click in the view to say where it goes, where there's a view to click in.
   const addPart = () => {
+    const part = partsOf(config)[chosenPart];
+    setTab("layout");
+    if (part && lastBuild && valid) return setPlacing(placingPart(config, chosenPart, part, selectedComponent?.surface));
     const { config: next, id } = addComponent(config, chosenPart, selectedComponent?.surface);
     applyConfig(next);
     setSelected(id);
-    setTab("layout");
+  };
+  const placeInMiddle = () => {
+    if (!placing) return;
+    applyConfig(placing.middle(config));
+    if (placing.selects) setSelected(placing.selects);
+    setPlacing(null);
   };
 
   const selectIssue = (issue: Issue) => {
@@ -714,7 +747,7 @@ export function App() {
         </div>
 
         {tab === "shape" ? (
-          <ShapePanel config={config} onChange={(next) => applyConfig(next)} />
+          <ShapePanel config={config} onChange={(next) => applyConfig(next)} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />
         ) : tab === "layout" ? (
           <div className="tab-body">
             <section className="add-part">
@@ -1030,6 +1063,13 @@ export function App() {
 
       <main className="stage">
         <div className="viewport" ref={viewportRef} data-testid="viewport" aria-label="3D view of the enclosure" />
+        {placing ? (
+          <p className="measure-readout placing" role="status">
+            {placingMissed ? `That isn't ${ontoWords(placing)}. ` : ""}Click {ontoWords(placing)} to put {placing.what} there.
+            <button onClick={placeInMiddle}>Put it in the middle</button>
+            <button onClick={() => setPlacing(null)}>Cancel</button>
+          </p>
+        ) : null}
         {measuring ? (
           <p className="measure-readout" role="status">
             {measurement

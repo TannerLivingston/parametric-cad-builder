@@ -12,14 +12,11 @@ proven the numbers. Move an item to the done list once it's built.
 The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
 click or drag in the view.
 
-- [ ] **Click in the view to choose where something goes.** Adding a label, hole, vent, seam, support, foot, weight pocket or
-  cable tie asks for a click on a surface, wall or the plate, and puts it there, with the surface or wall filled in from what
-  was clicked.
 - [ ] **Click anything in the view to select it,** not only parts: a surface, wall, label, hole, vent, seam, screw or foot. The
   sidebar opens to its fields, on whichever tab they're on, and scrolls to them.
 - [ ] **The other way round:** resting on or focusing a field lights up what it controls in the view, such as a surface's
   edge for its depth and height, a round, or a seam's line.
-- [ ] **Add a part by clicking where it goes,** or by dragging it out of the library list onto a surface, a wall or the floor.
+- [ ] **Drag a part out of the library list** onto a surface, a wall or the floor.
 - [ ] **Drag a part from one surface to another,** or onto a wall or the floor where it can go, without the Surface list.
 - [ ] **Handles on the shape itself:** drag a crease to move a surface's end, a wall to change the width or depth, a seam or
   a plate joint along the width, the middle of a curve to set its bulge, and a bowed wall to set its bow.
@@ -56,6 +53,9 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Click in the view to choose where something goes.** Adding a part, label, hole, vent, seam, support, foot, weight
+  pocket, pin or cable tie waits for a click on a surface, wall, the floor or the underside, and puts it there, with the
+  surface or wall filled in from what was clicked.
 - [x] **Parts on a curved surface,** each on a flat of its own let into the curve, as thick as the surface, with sloped
   sides so it needs no support. Its own label goes on the flat with it, and dragging it in the view follows the curve. And
   the view no longer draws a line at each of a curve's short flats.
