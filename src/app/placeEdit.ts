@@ -93,3 +93,12 @@ export function ontoWords(placing: Placing): string {
   const words = placing.onto.map((kind) => names[kind]);
   return placing.onto.length === 4 ? "the model" : words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words.at(-1)}` : words[0]!;
 }
+
+// A part on a top surface dragged over another one goes onto it, under the pointer, or null where
+// it's still over its own, or over no top surface at all.
+export function ontoAnotherSurface(config: RawConfig, id: string, onSurface: string | null, spots: (Spot | null)[]): RawConfig | null {
+  const spot = spots.find((s): s is Spot => s !== null);
+  if (spot?.kind !== "surface" || spot.surface === onSurface) return null;
+  const half = (value: number) => Math.round(value * 2) / 2;
+  return updateComponent(config, id, { surface: spot.surface, u: half(spot.u), v: half(spot.v) });
+}

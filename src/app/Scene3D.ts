@@ -11,6 +11,9 @@ import { curveCoordinates, explodeOffset, sectionPlane, surfaceCoordinates, type
 
 export type ViewPreset = "iso" | "top" | "front" | "under";
 
+// Which top surface a part is on: the curve, for one on a curve, rather than its own flat.
+const surfaceKey = (component: SceneComponent) => component.curve ?? component.surface?.id ?? null;
+
 export interface SceneEvents {
   onSelect(id: string | null): void;
   onDragStart(id: string): void;
@@ -28,6 +31,9 @@ export interface SceneEvents {
   onClick(faces: PickedFace[]): void;
   // A right-click that didn't pan: where on the page, the part under it if any, and the faces.
   onMenu(at: { x: number; y: number }, part: string | null, faces: PickedFace[]): void;
+  // While a part on a top surface is dragged, the faces under the pointer, so that it can go onto
+  // another surface. True if it did, and the part's new place is on its way.
+  onDragOnto(id: string, faces: PickedFace[]): boolean;
 }
 
 export interface PickedFace {
@@ -115,7 +121,7 @@ export class Scene3D {
   private focus: Set<number> | null = null; // the printed parts an assembly step is about, with the rest faded
   private fadedMaterial = new THREE.MeshStandardMaterial({ color: 0x9a9a9a, roughness: 0.9, transparent: true, opacity: 0.12, depthWrite: false });
   private raycaster = new THREE.Raycaster();
-  private drag: { id: string; plane: THREE.Plane; offset: [number, number]; surface: Surface | null; moved: boolean } | null = null;
+  private drag: { id: string; plane: THREE.Plane; offset: [number, number]; surface: Surface | null; key: string | null; moved: boolean } | null = null;
   private preview: THREE.Group | null = null;
   private reference: THREE.Group | null = null;
   private highlight: THREE.Group | null = null;
@@ -222,6 +228,14 @@ export class Scene3D {
 
   setModel(model: SceneModel | null, selected: string | null, invalid: Set<string>) {
     this.model = model ?? this.model;
+    // A part dragged onto another surface goes on dragging along that one, centred on the pointer.
+    const dragged = this.drag && this.model?.components.find((c) => c.id === this.drag!.id);
+    if (this.drag && dragged && surfaceKey(dragged) !== this.drag.key) {
+      this.drag.plane = this.planeFor(dragged);
+      this.drag.surface = dragged.surface;
+      this.drag.key = surfaceKey(dragged);
+      this.drag.offset = [0, 0];
+    }
     this.selected = selected;
     this.invalid = invalid;
     this.rebuildMarkers();
@@ -465,7 +479,12 @@ export class Scene3D {
 
   // Every face under a click, nearest first: each point with its part's separation taken off, and
   // its normal. All of them, so that a click can reach the floor through the top.
-  private pickFaces(event: PointerEvent): PickedFace[] {
+  // The faces at a point on the page, for something dropped onto the view.
+  facesAt(clientX: number, clientY: number): PickedFace[] {
+    return this.pickFaces({ clientX, clientY });
+  }
+
+  private pickFaces(event: { clientX: number; clientY: number }): PickedFace[] {
     this.rayFrom(event);
     const targets = [...this.parts.values()].filter((p) => p.mesh.visible).map((p) => p.mesh);
     const hits = this.visibleHits(this.raycaster.intersectObjects(targets, false).filter((hit) => hit.face));
@@ -834,7 +853,7 @@ export class Scene3D {
     return mesh;
   }
 
-  private rayFrom(event: PointerEvent) {
+  private rayFrom(event: { clientX: number; clientY: number }) {
     const rect = this.renderer.domElement.getBoundingClientRect();
     const pointer = new THREE.Vector2(
       ((event.clientX - rect.left) / rect.width) * 2 - 1,
@@ -935,6 +954,7 @@ export class Scene3D {
       plane,
       offset: [marker.component.a - at[0], marker.component.b - at[1]],
       surface: marker.component.surface,
+      key: surfaceKey(marker.component),
       moved: false,
     };
     this.events.onSelect(marker.component.id);
@@ -968,6 +988,11 @@ export class Scene3D {
     }
     const component = this.model?.components.find((c) => c.id === this.drag!.id);
     if (!component) return;
+    if (component.mount === "panel" && !component.inWall && this.events.onDragOnto(component.id, this.pickFaces(event))) {
+      this.drag.moved = true;
+      this.renderer.domElement.style.cursor = "grabbing";
+      return;
+    }
     const at = this.planePosition(this.rayFrom(event), this.drag.plane, component);
     if (!at) return;
     this.drag.moved = true;

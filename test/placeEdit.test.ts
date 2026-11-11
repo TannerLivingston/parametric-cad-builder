@@ -1,7 +1,7 @@
 // Adding things where a click in the view lands.
 import { describe, expect, it } from "vitest";
 import { library } from "../src/library.js";
-import { ontoWords, PLACING, placingPart, spotFor } from "../src/app/placeEdit.js";
+import { ontoAnotherSurface, ontoWords, PLACING, placingPart, spotFor } from "../src/app/placeEdit.js";
 import { validateConfig } from "../src/index.js";
 
 const box = (): any => ({
@@ -60,5 +60,18 @@ describe("placing by a click", () => {
     expect(ontoWords(PLACING.label)).toBe("a top surface or a wall");
     expect(ontoWords(PLACING.wallHole)).toBe("a wall");
     expect(ontoWords(PLACING.seam)).toBe("the model");
+  });
+});
+
+describe("dragging a part onto another surface", () => {
+  const config = (): any => ({ components: [{ id: "b", type: "arcade-24mm", surface: "deck", u: 40, v: 30 }] });
+  it("moves it there, under the pointer, in half millimetres", () => {
+    const next = ontoAnotherSurface(config(), "b", "deck", [null, { kind: "surface", surface: "panel", u: 101.26, v: 12.8 }]);
+    expect(next!.components[0]).toEqual({ id: "b", type: "arcade-24mm", surface: "panel", u: 101.5, v: 13 });
+  });
+  it("leaves it where it's still over its own surface, or over no surface", () => {
+    expect(ontoAnotherSurface(config(), "b", "deck", [{ kind: "surface", surface: "deck", u: 50, v: 30 }])).toBeNull();
+    expect(ontoAnotherSurface(config(), "b", "deck", [{ kind: "wall", wall: "rear", at: 50, z: 10 }])).toBeNull();
+    expect(ontoAnotherSurface(config(), "b", "deck", [])).toBeNull();
   });
 });

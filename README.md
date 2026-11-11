@@ -55,6 +55,9 @@ tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link
 others only once it's hosted. Parts with a connector or a recess are still edited in the **Config** tab, and
 everything else can be too.
 
+A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the
+**Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
+
 A selected part can be copied in rows, mirrored across the enclosure's centre, centred, or lined up with another part on the same
 surface. Drag parts in the 3D view, or use the keys above. Changes
 write back to the config, and editing the config text updates the view. Everything saves as a draft in the browser.

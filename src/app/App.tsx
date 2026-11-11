@@ -24,7 +24,7 @@ import { buildSceneModel, issueSpot, measureBetween, nearestNeighbour, sectionRa
 import { ScrewsPanel } from "./ScrewsPanel.js";
 import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
-import { ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
+import { ontoAnotherSurface, ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
 import { FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } from "./pickThing.js";
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
@@ -36,6 +36,8 @@ import { referenceMiddle, referenceTransform, startingPlace } from "../reference
 import type { ReferenceMesh } from "./engineClient.js";
 import { addCustomPart, draftFromPart, newPartDraft, removeCustomPart, updateCustomPart } from "./shapeEdit.js";
 import { TEMPLATES } from "./templates.js";
+
+const PART_DRAG = "application/x-enclosure-part"; // a library part being dragged onto the view
 
 const DRAFT_KEY = "enclosure-generator.draft-v3";
 const STEP_GAP = 30; // how far apart an assembly step separates the parts
@@ -252,6 +254,14 @@ export function App() {
           apply(updateComponent(current, id, patch), false);
         },
         onDragEnd: () => latest.current.commit(latest.current.text),
+        onDragOnto: (id, faces) => {
+          const { config: current, applyConfig: apply, model: scene3d } = latest.current;
+          const component = scene3d?.components.find((c) => c.id === id);
+          if (!scene3d || !component) return false;
+          const next = ontoAnotherSurface(current, id, component.curve ?? component.surface?.id ?? null, faces.map((face) => spotAt(scene3d, face.point, face.normal)));
+          if (next) apply(next, false);
+          return next !== null;
+        },
         onMeasure: setMeasured,
         onClick: (faces) => {
           const { model: scene3d, tab: on } = latest.current;
@@ -762,6 +772,17 @@ export function App() {
     applyConfig(next);
     setSelected(id);
   };
+  // A part dragged from the library and dropped on the view goes where it was dropped, if it can.
+  const dropPart = (type: string, part: Part, x: number, y: number) => {
+    const faces = sceneRef.current?.facesAt(x, y) ?? [];
+    const dropping = placingPart(config, type, part, selectedComponent?.surface);
+    const spot = model ? spotFor(dropping, faces.map((face) => spotAt(model, face.point, face.normal))) : null;
+    setPlacing(null);
+    setTab("layout");
+    if (!spot) return setNotice(`The ${part.name} goes on ${ontoWords(dropping)}. Drop it there.`);
+    applyConfig(dropping.at(config, spot));
+    if (dropping.selects) setSelected(dropping.selects);
+  };
   const placeInMiddle = () => {
     if (!placing) return;
     applyConfig(placing.middle(config));
@@ -928,7 +949,17 @@ export function App() {
                     <option key={id} value={id}>{part.name}{part.source === "measured" ? "" : part.source === "datasheet" ? " (from a datasheet)" : " (estimated)"}</option>
                   ))}
                 </select>
-                <button onClick={addPart}>Add</button>
+                <button
+                  onClick={addPart}
+                  draggable={Boolean(lastBuild && valid)}
+                  onDragStart={(event) => {
+                    event.dataTransfer.setData(PART_DRAG, chosenPart);
+                    event.dataTransfer.effectAllowed = "copy";
+                  }}
+                  title="Click, then click where it goes in the view. Or drag it there."
+                >
+                  Add
+                </button>
               </div>
               <div className="row part-actions">
                 <button onClick={() => setPartEditor({ id: null })}>New custom part</button>
@@ -1232,7 +1263,24 @@ export function App() {
       </aside>
 
       <main className="stage">
-        <div className="viewport" ref={viewportRef} data-testid="viewport" aria-label="3D view of the enclosure" />
+        <div
+          className="viewport"
+          ref={viewportRef}
+          data-testid="viewport"
+          aria-label="3D view of the enclosure"
+          onDragOver={(event) => {
+            if (!event.dataTransfer.types.includes(PART_DRAG)) return;
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }}
+          onDrop={(event) => {
+            const type = event.dataTransfer.getData(PART_DRAG);
+            const part = partsOf(config)[type];
+            if (!type || !part || !model) return;
+            event.preventDefault();
+            dropPart(type, part, event.clientX, event.clientY);
+          }}
+        />
         {menu ? (
           <div className="view-menu" role="menu" aria-label={menu.title} style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 40 - (menu.array ? 160 : 32 * menu.choices.length)) }}>
             <p>{menu.array ? `${menu.title}: make an array` : menu.title}</p>
