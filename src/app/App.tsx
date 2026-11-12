@@ -1617,7 +1617,7 @@ export function App() {
           ? dimensionsFor(model, selectedComponent.id).map((dimension) => {
               const at = sceneRef.current?.project(dimension.at);
               if (!at || dimension.value < 0) return null;
-              const words = { left: "the left end", right: "the right end", front: "the front edge", back: "the back edge" }[dimension.side];
+              const words = dimension.to ?? { left: "the left end", right: "the right end", front: "the front edge", back: "the back edge" }[dimension.side];
               const place = (text: string) => {
                 setEditingSide(null);
                 const value = Number(text);

@@ -36,4 +36,26 @@ describe("sizes typed onto the view", () => {
     expect(placeForDimension(model, "b", "back", 5)).toEqual([60, 65]);
     expect(placeForDimension(model, "nothing", "left", 5)).toBeNull();
   });
+
+  it("measures to the nearest neighbour in its way instead, and moves to make that gap what's typed", () => {
+    const withNeighbours: any = {
+      ...model,
+      components: [
+        ...model.components,
+        { ...base, id: "n1", mount: "panel", a: 20, b: 30, surface: deck, above: { shape: "rect", hu: 8, hv: 8, height: 5 } },
+        { ...base, id: "n2", mount: "panel", a: 60, b: 70, surface: deck, above: { shape: "rect", hu: 5, hv: 5, height: 5 } },
+        // Not in its row or column, so not in the way.
+        { ...base, id: "far", mount: "panel", a: 200, b: 70, surface: deck, above: { shape: "rect", hu: 5, hv: 5, height: 5 } },
+      ],
+    };
+    const dims = dimensionsFor(withNeighbours, "b");
+    expect(dims.map((d) => [d.side, d.to, d.value])).toEqual([
+      ["left", "n1", 20],
+      ["right", null, 228],
+      ["front", null, 20],
+      ["back", "n2", 25],
+    ]);
+    expect(placeForDimension(withNeighbours, "b", "left", 5)).toEqual([45, 30]);
+    expect(placeForDimension(withNeighbours, "b", "back", 10)).toEqual([60, 45]);
+  });
 });

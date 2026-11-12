@@ -7,6 +7,7 @@ export type Side = "left" | "right" | "front" | "back";
 
 export interface Dimension {
   side: Side;
+  to: string | null; // the neighbour it's measured to, or null for the edge of where it sits
   value: number; // mm from the part's edge to that edge
   at: [number, number, number]; // where to show it, halfway across the gap
 }
@@ -40,19 +41,44 @@ const halfOf = (c: SceneComponent): [number, number] => {
 };
 const round = (value: number) => Math.round(value * 100) / 100;
 
+const placeOf = (c: SceneComponent) => (c.inWall ? `wall ${c.inWall.wall}` : c.mount === "floor" ? "floor" : `surface ${c.curve ?? c.surface?.id}`);
+
+// What each side measures to: the edge of the nearest neighbour that way, among those it would run
+// into going straight that way, or else the edge of where it sits.
+function stops(model: SceneModel, c: SceneComponent, size: [number, number]): Record<Side, { edge: number; to: string | null }> {
+  const [ha, hb] = halfOf(c);
+  const others = model.components.filter((n) => n.id !== c.id && placeOf(n) === placeOf(c));
+  const result: Record<Side, { edge: number; to: string | null }> = {
+    left: { edge: 0, to: null },
+    right: { edge: size[0], to: null },
+    front: { edge: 0, to: null },
+    back: { edge: size[1], to: null },
+  };
+  for (const n of others) {
+    const [na, nb] = halfOf(n);
+    const besideAcross = Math.abs(n.b - c.b) < nb + hb; // in its row, so in the way left or right
+    const besideBack = Math.abs(n.a - c.a) < na + ha; // in its column, so in the way front or back
+    if (besideAcross && n.a + na <= c.a - ha && n.a + na > result.left.edge) result.left = { edge: n.a + na, to: n.id };
+    if (besideAcross && n.a - na >= c.a + ha && n.a - na < result.right.edge) result.right = { edge: n.a - na, to: n.id };
+    if (besideBack && n.b + nb <= c.b - hb && n.b + nb > result.front.edge) result.front = { edge: n.b + nb, to: n.id };
+    if (besideBack && n.b - nb >= c.b + hb && n.b - nb < result.back.edge) result.back = { edge: n.b - nb, to: n.id };
+  }
+  return result;
+}
+
 export function dimensionsFor(model: SceneModel, id: string): Dimension[] {
   const c = model.components.find((item) => item.id === id);
   const frame = c && frameOf(model, c);
   if (!c || !frame) return [];
   const [ha, hb] = halfOf(c);
-  const [width, length] = frame.size;
+  const stop = stops(model, c, frame.size);
   const [low, high] = [c.a - ha, c.a + ha];
   const [near, far] = [c.b - hb, c.b + hb];
   return [
-    { side: "left", value: round(low), at: frame.point(low / 2, c.b) },
-    { side: "right", value: round(width - high), at: frame.point((high + width) / 2, c.b) },
-    { side: "front", value: round(near), at: frame.point(c.a, near / 2) },
-    { side: "back", value: round(length - far), at: frame.point(c.a, (far + length) / 2) },
+    { side: "left", to: stop.left.to, value: round(low - stop.left.edge), at: frame.point((low + stop.left.edge) / 2, c.b) },
+    { side: "right", to: stop.right.to, value: round(stop.right.edge - high), at: frame.point((high + stop.right.edge) / 2, c.b) },
+    { side: "front", to: stop.front.to, value: round(near - stop.front.edge), at: frame.point(c.a, (near + stop.front.edge) / 2) },
+    { side: "back", to: stop.back.to, value: round(stop.back.edge - far), at: frame.point(c.a, (far + stop.back.edge) / 2) },
   ];
 }
 
@@ -62,11 +88,11 @@ export function placeForDimension(model: SceneModel, id: string, side: Side, val
   const frame = c && frameOf(model, c);
   if (!c || !frame) return null;
   const [ha, hb] = halfOf(c);
-  const [width, length] = frame.size;
-  if (side === "left") return [round(value + ha), c.b];
-  if (side === "right") return [round(width - value - ha), c.b];
-  if (side === "front") return [c.a, round(value + hb)];
-  return [c.a, round(length - value - hb)];
+  const stop = stops(model, c, frame.size);
+  if (side === "left") return [round(stop.left.edge + value + ha), c.b];
+  if (side === "right") return [round(stop.right.edge - value - ha), c.b];
+  if (side === "front") return [c.a, round(stop.front.edge + value + hb)];
+  return [c.a, round(stop.back.edge - value - hb)];
 }
 
 // Where a part's centre is in the view's space, for finding it on the page.

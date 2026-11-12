@@ -79,8 +79,8 @@ same gap as the row it's joining, with a dashed line along what it's lined up wi
 dragged, the parts of its surface or the floor where it would be refused are shaded red, once they've been worked out: a spot
 every 6 mm is checked in the background after it's selected, which takes a few seconds on a busy design.
 
-A selected part shows its distances to the ends and edges of its surface, wall or floor in the view. Click one and type what it
-should be, and the part moves to match.
+A selected part shows its distances in the view: to the nearest part in its way on each side, or else to the end or edge of its
+surface, wall or floor. Click one and type what it should be, and the part moves to match.
 
 A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the
 **Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
