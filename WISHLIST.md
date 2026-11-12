@@ -12,6 +12,7 @@ proven the numbers. Move an item to the done list once it's built.
 The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
 click or drag in the view.
 
+Nothing open here for now: everything on it so far is in the done list below.
 
 ## Shape
 
