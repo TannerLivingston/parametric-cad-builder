@@ -36,7 +36,7 @@ import { centreOf, dimensionsFor, placeForDimension, type Side } from "./dimensi
 import { reachCells, refusedSquares, type Cell } from "./reach.js";
 import { firstUnfinished, TUTORIAL, tutorialStart, type TutorialState } from "./tutorial.js";
 import { TutorialPanel } from "./TutorialPanel.js";
-import { copyParts, duplicateComponent, duplicateThing, nearestFit, nearestFitThing, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
+import { copyParts, duplicateComponent, duplicateThing, fitSearch, nudgeThing, pasteParts, removeThing, rotateThing, type FitTarget } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -826,6 +826,44 @@ export function App() {
     sceneRef.current?.lookAt(box, facingFor(config, model, path));
   };
 
+  // Looking for the nearest spot that fits, a little at a time, so the app keeps responding. Any
+  // change to the design meanwhile stops it, since what it found would be for the design before.
+  const [fitting, setFitting] = useState<{ key: string; reach: number } | null>(null);
+  const fitRun = useRef(0);
+  const startFit = (target: FitTarget, key: string, name: string) => {
+    const run = ++fitRun.current;
+    const search = fitSearch(config, target);
+    setFitting({ key, reach: 0 });
+    const work = () => {
+      if (fitRun.current !== run) return;
+      const until = performance.now() + 30;
+      let reach = 0;
+      while (performance.now() < until) {
+        const step = search.next();
+        if (step.done) {
+          fitRun.current++;
+          setFitting(null);
+          if (step.value) applyConfig(step.value);
+          else setNotice(`There's nowhere within 40 mm that ${name} fits. The problem says what's in the way.`);
+          return;
+        }
+        reach = step.value;
+      }
+      setFitting({ key, reach });
+      window.setTimeout(work, 0);
+    };
+    window.setTimeout(work, 0);
+  };
+  const cancelFit = () => {
+    fitRun.current++;
+    setFitting(null);
+  };
+  const fittingNow = useRef(fitting);
+  fittingNow.current = fitting;
+  useEffect(() => {
+    if (fittingNow.current) cancelFit();
+  }, [text]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Ctrl+C and Ctrl+V copy the selected parts and paste them, here or in another design, while the
   // cursor isn't in a field, where they copy and paste text as usual.
   useEffect(() => {
@@ -1186,15 +1224,7 @@ export function App() {
               return (
                 <div className="fix-bar" role="status">
                   <span>{problem.message}</span>
-                  <button
-                    onClick={() => {
-                      const next = nearestFitThing(config, picked);
-                      if (next) applyConfig(next);
-                      else setNotice(`There's nowhere within 40 mm that the ${nameOfThing(picked)} fits. The problem says what's in the way.`);
-                    }}
-                  >
-                    Move it to the nearest spot that fits
-                  </button>
+                  <FitButton fitting={fitting?.key === picked ? fitting : null} onStart={() => startFit({ path: picked }, picked, `the ${nameOfThing(picked)}`)} onCancel={cancelFit} />
                 </div>
               );
             })()}
@@ -1273,15 +1303,11 @@ export function App() {
                 <p className="muted">{selectedPart.name}</p>
                 {invalid.has(selectedComponent.id) ? (
                   <div className="row">
-                    <button
-                      onClick={() => {
-                        const next = nearestFit(config, selectedComponent.id);
-                        if (next) applyConfig(next);
-                        else setNotice(`There's nowhere within 40 mm of where ${selectedComponent.id} is that it fits. The problem list says what's in the way.`);
-                      }}
-                    >
-                      Move it to the nearest spot that fits
-                    </button>
+                    <FitButton
+                      fitting={fitting?.key === selectedComponent.id ? fitting : null}
+                      onStart={() => startFit({ part: selectedComponent.id }, selectedComponent.id, selectedComponent.id)}
+                      onCancel={cancelFit}
+                    />
                   </div>
                 ) : null}
                 <div className="fields">
@@ -1741,5 +1767,16 @@ function IssueRow({ issue, onSelect }: { issue: Issue; onSelect(issue: Issue): v
       <span>{issue.message}</span>
       <code>{issue.path}</code>
     </button>
+  );
+}
+
+// The fix that looks for the nearest spot that fits, and says how far out it's looked while it does.
+function FitButton({ fitting, onStart, onCancel }: { fitting: { reach: number } | null; onStart(): void; onCancel(): void }) {
+  if (!fitting) return <button onClick={onStart}>Move it to the nearest spot that fits</button>;
+  return (
+    <span className="row">
+      <button disabled>Looking… {fitting.reach.toFixed(1)} mm out</button>
+      <button onClick={onCancel}>Cancel</button>
+    </span>
   );
 }

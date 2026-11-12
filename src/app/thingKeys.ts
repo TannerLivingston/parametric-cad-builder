@@ -267,44 +267,56 @@ export function pasteParts(config: RawConfig, text: string): { config: RawConfig
   return { config: besideOriginal(config, ["u", "v"], place), ids: [...renamed.values()] };
 }
 
-// The nearest place to where a part is now at which it has no problems of its own, and nothing else
-// is made worse, searched outward a millimetre at a time in sixteen directions. Null if there's
-// none within reach, or it has no problems to begin with.
+// The nearest place to where something is now at which it has no problem of its own, and nothing
+// else is made worse: a part by its id, or a label, hole, vent, seam or plate item by its path.
+// Tried outward in rings half a millimetre apart, a millimetre apart around each, to 40 mm, so a
+// narrow band between two limits isn't stepped over. A seam moves only across.
 const FIT_REACH = 40;
-const FIT_DIRECTIONS = 16;
-export function nearestFit(config: RawConfig, id: string): RawConfig | null {
-  const components: RawConfig[] = config.components ?? [];
-  const original = components.find((c) => c.id === id);
-  if (!original) return null;
-  const problems = (c: RawConfig) => {
-    const result = validateConfig(c, { wiring: false });
-    const errors = result.ok ? [] : result.errors;
-    return { own: errors.filter((issue) => issue.componentIds.includes(id)).length, all: errors.length };
-  };
-  const start = problems(config);
-  if (start.own === 0) return null;
-  const axes: Axes = "wall" in original ? ["at", "z"] : "x" in original ? ["x", "y"] : ["u", "v"];
-  for (let distance = 1; distance <= FIT_REACH; distance++) {
-    for (let i = 0; i < FIT_DIRECTIONS; i++) {
-      const angle = (i / FIT_DIRECTIONS) * 2 * Math.PI;
-      const candidate = { ...config, components: components.map((c) => (c.id === id ? moved(c, axes, distance * Math.cos(angle), distance * Math.sin(angle)) : c)) };
-      const now = problems(candidate);
-      if (now.own === 0 && now.all <= start.all - start.own) return candidate;
+const FIT_SPACING = 1; // mm between the spots tried around a ring
+
+function* fitOffsets(twoD: boolean): Generator<[number, number]> {
+  for (let r = 0.5; r <= FIT_REACH; r += 0.5) {
+    if (!twoD) {
+      yield [r, 0];
+      yield [-r, 0];
+      continue;
+    }
+    const count = Math.max(8, Math.ceil((2 * Math.PI * r) / FIT_SPACING));
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * 2 * Math.PI;
+      yield [Math.round(r * Math.cos(angle) * 10) / 10, Math.round(r * Math.sin(angle) * 10) / 10];
     }
   }
-  return null;
 }
 
-// The same for a label, hole, vent, seam or something on the plate, by its path: the nearest place
-// where it has no problem of its own, and nothing else is made worse. A seam moves only across.
-export function nearestFitThing(config: RawConfig, path: string): RawConfig | null {
-  const where = whereOf(path);
-  if (!where) return null;
-  const items = listOf(config, where);
-  const item = items[where.index];
-  const axes = item && axesOf(item, where.key);
-  if (!item || !axes) return null;
-  const own = (issue: { path: string }) => issue.path === path || issue.path.startsWith(`${path}.`);
+export type FitTarget = { part: string } | { path: string };
+
+// A search that's worked through a step at a time: each yield is how far out it's got, in mm, and
+// what it returns is the design with it moved, or null if there's nowhere in reach. Nothing at all
+// for something that has no problem of its own.
+export function* fitSearch(config: RawConfig, target: FitTarget): Generator<number, RawConfig | null> {
+  let own: (issue: { path: string; componentIds: string[] }) => boolean;
+  let at: (da: number, db: number) => RawConfig;
+  let twoD: boolean;
+  if ("part" in target) {
+    const components: RawConfig[] = config.components ?? [];
+    const original = components.find((c) => c.id === target.part);
+    if (!original) return null;
+    const axes: Axes = "wall" in original ? ["at", "z"] : "x" in original ? ["x", "y"] : ["u", "v"];
+    own = (issue) => issue.componentIds.includes(target.part);
+    at = (da, db) => ({ ...config, components: components.map((c) => (c.id === target.part ? moved(c, axes, da, db) : c)) });
+    twoD = true;
+  } else {
+    const where = whereOf(target.path);
+    if (!where) return null;
+    const items = listOf(config, where);
+    const item = items[where.index];
+    const axes = item && axesOf(item, where.key);
+    if (!item || !axes) return null;
+    own = (issue) => issue.path === target.path || issue.path.startsWith(`${target.path}.`);
+    at = (da, db) => withList(config, where, items.map((it, i) => (i === where.index ? moved(it, axes, da, db) : it)));
+    twoD = axes[1] !== null;
+  }
   const problems = (c: RawConfig) => {
     const result = validateConfig(c, { wiring: false });
     const errors = result.ok ? [] : result.errors;
@@ -312,16 +324,22 @@ export function nearestFitThing(config: RawConfig, path: string): RawConfig | nu
   };
   const start = problems(config);
   if (start.own === 0) return null;
-  const at = (da: number, db: number) => withList(config, where, items.map((it, i) => (i === where.index ? moved(it, axes, da, db) : it)));
-  for (let distance = 1; distance <= FIT_REACH; distance++) {
-    const tries: [number, number][] = axes[1]
-      ? Array.from({ length: FIT_DIRECTIONS }, (_, i) => [distance * Math.cos((i / FIT_DIRECTIONS) * 2 * Math.PI), distance * Math.sin((i / FIT_DIRECTIONS) * 2 * Math.PI)])
-      : [[distance, 0], [-distance, 0]];
-    for (const [da, db] of tries) {
-      const candidate = at(da, db);
-      const now = problems(candidate);
-      if (now.own === 0 && now.all <= start.all - start.own) return candidate;
-    }
+  for (const [da, db] of fitOffsets(twoD)) {
+    const candidate = at(da, db);
+    const now = problems(candidate);
+    if (now.own === 0 && now.all <= start.all - start.own) return candidate;
+    yield Math.hypot(da, db);
   }
   return null;
 }
+
+// The search run to its end, all at once.
+function finish(search: Generator<number, RawConfig | null>): RawConfig | null {
+  for (;;) {
+    const step = search.next();
+    if (step.done) return step.value;
+  }
+}
+
+export const nearestFit = (config: RawConfig, id: string) => finish(fitSearch(config, { part: id }));
+export const nearestFitThing = (config: RawConfig, path: string) => finish(fitSearch(config, { path }));
