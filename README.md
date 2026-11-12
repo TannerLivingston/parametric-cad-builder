@@ -87,7 +87,8 @@ A part on a top surface goes onto another one when it's dragged over it, and a p
 **Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
 
 Shift-click parts, in the view or the parts list, to select several, or Shift-drag a box on empty space in the view to select
-the parts inside it. The arrow keys, R and Delete then act on all of them, and
+the parts inside it. Labels, holes, vents, seams and plate items can be Shift-clicked in the view the same way, and the arrow
+keys, R and Delete then act on all of them. The arrow keys, R and Delete then act on all of them, and
 the Layout tab can put them in the same row or column as the first, space them evenly between the outermost, or delete them.
 
 Ctrl+C (or Cmd+C) copies the selected parts, with their knobs, caps and labels and any custom part they are, and Ctrl+V pastes

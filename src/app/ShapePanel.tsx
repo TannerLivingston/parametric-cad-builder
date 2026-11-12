@@ -65,11 +65,11 @@ const LABEL_SIDES = ["below", "above", "left", "right"] as const;
 // no view to click in, and it goes in the middle.
 // `picked` is the path in the config of what was clicked in the view, whose fields are marked and
 // scrolled to. `onPick` says which fields have the focus, so that the view can light up what they're for.
-export function ShapePanel({ config, onChange, onPlace, picked, onPick, onField, banner }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; onPick?(path: string | null): void; onField?(path: string | null): void; banner?: ReactNode }) {
+export function ShapePanel({ config, onChange, onPlace, picked, alsoPicked = [], onPick, onField, banner }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; alsoPicked?: string[]; onPick?(path: string | null): void; onField?(path: string | null): void; banner?: ReactNode }) {
   const place = (placing: Placing) => (onPlace ? onPlace(placing) : onChange(placing.middle(config)));
   const root = useRef<HTMLDivElement>(null);
   // Fields for one thing in the design, marked when it's the one picked.
-  const card = (path: string, name = "surface-card") => ({ className: picked === path ? `${name} picked` : name, "data-path": path });
+  const card = (path: string, name = "surface-card") => ({ className: picked === path || alsoPicked.includes(path) ? `${name} picked` : name, "data-path": path });
   useEffect(() => {
     if (!picked) return;
     const fields = root.current?.querySelector(`[data-path="${picked}"]`);

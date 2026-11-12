@@ -45,6 +45,9 @@ import { addCustomPart, draftFromPart, newPartDraft, removeCustomPart, updateCus
 import { TEMPLATES } from "./templates.js";
 import { lineUpGroup, spaceEvenly } from "./layoutEdit.js";
 
+// What can be picked several at a time: things on a list, but not the surfaces or walls.
+const GROUPABLE = /^(labels|wallHoles|vents|seams|plate\.(supports|pins|feet|weights|cableTies|countersunkHoles))\[\d+\]$/;
+
 const PART_DRAG = "application/x-enclosure-part"; // a library part being dragged onto the view
 
 const DRAFT_KEY = "enclosure-generator.draft-v3";
@@ -142,6 +145,14 @@ export function App() {
   // What was last clicked in the view or focused in the Shape tab, other than a part, as its path
   // in the config. Its fields are shown, and it's lit up in the view.
   const [picked, setPicked] = useState<string | null>(null);
+  // Labels, holes, vents or plate items picked along with it, by Shift-clicking them.
+  const [pickedGroup, setPickedGroup] = useState<string[]>([]);
+  const keepPickedGroup = useRef(false);
+  useEffect(() => {
+    // Picking something some other way starts afresh.
+    if (keepPickedGroup.current) keepPickedGroup.current = false;
+    else setPickedGroup([]);
+  }, [picked]);
   const [reference, setReference] = useState<(LoadedReference & { mesh: ReferenceMesh }) | null>(null);
   const [referenceLoading, setReferenceLoading] = useState(false);
   const [referenceProblem, setReferenceProblem] = useState<string | null>(null);
@@ -249,8 +260,8 @@ export function App() {
   // Dragging reads the latest state through a ref, because the scene's callbacks are
   // set once. Each move replaces the text, and only the release joins the undo history.
   const plan = result?.ok ? result.plan : null;
-  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked, plan, selected, group });
-  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked, plan, selected, group };
+  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked, plan, selected, group, pickedGroup });
+  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked, plan, selected, group, pickedGroup };
 
   useEffect(() => {
     // Shift-click: in or out of what's selected. The first one stays the one the rest line up with.
@@ -266,6 +277,20 @@ export function App() {
       setTab("layout");
     };
     toggleRef.current = toggleInGroup;
+    const toggleThing = (path: string) => {
+      const { picked: first, pickedGroup: others } = latest.current;
+      setSelected(null);
+      setTab("shape");
+      if (!first || !GROUPABLE.test(first)) {
+        setPicked(path);
+      } else if (first === path) {
+        // The next one takes its place, keeping the rest.
+        keepPickedGroup.current = others.length > 0;
+        setPicked(others[0] ?? null);
+        setPickedGroup(others.slice(1));
+      } else if (others.includes(path)) setPickedGroup(others.filter((other) => other !== path));
+      else setPickedGroup([...others, path]);
+    };
     // What's under a click, with what the validator worked out: where labels went, the screws and
     // the plate's joints.
     const whatsAt = (faces: PickedFace[]) => {
@@ -375,10 +400,16 @@ export function App() {
           return next !== null;
         },
         onMeasure: setMeasured,
-        onClick: (faces) => {
+        onClick: (faces, shift) => {
           const { model: scene3d, tab: on } = latest.current;
           if (!scene3d || (on !== "shape" && on !== "layout")) return;
           const { path } = whatsAt(faces);
+          // Shift-click adds a label, hole, vent or plate item to what's picked, or takes it out.
+          if (shift) {
+            // Anything else, Shift held, leaves what's picked as it is.
+            if (path && GROUPABLE.test(path) && !partOfLabel(latest.current.config, path)) toggleThing(path);
+            return;
+          }
           // From the Layout tab, where a click on the model is how a part is let go of, only
           // something in particular is worth leaving for, not the bare surface or wall.
           const bare = path !== null && /^enclosure\./.test(path);
@@ -549,8 +580,13 @@ export function App() {
   useEffect(() => {
     if (picked === null && focusedField === null && shownIssue) return;
     const field = focusedField && model ? fieldSpot(focusedField, config, model) : null;
-    sceneRef.current?.setHighlight(field ?? (picked && model ? issueSpot({ path: picked }, config, model, fasteners) : null), "selection");
-  }, [picked, text, focusedField]); // eslint-disable-line react-hooks/exhaustive-deps
+    // Several picked together light up as one box around them all.
+    const boxes = picked && model ? [picked, ...pickedGroup].map((path) => issueSpot({ path }, config, model, fasteners)).filter((box): box is NonNullable<typeof box> => box !== null) : [];
+    const around = boxes.length
+      ? { min: [0, 1, 2].map((i) => Math.min(...boxes.map((b) => b.min[i]!))) as [number, number, number], max: [0, 1, 2].map((i) => Math.max(...boxes.map((b) => b.max[i]!))) as [number, number, number] }
+      : null;
+    sceneRef.current?.setHighlight(field ?? around, "selection");
+  }, [picked, pickedGroup, text, focusedField]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     sceneRef.current?.setMeasuring(measuring);
@@ -751,16 +787,22 @@ export function App() {
       if (!part && thing) {
         // Something selected by clicking it, other than a part.
         let next: RawConfig | null = null;
-        if (move) next = nudgeThing(current, thing, move[0], move[1]);
+        // With others picked along with it, each acts on all of them, as one change.
+        const things = [thing, ...latest.current.pickedGroup];
+        const eachOf = (edit: (config: RawConfig, path: string) => RawConfig | null) => things.reduce<RawConfig | null>((config, path) => edit(config ?? current, path) ?? config, null);
+        if (move) next = eachOf((config, path) => nudgeThing(config, path, move[0], move[1]));
         else if (duplicating) {
           const copy = duplicateThing(current, thing);
           if (copy) {
             next = copy.config;
             setPicked(copy.path);
           }
-        } else if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey) next = rotateThing(current, thing);
+        } else if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey) next = eachOf(rotateThing);
         else if (event.key === "Delete" || event.key === "Backspace") {
-          next = removeThing(current, thing);
+          // Later ones on a list first, so that taking one out doesn't move the rest along.
+          const index = (path: string) => Number(/\[(\d+)\]$/.exec(path)?.[1] ?? 0);
+          const order = [...things].sort((a, b) => index(b) - index(a));
+          next = order.reduce<RawConfig | null>((config, path) => removeThing(config ?? current, path) ?? config, null);
           if (next) setPicked(null);
         }
         if (move || duplicating || event.key === "Delete" || event.key === "Backspace") event.preventDefault();
@@ -1228,7 +1270,7 @@ export function App() {
                 </div>
               );
             })()}
-            config={config} onChange={(next) => applyConfig(next)} picked={picked} onField={setFocusedField} onPick={(path) => {
+            config={config} onChange={(next) => applyConfig(next)} picked={picked} alsoPicked={pickedGroup} onField={setFocusedField} onPick={(path) => {
               setPicked(path);
               if (path) setSelected(null);
             }} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />

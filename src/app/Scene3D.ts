@@ -32,7 +32,7 @@ export interface SceneEvents {
   onPick(faces: PickedFace[]): void;
   // A plain click on the model, not on a part, with the faces under it the same way. With none,
   // it was on empty space.
-  onClick(faces: PickedFace[]): void;
+  onClick(faces: PickedFace[], shift: boolean): void;
   // A right-click that didn't pan: where on the page, the part under it if any, and the faces.
   onMenu(at: { x: number; y: number }, part: string | null, faces: PickedFace[]): void;
   // While a part on a top surface is dragged, the faces under the pointer, so that it can go onto
@@ -1276,7 +1276,11 @@ export class Scene3D {
       this.boxStart = null;
       this.controls.enabled = true;
       if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
-      this.events.onBox({ x0: start.x, y0: start.y, x1: event.clientX, y1: event.clientY }, true);
+      // Shift and a click that hardly moved is a Shift-click on what's there, not a box.
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) < 4) {
+        this.events.onBox(null, true);
+        this.events.onClick(this.pickFaces(event), true);
+      } else this.events.onBox({ x0: start.x, y0: start.y, x1: event.clientX, y1: event.clientY }, true);
       return;
     }
     if (this.toggling) {
@@ -1347,7 +1351,7 @@ export class Scene3D {
       if (this.fasteners) this.events.onFastenerSelect(null);
       else {
         this.events.onSelect(null);
-        this.events.onClick(this.pickFaces(event));
+        this.events.onClick(this.pickFaces(event), event.shiftKey);
       }
     }
     this.pressedEmpty = null;
