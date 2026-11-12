@@ -1,7 +1,7 @@
 // Placing parts relative to each other, checked against the real validator and the Desk Synth's layout.
 import { describe, expect, it } from "vitest";
 import { validateConfig } from "../src/index.js";
-import { alignableWith, alignComponent, arrayComponent, centreComponent, MAX_COPIES, mirrorComponent } from "../src/app/layoutEdit.js";
+import { alignableWith, alignComponent, arrayComponent, centreComponent, lineUpGroup, MAX_COPIES, mirrorComponent, spaceEvenly } from "../src/app/layoutEdit.js";
 import { deskSynth } from "./helpers.js";
 
 const box = (components: unknown[] = []): any => ({ schemaVersion: 1, name: "box", enclosure: { width: 240, frontHeight: 30, surfaces: [{ id: "top", y: 150, z: 30 }, { id: "back", y: 200, z: 20 }] }, components });
@@ -119,5 +119,30 @@ describe("lining up", () => {
   it("does nothing for a part that isn't there", () => {
     const config = box([dial]);
     expect(alignComponent(config, "dial-1", "nope", "row")).toBe(config);
+  });
+});
+
+describe("several parts at once", () => {
+  const config = (): any => ({
+    enclosure: { width: 300, surfaces: [{ id: "deck", y: 80, z: 40 }, { id: "panel", y: 150, z: 60 }] },
+    components: [
+      { id: "a", type: "arcade-24mm", surface: "deck", u: 20, v: 30 },
+      { id: "b", type: "arcade-24mm", surface: "deck", u: 90, v: 34 },
+      { id: "c", type: "arcade-24mm", surface: "deck", u: 50, v: 41 },
+      { id: "p", type: "arcade-24mm", surface: "panel", u: 70, v: 20 },
+    ],
+  });
+  const where = (c: any) => Object.fromEntries(c.components.map((p: any) => [p.id, [p.u, p.v]]));
+
+  it("line up with the first, only where they share its surface", () => {
+    expect(where(lineUpGroup(config(), ["a", "b", "c", "p"], "row"))).toEqual({ a: [20, 30], b: [90, 30], c: [50, 30], p: [70, 20] });
+    expect(where(lineUpGroup(config(), ["c", "a"], "column"))).toEqual({ a: [50, 30], b: [90, 34], c: [50, 41], p: [70, 20] });
+  });
+
+  it("space evenly between the outermost, in the order they sit", () => {
+    const spaced = where(spaceEvenly(config(), ["b", "a", "c", "p"]));
+    expect(spaced).toEqual({ a: [20, 30], b: [90, 34], c: [55, 41], p: [70, 20] });
+    // Two are already as even as they can be.
+    expect(spaceEvenly(config(), ["a", "b"])).toEqual(config());
   });
 });

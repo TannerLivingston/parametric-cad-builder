@@ -37,6 +37,7 @@ import { referenceMiddle, referenceTransform, startingPlace } from "../reference
 import type { ReferenceMesh } from "./engineClient.js";
 import { addCustomPart, draftFromPart, newPartDraft, removeCustomPart, updateCustomPart } from "./shapeEdit.js";
 import { TEMPLATES } from "./templates.js";
+import { lineUpGroup, spaceEvenly } from "./layoutEdit.js";
 
 const PART_DRAG = "application/x-enclosure-part"; // a library part being dragged onto the view
 
@@ -99,6 +100,8 @@ type Tab = "shape" | "layout" | "screws" | "config" | "print";
 export function App() {
   const [text, setText] = useState(loadDraft);
   const [selected, setSelected] = useState<string | null>(null);
+  // Parts selected along with it, by Shift-clicking them, to move, line up or delete together.
+  const [group, setGroup] = useState<string[]>([]);
   const [tab, setTab] = useState<Tab>("layout");
   const [internals, setInternals] = useState(false);
   const [showWires, setShowWires] = useState(false);
@@ -139,6 +142,7 @@ export function App() {
   const openInput = useRef<HTMLInputElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene3D | null>(null);
+  const toggleRef = useRef<(id: string) => void>(() => {});
   const engineRef = useRef<EngineClient | null>(null);
 
   const parsed = useMemo(() => parseConfig(text), [text]);
@@ -207,10 +211,23 @@ export function App() {
   // Dragging reads the latest state through a ref, because the scene's callbacks are
   // set once. Each move replaces the text, and only the release joins the undo history.
   const plan = result?.ok ? result.plan : null;
-  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked, plan });
-  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked, plan };
+  const latest = useRef({ config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab: tab as string, picked, plan, selected, group });
+  latest.current = { config, applyConfig, model, text, commit, fasteners, placing, seeThrough, tab, picked, plan, selected, group };
 
   useEffect(() => {
+    // Shift-click: in or out of what's selected. The first one stays the one the rest line up with.
+    const toggleInGroup = (id: string) => {
+      const { selected: first, group: others } = latest.current;
+      if (first === id) {
+        setSelected(others[0] ?? null);
+        setGroup(others.slice(1));
+      } else if (others.includes(id)) setGroup(others.filter((other) => other !== id));
+      else if (!first) setSelected(id);
+      else setGroup([...others, id]);
+      setPicked(null);
+      setTab("layout");
+    };
+    toggleRef.current = toggleInGroup;
     // What's under a click, with what the validator worked out: where labels went, the screws and
     // the plate's joints.
     const whatsAt = (faces: PickedFace[]) => {
@@ -245,7 +262,11 @@ export function App() {
     const scene = new Scene3D(
       viewportRef.current!,
       {
-        onSelect: setSelected,
+        onSelect: (id) => {
+          setSelected(id);
+          setGroup([]);
+        },
+        onToggle: (id) => toggleInGroup(id),
         onDragStart: () => {},
         onDrag: (id, a, b) => {
           const { config: current, applyConfig: apply, model: scene3d } = latest.current;
@@ -386,13 +407,22 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    sceneRef.current?.setModel(model, selected, invalid);
-  }, [model, selected, invalid, seeThrough]);
+    sceneRef.current?.setModel(model, selected, invalid, new Set(group));
+  }, [model, selected, invalid, seeThrough, group]);
 
   useEffect(() => {
     sceneRef.current?.setInternals(seeThrough);
-    sceneRef.current?.setModel(model, selected, invalid);
+    sceneRef.current?.setModel(model, selected, invalid, new Set(group));
   }, [seeThrough]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The rest go when nothing's selected, and any that are no longer in the design.
+  useEffect(() => {
+    const present = new Set((config.components ?? []).map((c: RawConfig) => c.id));
+    setGroup((others) => {
+      const kept = selected ? others.filter((id) => id !== selected && present.has(id)) : [];
+      return kept.length === others.length ? others : kept;
+    });
+  }, [selected, config]);
 
   useEffect(() => {
     sceneRef.current?.setFasteners(tab === "screws" ? { ...fasteners, selected: selectedFastener } : null);
@@ -575,18 +605,25 @@ export function App() {
     };
   }, [menu]);
 
-  const nudge = useCallback((id: string, da: number, db: number) => {
+  // Each acts on the selected part and any selected with it, as one change.
+  const nudge = useCallback((ids: string[], da: number, db: number) => {
     const { config: current, applyConfig: apply } = latest.current;
-    const component = current.components?.find((c: any) => c.id === id);
-    if (!component) return;
-    const patch = "wall" in component ? { at: component.at + da, z: component.z + db } : "x" in component ? { x: component.x + da, y: component.y + db } : { u: component.u + da, v: component.v + db };
-    apply(updateComponent(current, id, patch));
+    const next = ids.reduce((config: RawConfig, id) => {
+      const component = config.components?.find((c: any) => c.id === id);
+      if (!component) return config;
+      const patch = "wall" in component ? { at: component.at + da, z: component.z + db } : "x" in component ? { x: component.x + da, y: component.y + db } : { u: component.u + da, v: component.v + db };
+      return updateComponent(config, id, patch);
+    }, current);
+    apply(next);
   }, []);
 
-  const rotate = useCallback((id: string) => {
+  const rotate = useCallback((ids: string[]) => {
     const { config: current, applyConfig: apply } = latest.current;
-    const component = current.components?.find((c: any) => c.id === id);
-    if (component) apply(updateComponent(current, id, { rotationDeg: ((component.rotationDeg ?? 0) + 90) % 360 }));
+    const next = ids.reduce((config: RawConfig, id) => {
+      const component = config.components?.find((c: any) => c.id === id);
+      return component ? updateComponent(config, id, { rotationDeg: ((component.rotationDeg ?? 0) + 90) % 360 }) : config;
+    }, current);
+    apply(next);
   }, []);
 
   useEffect(() => {
@@ -646,6 +683,7 @@ export function App() {
         return;
       }
       if (!part) return;
+      const all = [part, ...latest.current.group];
       if (duplicating) {
         event.preventDefault();
         const copy = duplicateComponent(current, part);
@@ -655,12 +693,12 @@ export function App() {
         }
       } else if (move) {
         event.preventDefault();
-        nudge(part, move[0], move[1]);
+        nudge(all, move[0], move[1]);
       } else if (event.key.toLowerCase() === "r" && !event.metaKey && !event.ctrlKey) {
-        rotate(part);
+        rotate(all);
       } else if (event.key === "Delete" || event.key === "Backspace") {
         event.preventDefault();
-        applyConfig(removeComponent(current, part));
+        applyConfig(all.reduce((config: RawConfig, id) => removeComponent(config, id), current));
         setSelected(null);
       } else if (event.key === "Escape") {
         setSelected(null);
@@ -1002,6 +1040,32 @@ export function App() {
               />
             ) : null}
 
+            {selectedComponent && group.length ? (
+              <section className="inspector" aria-label="Selected parts">
+                <h2>{group.length + 1} parts selected</h2>
+                <p className="muted">
+                  Lined up with {selectedComponent.id}. Shift-click a part to add it or take it out. The arrow keys, R and Delete act on all of
+                  them.
+                </p>
+                <div className="row">
+                  <button onClick={() => applyConfig(lineUpGroup(config, [selectedComponent.id, ...group], "row"))}>Same row</button>
+                  <button onClick={() => applyConfig(lineUpGroup(config, [selectedComponent.id, ...group], "column"))}>Same column</button>
+                  <button disabled={group.length < 2} onClick={() => applyConfig(spaceEvenly(config, [selectedComponent.id, ...group]))}>
+                    Space evenly
+                  </button>
+                  <button
+                    className="danger"
+                    onClick={() => {
+                      applyConfig([selectedComponent.id, ...group].reduce((next: RawConfig, id) => removeComponent(next, id), config));
+                      setSelected(null);
+                    }}
+                  >
+                    Delete all
+                  </button>
+                </div>
+              </section>
+            ) : null}
+
             {selectedComponent && selectedPart ? (
               <section className="inspector" aria-label="Selected part">
                 <h2>{selectedComponent.id}</h2>
@@ -1090,7 +1154,7 @@ export function App() {
                 {neighbour ? <p className="muted note">{neighbour.gap.toFixed(1)} mm to {neighbour.id}</p> : null}
                 {selectedPart.notes ? <p className="muted note">{selectedPart.notes}</p> : null}
                 <div className="row">
-                  <button onClick={() => rotate(selectedComponent.id)}>Rotate 90°</button>
+                  <button onClick={() => rotate([selectedComponent.id])}>Rotate 90°</button>
                   <button
                     className="danger"
                     onClick={() => {
@@ -1115,9 +1179,13 @@ export function App() {
                 {components.map((c) => (
                   <li key={c.id}>
                     <button
-                      className={c.id === selected ? "selected" : ""}
-                      aria-pressed={c.id === selected}
-                      onClick={() => setSelected(c.id)}
+                      className={c.id === selected || group.includes(c.id) ? "selected" : ""}
+                      aria-pressed={c.id === selected || group.includes(c.id)}
+                      onClick={(event) => {
+                        if (event.shiftKey) return toggleRef.current(c.id);
+                        setSelected(c.id);
+                        setGroup([]);
+                      }}
                     >
                       <span className={`dot ${invalid.has(c.id) ? "bad" : "quiet"}`} aria-hidden="true" />
                       <span className="part-id">{c.id}</span>

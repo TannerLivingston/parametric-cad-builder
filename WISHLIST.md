@@ -14,7 +14,7 @@ click or drag in the view.
 
 - [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
   and the fields on the other tabs.
-- [ ] **Select several parts,** with Shift-click or a dragged box, to move, line up, space evenly or delete together.
+- [ ] **Select several parts with a dragged box,** and several labels, holes or plate items, as Shift-click selects parts.
 - [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
   and to equal spacing in a row.
 - [ ] **Type a size onto the view:** click a dimension shown beside a selection, such as its distance to an edge or a
@@ -48,6 +48,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Select several parts** with Shift-click, in the view or the parts list, to nudge, turn or delete together, put in one
+  row or column, or space evenly. The view's Shift-click is untried in the app, the list's is.
 - [x] **Drag the rest:** a label, a hole or vent in a wall, a support, pin, foot, weight pocket, cable tie bridge or hole in the
   plate, by a handle in its middle, once it's selected.
 - [x] **Handles on the shape:** for a seam or the plate's split along the width, the walls' width, depth and front height, a

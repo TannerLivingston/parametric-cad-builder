@@ -83,3 +83,29 @@ export function alignComponent(config: RawConfig, id: string, targetId: string, 
   const key = direction === "row" ? across(target) : along(target);
   return { ...config, components: componentsOf(config).map((component) => (component.id === id ? { ...component, [key]: target[key] } : component)) };
 }
+
+// Several parts at once. The first is the one they line up with.
+
+// All of them into the first one's row, or column, where they share its surface, wall or the floor.
+export function lineUpGroup(config: RawConfig, ids: string[], direction: "row" | "column"): RawConfig {
+  const [first, ...rest] = ids;
+  if (!first) return config;
+  const alike = new Set(alignableWith(config, first));
+  return rest.filter((id) => alike.has(id)).reduce((next, id) => alignComponent(next, id, first, direction), config);
+}
+
+// Equal gaps between their centres along the row, from the first to the last as they sit now, for
+// those that share the first one's surface, wall or the floor. Three at least, or there's nothing to even.
+export function spaceEvenly(config: RawConfig, ids: string[]): RawConfig {
+  const [first] = ids;
+  if (!first) return config;
+  const alike = new Set([first, ...alignableWith(config, first)]);
+  const members = componentsOf(config).filter((component) => ids.includes(component.id) && alike.has(component.id));
+  if (members.length < 3) return config;
+  const key = along(members[0]!);
+  const sorted = [...members].sort((a, b) => a[key] - b[key]);
+  const start = sorted[0]![key];
+  const step = (sorted.at(-1)![key] - start) / (sorted.length - 1);
+  const placed = new Map(sorted.map((component, i) => [component.id, tidy(start + i * step)]));
+  return { ...config, components: componentsOf(config).map((component) => (placed.has(component.id) ? { ...component, [key]: placed.get(component.id) } : component)) };
+}

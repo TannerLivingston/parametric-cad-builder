@@ -18,6 +18,8 @@ const surfaceKey = (component: SceneComponent) => component.curve ?? component.s
 
 export interface SceneEvents {
   onSelect(id: string | null): void;
+  // A Shift-click on a part, to add it to what's selected or take it out.
+  onToggle(id: string): void;
   onDragStart(id: string): void;
   onDrag(id: string, a: number, b: number): void;
   onDragEnd(id: string): void;
@@ -133,6 +135,8 @@ export class Scene3D {
   private handleDrag: { id: string; start: number; origin: THREE.Vector3; axis: THREE.Vector3; across: THREE.Vector3 | null; startAcross: number } | null = null;
   private model: SceneModel | null = null;
   private selected: string | null = null;
+  private group = new Set<string>(); // selected along with it
+  private toggling = false;
   private invalid = new Set<string>();
   private gap = 0;
   private internals = false;
@@ -245,7 +249,8 @@ export class Scene3D {
     this.requestFrame();
   }
 
-  setModel(model: SceneModel | null, selected: string | null, invalid: Set<string>) {
+  setModel(model: SceneModel | null, selected: string | null, invalid: Set<string>, group: Set<string> = new Set()) {
+    this.group = group;
     this.model = model ?? this.model;
     // A part dragged onto another surface goes on dragging along that one, centred on the pointer.
     const dragged = this.drag && this.model?.components.find((c) => c.id === this.drag!.id);
@@ -786,13 +791,13 @@ export class Scene3D {
 
   private colorFor(component: SceneComponent) {
     if (this.invalid.has(component.id)) return this.colors.invalid;
-    return component.id === this.selected ? this.colors.selected : this.colors.marker;
+    return component.id === this.selected || this.group.has(component.id) ? this.colors.selected : this.colors.marker;
   }
 
   private buildMarker(component: SceneComponent): Marker {
     const group = new THREE.Group();
     const color = this.colorFor(component);
-    const emphasised = component.id === this.selected || this.invalid.has(component.id);
+    const emphasised = component.id === this.selected || this.group.has(component.id) || this.invalid.has(component.id);
     const footprint = component.above ?? component.floor ?? component.inWall!.face;
     const flat = new THREE.ShapeGeometry(outlineShape(footprint), 32);
     const pick = new THREE.Mesh(
@@ -1046,6 +1051,13 @@ export class Scene3D {
     }
     this.pressedEmpty = null;
     event.stopImmediatePropagation();
+    if (event.shiftKey) {
+      // Held still until it's let go, so the view doesn't pan as Shift and drag would.
+      this.controls.enabled = false;
+      this.toggling = true;
+      this.events.onToggle(marker.component.id);
+      return;
+    }
     const plane = this.planeFor(marker.component);
     const at = this.planePosition(this.raycaster.ray, plane, marker.component);
     if (!at) return;
@@ -1137,6 +1149,11 @@ export class Scene3D {
   }
 
   private handleUp = (event: PointerEvent) => {
+    if (this.toggling) {
+      this.toggling = false;
+      this.controls.enabled = true;
+      return;
+    }
     if (this.handleDrag) {
       const { id } = this.handleDrag;
       this.handleDrag = null;

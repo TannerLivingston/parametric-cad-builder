@@ -64,6 +64,9 @@ it goes.
 A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the
 **Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
 
+Shift-click parts, in the view or the parts list, to select several. The arrow keys, R and Delete then act on all of them, and
+the Layout tab can put them in the same row or column as the first, space them evenly between the outermost, or delete them.
+
 A selected part can be copied in rows, mirrored across the enclosure's centre, centred, or lined up with another part on the same
 surface. Drag parts in the 3D view, or use the keys above. Changes
 write back to the config, and editing the config text updates the view. Everything saves as a draft in the browser.
