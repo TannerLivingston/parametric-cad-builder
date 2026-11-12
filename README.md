@@ -49,6 +49,8 @@ the other parts left out, so anything already beside it shows as a problem once 
 hole, vent, seam, support, pin, plate hole, cable tie bridge, weight pocket or foot there, whichever can go on it. What's added is
 selected, with the Shape tab open at its fields. Escape, or a press anywhere else, closes it.
 
+A field whose name is underlined with dots has a note: rest the pointer on it to see what it changes.
+
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
 tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for

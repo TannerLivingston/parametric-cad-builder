@@ -237,8 +237,8 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
               <NumberField label="Centre height" value={vent.z} onCommit={number((z) => updateVent(config, index, { z }))} />
               <NumberField label="Width" value={vent.width} onCommit={number((width) => updateVent(config, index, { width }))} />
               <NumberField label="Height" value={vent.height} onCommit={number((height) => updateVent(config, index, { height }))} />
-              <NumberField label="Slot" value={vent.slotWidth ?? 2} onCommit={number((slotWidth) => updateVent(config, index, { slotWidth }))} />
-              <NumberField label="Gap" value={vent.gap ?? 2} onCommit={number((gap) => updateVent(config, index, { gap }))} />
+              <NumberField label="Slot width" value={vent.slotWidth ?? 2} onCommit={number((slotWidth) => updateVent(config, index, { slotWidth }))} />
+              <NumberField label="Gap between slots" value={vent.gap ?? 2} onCommit={number((gap) => updateVent(config, index, { gap }))} />
             </div>
             <button className="danger" onClick={() => onChange(removeVent(config, index))}>Remove vent</button>
           </div>
@@ -286,8 +286,8 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
                       {e.surfaces.map((surface) => <option key={surface.id} value={surface.id}>{surface.id}</option>)}
                     </select>
                   </label>
-                  <NumberField label="u" value={label.u} onCommit={number((u) => updateLabel(config, index, { u }))} />
-                  <NumberField label="v" value={label.v} onCommit={number((v) => updateLabel(config, index, { v }))} />
+                  <NumberField label="Across (u)" value={label.u} onCommit={number((u) => updateLabel(config, index, { u }))} />
+                  <NumberField label="Back (v)" value={label.v} onCommit={number((v) => updateLabel(config, index, { v }))} />
                 </>
               )}
               {"component" in label ? null : (

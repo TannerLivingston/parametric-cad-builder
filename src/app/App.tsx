@@ -1125,13 +1125,13 @@ export function App() {
                           {["rear", "left", "right", "front"].map((wall) => <option key={wall} value={wall}>{wall}</option>)}
                         </select>
                       </label>
-                      <NumberField label="Along" value={selectedComponent.at} onCommit={(v) => changeField("at", v)} />
+                      <NumberField label="Along the wall" value={selectedComponent.at} onCommit={(v) => changeField("at", v)} />
                       <NumberField label="Height" value={selectedComponent.z} onCommit={(v) => changeField("z", v)} />
                     </>
                   ) : "x" in selectedComponent ? (
                     <>
-                      <NumberField label="x" value={selectedComponent.x} onCommit={(v) => changeField("x", v)} />
-                      <NumberField label="y" value={selectedComponent.y} onCommit={(v) => changeField("y", v)} />
+                      <NumberField label="Across (x)" value={selectedComponent.x} onCommit={(v) => changeField("x", v)} />
+                      <NumberField label="Back (y)" value={selectedComponent.y} onCommit={(v) => changeField("y", v)} />
                     </>
                   ) : (
                     <>
@@ -1144,8 +1144,8 @@ export function App() {
                           {surfaceIds.map((id) => <option key={id} value={id}>{id}</option>)}
                         </select>
                       </label>
-                      <NumberField label="u" value={selectedComponent.u} onCommit={(v) => changeField("u", v)} />
-                      <NumberField label="v" value={selectedComponent.v} onCommit={(v) => changeField("v", v)} />
+                      <NumberField label="Across (u)" value={selectedComponent.u} onCommit={(v) => changeField("u", v)} />
+                      <NumberField label="Back (v)" value={selectedComponent.v} onCommit={(v) => changeField("v", v)} />
                     </>
                   )}
                 </div>

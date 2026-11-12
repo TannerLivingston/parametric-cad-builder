@@ -30,8 +30,7 @@ click or drag in the view.
   been done right, saying what's still missing, and the next step stays locked until it has. It ends on a finished screen that
   makes it plain the tutorial is complete, with the synth shown and the design kept as an ordinary one afterwards. It can be
   left at any point, but not skipped ahead.
-- [ ] **Plain names and units in the fields,** with a short note on hover saying what each one changes, and a small drawing
-  for the less obvious ones, such as u and v, bulge and bow.
+- [ ] **Small drawings for the less obvious fields,** such as u and v, bulge and bow, beside their notes.
 
 ## Shape
 
@@ -47,6 +46,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Plainer names and notes on the fields:** u and v read "Across (u)" and "Back (v)", and the less obvious fields, such as a
+  curve, a bow, a lip or a round, have a note on hover saying what they change, with a dotted line under their name.
 - [x] **Fix a part's problem with one button:** a part that has one can move to the nearest spot, up to 40 mm away, where it has
   none and nothing else is made worse.
 - [x] **Copy and paste parts,** with their knobs, caps, labels and any custom part they are, within a design and between designs.

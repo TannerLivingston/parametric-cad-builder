@@ -860,3 +860,14 @@ fieldset.fields legend {
 .view-menu .array-form button:disabled {
   opacity: 0.5;
 }
+
+/* A field with a note on hover: its name is underlined with dots. */
+label.noted {
+  text-decoration: underline dotted var(--muted);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+
+label.noted input {
+  cursor: text;
+}
