@@ -48,6 +48,8 @@ export interface SceneEvents {
   onLook(): void;
   // The view has turned, moved or been resized, so what's drawn over it needs placing again.
   onViewChange(): void;
+  // A box dragged out with Shift on empty space, on the page, while it's dragged and when let go.
+  onBox(box: { x0: number; y0: number; x1: number; y1: number } | null, done: boolean): void;
 }
 
 // A point on the shape that can be dragged along a line to change a size, such as a seam's place
@@ -145,6 +147,7 @@ export class Scene3D {
   private selected: string | null = null;
   private group = new Set<string>(); // selected along with it
   private toggling = false;
+  private boxStart: { x: number; y: number } | null = null;
   private invalid = new Set<string>();
   private gap = 0;
   private internals = false;
@@ -1127,6 +1130,14 @@ export class Scene3D {
       return;
     }
     const marker = this.markerAt(event);
+    if (!marker && event.shiftKey) {
+      // Shift and drag on empty space draws a box to select the parts in, rather than panning.
+      event.stopImmediatePropagation();
+      this.controls.enabled = false;
+      this.renderer.domElement.setPointerCapture(event.pointerId);
+      this.boxStart = { x: event.clientX, y: event.clientY };
+      return;
+    }
     if (!marker) {
       this.pressedEmpty = { x: event.clientX, y: event.clientY };
       return;
@@ -1160,6 +1171,10 @@ export class Scene3D {
   private pressedEmpty: { x: number; y: number } | null = null;
 
   private handleMove = (event: PointerEvent) => {
+    if (this.boxStart) {
+      this.events.onBox({ x0: this.boxStart.x, y0: this.boxStart.y, x1: event.clientX, y1: event.clientY }, false);
+      return;
+    }
     if (this.handleDrag) {
       const { id, start, startAcross, origin, axis, across } = this.handleDrag;
       const ray = this.rayFrom(event);
@@ -1232,6 +1247,14 @@ export class Scene3D {
   }
 
   private handleUp = (event: PointerEvent) => {
+    if (this.boxStart) {
+      const start = this.boxStart;
+      this.boxStart = null;
+      this.controls.enabled = true;
+      if (this.renderer.domElement.hasPointerCapture(event.pointerId)) this.renderer.domElement.releasePointerCapture(event.pointerId);
+      this.events.onBox({ x0: start.x, y0: start.y, x1: event.clientX, y1: event.clientY }, true);
+      return;
+    }
     if (this.toggling) {
       this.toggling = false;
       this.controls.enabled = true;

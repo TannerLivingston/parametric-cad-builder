@@ -56,7 +56,7 @@ onto what's selected and brings it near: a part or label from above its surface 
 what's under it from below.
 
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
-tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
+tab that fixes it. Clicking it again turns the view to it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for
 others only once it's hosted. Parts with a connector or a recess are still edited in the **Config** tab, and
 everything else can be too.
@@ -76,7 +76,8 @@ should be, and the part moves to match.
 A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the
 **Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
 
-Shift-click parts, in the view or the parts list, to select several. The arrow keys, R and Delete then act on all of them, and
+Shift-click parts, in the view or the parts list, to select several, or Shift-drag a box on empty space in the view to select
+the parts inside it. The arrow keys, R and Delete then act on all of them, and
 the Layout tab can put them in the same row or column as the first, space them evenly between the outermost, or delete them.
 
 Ctrl+C (or Cmd+C) copies the selected parts, with their knobs, caps and labels and any custom part they are, and Ctrl+V pastes

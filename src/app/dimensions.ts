@@ -68,3 +68,12 @@ export function placeForDimension(model: SceneModel, id: string, side: Side, val
   if (side === "front") return [c.a, round(value + hb)];
   return [c.a, round(length - value - hb)];
 }
+
+// Where a part's centre is in the view's space, for finding it on the page.
+export function centreOf(model: SceneModel, c: SceneComponent): Point | null {
+  if (c.curve && c.surface) {
+    const s = c.surface;
+    return [c.a, s.y0 + c.b * s.cos, s.z0 + c.b * s.sin];
+  }
+  return frameOf(model, c)?.point(c.a, c.b) ?? null;
+}

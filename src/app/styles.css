@@ -905,3 +905,12 @@ input.view-dimension {
   border-radius: 6px;
   color: var(--text);
 }
+
+/* The box dragged out with Shift to select the parts in it. */
+.select-box {
+  position: fixed;
+  z-index: 11;
+  border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  pointer-events: none;
+}

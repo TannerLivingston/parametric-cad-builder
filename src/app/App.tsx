@@ -32,7 +32,7 @@ import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
 import { facingFor } from "./lookAt.js";
 import { guideSegments, snapDrag } from "./snap.js";
-import { dimensionsFor, placeForDimension, type Side } from "./dimensions.js";
+import { centreOf, dimensionsFor, placeForDimension, type Side } from "./dimensions.js";
 import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -129,6 +129,7 @@ export function App() {
   // Bumped when the view turns, so that what's drawn over it is placed again.
   const [, setViewTick] = useState(0);
   const [editingSide, setEditingSide] = useState<Side | null>(null);
+  const [selectBox, setSelectBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   useEffect(() => setEditingSide(null), [selected]);
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; title: string; choices: MenuChoice[]; array?: { part: string } | { path: string } } | null>(null);
@@ -313,6 +314,25 @@ export function App() {
         },
         onLook: () => lookRef.current(),
         onViewChange: () => setViewTick((n) => n + 1),
+        onBox: (box, done) => {
+          if (!done) return setSelectBox(box);
+          setSelectBox(null);
+          const { model: scene3d, seeThrough: through } = latest.current;
+          if (!box || !scene3d) return;
+          const [left, right, top, bottom] = [Math.min(box.x0, box.x1), Math.max(box.x0, box.x1), Math.min(box.y0, box.y1), Math.max(box.y0, box.y1)];
+          // Parts on the floor are only seen, and so only boxed, with the inside showing.
+          const inside = scene3d.components.filter((c) => {
+            if (c.mount === "floor" && !through) return false;
+            const centre = centreOf(scene3d, c);
+            const at = centre && sceneRef.current?.project(centre);
+            return at && at.x >= left && at.x <= right && at.y >= top && at.y <= bottom;
+          });
+          if (!inside.length) return;
+          setSelected(inside[0]!.id);
+          setGroup(inside.slice(1).map((c) => c.id));
+          setPicked(null);
+          setTab("layout");
+        },
         onHover: (at, part, faces) => {
           if (!at) return setHover(null);
           const { config: current } = latest.current;
@@ -940,6 +960,13 @@ export function App() {
   };
 
   const selectIssue = (issue: Issue) => {
+    // Clicked again once it's shown, the view turns to it and comes near.
+    const again = shownIssue && shownIssue.message === issue.message && shownIssue.path === issue.path;
+    if (again && model) {
+      const box = issueSpot(issue, config, model, fasteners);
+      if (box) sceneRef.current?.lookAt(box);
+      return;
+    }
     setShownIssue(issue);
     const id = issue.componentIds[issue.componentIds.length - 1];
     if (issue.path.startsWith("fabrication.fit")) {
@@ -1519,6 +1546,12 @@ export function App() {
               );
             })
           : null}
+        {selectBox ? (
+          <div
+            className="select-box"
+            style={{ left: Math.min(selectBox.x0, selectBox.x1), top: Math.min(selectBox.y0, selectBox.y1), width: Math.abs(selectBox.x1 - selectBox.x0), height: Math.abs(selectBox.y1 - selectBox.y0) }}
+          />
+        ) : null}
         {hover && !menu ? (
           <div className="view-hover" role="tooltip" style={{ left: Math.min(hover.x + 14, window.innerWidth - 300), top: hover.y + 16 }}>
             {hover.text}
@@ -1605,7 +1638,7 @@ export function App() {
 
 function IssueRow({ issue, onSelect }: { issue: Issue; onSelect(issue: Issue): void }) {
   return (
-    <button className={`issue ${issue.severity}`} onClick={() => onSelect(issue)}>
+    <button className={`issue ${issue.severity}`} onClick={() => onSelect(issue)} title="Click to show it and select what it's about. Click again to look at it.">
       <strong>{issue.severity === "error" ? "Problem" : "Warning"}</strong>
       <span>{issue.message}</span>
       <code>{issue.path}</code>
