@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { measureVolume } from "replicad";
 import { buildEnclosure, initEngine, planPrint, validateConfig, type BuildPlan } from "../src/index.js";
 import { bowAt, planOutline } from "../src/bow.js";
+import { bowHollows } from "../src/engine.js";
 import { buildProblems } from "./buildChecks.js";
 import { errors } from "./helpers.js";
 import { setBow, shapeValues } from "../src/app/shapeEdit.js";
@@ -103,16 +104,19 @@ describe("a bowed wall, built", () => {
     await initEngine();
   });
 
-  it("builds sound halves with a lip, heavier by the solid walls, needing no support", async () => {
+  it("builds sound halves with a lip, a little heavier by the hollow walls, needing no support", async () => {
     const built = plan(bowed());
     const enclosure = buildEnclosure(built);
     expect(await buildProblems(built, enclosure)).toEqual([]);
     const straight = buildEnclosure(plan(bowed({}, {})));
     const volume = (e: typeof enclosure) => e.parts.filter((part) => built.printedParts[part.index]!.kind === "shell").reduce((sum, part) => sum + measureVolume(part.shape), 0);
-    // Two segments of about two thirds of 300 x 8 and 300 x 5, some 45 mm high on average.
+    // Solid, the two walls' segments would be some 140 cm3 more, about two thirds of 300 x 8 and 300 x 5,
+    // 45 mm high. Hollow, the wall is its own thickness, solid only along the bottom, under the top and
+    // where screws and the seam are fixed to it, which takes out about half of that.
     const extra = volume(enclosure) - volume(straight);
-    expect(extra).toBeGreaterThan(80_000);
-    expect(extra).toBeLessThan(160_000);
+    expect(extra).toBeGreaterThan(40_000);
+    expect(extra).toBeLessThan(100_000);
+    expect(measureVolume(bowHollows(built)!)).toBeGreaterThan(50_000);
     const reports = planPrint(built, enclosure.parts.map((part) => part.shape.mesh({ tolerance: 0.1, angularTolerance: 0.3 })));
     for (const part of built.printedParts.filter((p) => p.kind === "shell" || p.kind === "plate")) {
       expect(reports[part.index]!.needsSupport, `${part.name}: ${reports[part.index]!.notes.join(" ")}`).toBe(false);

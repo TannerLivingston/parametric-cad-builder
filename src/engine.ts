@@ -17,7 +17,7 @@ import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
 import { flatStart, type CurveFlat } from "./flats.js";
-import { bowedOuterPath, bowRise, hasBow, planOutline } from "./bow.js";
+import { bowAt, bowedOuterPath, bowRise, hasBow, planOutline } from "./bow.js";
 import { findSurface, buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
 export const BOLT_DIAMETER = 3.4; // M3 clearance, as used in the Desk Synth shell
@@ -450,6 +450,68 @@ function underBoss(plan: BuildPlan, x: number, y: number, lift: number): Shape3D
   return tools.reduce((all, tool) => all.intersect(tool));
 }
 
+// Behind a bowed wall, the inside follows its curve, so the wall is as thick as the others rather
+// than solid out to it. Everything in the enclosure is still placed against the square inside, so
+// the hollow is only the band between that and the curve. A band along the bottom stays, so it's
+// closed underneath, and the skin under the top stays its own thickness. Where a screw, a seam or
+// the plate's joint meets the wall, it stays solid, so what's fixed there is fixed to the curve.
+export const BOW_HOLLOW_MIN = 1.5; // a bow shallower than this isn't worth hollowing
+const BOW_KEEP = 9; // mm either side of a screw that stays solid: its boss, the feet it rises on, or a top tab
+export function bowHollows(plan: BuildPlan): Shape3D | null {
+  const e = plan.config.enclosure;
+  const { depth, inner, surfaces } = plan.profile;
+  const pockets: Shape3D[] = [];
+  for (const side of ["front", "rear"] as const) {
+    const bow = e.bow[side];
+    if (bow < BOW_HOLLOW_MIN) continue;
+    const front = side === "front";
+    // The band between the square inside and the curve, seen from side on: from the bottom band up
+    // to the underside of the top, which carries on along the slope of the surface it meets.
+    const [yInside, zInside] = front ? inner[0]! : inner.at(-1)!;
+    const surface = front ? surfaces[0]! : surfaces.at(-1)!;
+    const zTop = (y: number) => zInside + ((y - yInside) * surface.sin) / surface.cos;
+    const [y0, y1] = front ? [-bow - 1, e.wall + 0.5] : [depth - e.wall - 0.5, depth + bow + 1];
+    const zb = e.floorThickness;
+    const band = draw([y0, zb]).lineTo([y1, zb]).lineTo([y1, zTop(y1)]).lineTo([y0, zTop(y0)]).close().sketchOnPlane("YZ", e.wall).extrude(e.width - 2 * e.wall) as Shape3D;
+    // Inside the curve by the wall's thickness, seen from above.
+    const insidePath = planOutline(e.width - 2 * e.wall, depth - 2 * e.wall, Math.max(e.cornerRadius - e.wall, 0), front ? { front: bow, rear: 0 } : { front: 0, rear: bow });
+    let pen = draw(insidePath.at(-1)!.to);
+    for (const { to, via } of insidePath) pen = via ? pen.threePointsArcTo(to, via) : pen.lineTo(to);
+    const plan2d = pen.close().translate(e.wall, e.wall).sketchOnPlane("XY", zb - 1).extrude(plan.profile.maxHeight + bow + 2) as Shape3D;
+    let pocket = band.intersect(plan2d);
+    // Solid where something is fixed to the wall.
+    const near = (y: number) => (front ? y < e.wall + 15 : y > depth - e.wall - 15);
+    const keepXs: [number, number][] = [
+      ...plan.fasteners.items.filter((f) => near(f.y)).map((f): [number, number] => [f.x - BOW_KEEP, f.x + BOW_KEEP]),
+      ...(plan.plate?.screws ?? []).filter(([, y]) => near(y)).map(([x]): [number, number] => [x - BOW_KEEP, x + BOW_KEEP]),
+      ...plan.seams.map((seam): [number, number] => {
+        const reach = Math.max(seam.lip, seam.ribHalfThickness, seam.ribWidth / 2) + e.wall + 2;
+        return [seam.x - reach, seam.x + reach];
+      }),
+      ...(plan.plate?.joints ?? []).map((x): [number, number] => [x - 6, x + 6]),
+      // And at each corner, so that it ends in a slope rather than the corner's round.
+      [-10, e.wall + e.cornerRadius],
+      [e.width - e.wall - e.cornerRadius, e.width + 10],
+    ];
+    // Each solid stretch widens out toward the curve, its ends sloped steeper than 45 degrees, since
+    // a piece stands on its end to print, and a square end would be a roof over the hollow. Wider at
+    // the curve, each slope starts from the outer skin, which runs the piece's whole length.
+    // The slope runs only as deep as the hollow is there, from the square inside out to the curve.
+    const inside = front ? e.wall + 0.5 : depth - e.wall - 0.5;
+    const outward = front ? -1 : 1;
+    for (const [x0, x1] of keepXs) {
+      const deep = Math.max(bowAt(e.width, bow, x0), bowAt(e.width, bow, x1)) + 0.5;
+      const spread = deep * 1.15;
+      const yIn = inside - outward;
+      const yOut = inside + outward * (deep + 1);
+      const keep = draw([x0, yIn]).lineTo([x1, yIn]).lineTo([x1 + spread, yOut]).lineTo([x0 - spread, yOut]).close().sketchOnPlane("XY", zb - 2).extrude(plan.profile.maxHeight + bow + 4) as Shape3D;
+      pocket = pocket.cut(keep);
+    }
+    pockets.push(pocket);
+  }
+  return pockets.length ? (pockets.length === 1 ? pockets[0]! : pockets[0]!.fuse(pockets[1]!)) : null;
+}
+
 function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
   const e = plan.config.enclosure;
   const { inner } = plan.profile;
@@ -461,6 +523,8 @@ function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
     ? extrudedPath(plan.profile.cavityPath, e.wall, e.width - e.wall).intersect(roundedPlan(e.wall, e.width - e.wall, e.wall, plan.profile.depth - e.wall, e.cornerRadius > 0 ? innerRadius : 0, -2, plan.profile.maxHeight + 1))
     : roundedVerticals(extrudedProfile(inner, -1, e.wall, e.width - e.wall), e.cornerRadius, innerRadius);
   let shell = envelope.cut(withFlatsInside(cavity, plan));
+  const hollows = bowHollows(plan);
+  if (hollows) shell = shell.cut(hollows);
 
   for (const seam of plan.seams) {
     for (const tab of seam.tabs) shell = shell.fuse(envelope.intersect(seamTabSolid(tab, seam)));

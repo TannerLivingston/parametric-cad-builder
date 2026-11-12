@@ -1,6 +1,6 @@
 // A front or rear wall that bows outward, seen from above: an arc from corner to corner, furthest
-// out at the middle. Only the outside curves. The inside stays square, so everything in it is placed
-// as before, and the wall is solid out to its curve.
+// out at the middle. Everything in it is placed against the square inside, as before, and the engine
+// hollows the wall behind its curve, leaving it solid where things are fixed to it.
 import type { PathStep, Point2, Profile } from "./profile.js";
 
 export interface Bow {
@@ -9,7 +9,7 @@ export interface Bow {
 }
 
 export const MIN_BOW = 0.5; // less is as good as straight
-export const MAX_BOW = 20; // the wall is solid this far out
+export const MAX_BOW = 20; // the furthest out a wall can bow
 export const MAX_BOW_OF_WIDTH = 1 / 8; // which keeps the wall under 30 degrees off straight at its ends
 
 export const hasBow = (bow: Bow) => bow.front > 0 || bow.rear > 0;

@@ -871,9 +871,11 @@ curve still can't be a top panel. It has to curve by at least 0.5 mm and at most
 stay under the slope limit all along, and can't end in a rear top round.
 
 **`bow`** makes the `front` or `rear` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
-to corner that runs smoothly into each corner's round. Only the outside curves. The inside stays square, so everything in
-the enclosure is placed and checked exactly as before, and the wall is solid out to its curve, which costs plastic: about two
-thirds of width x bow x height. The top carries on out along the slope of the surface it meets, and a top panel there
+to corner that runs smoothly into each corner's round. Everything in the enclosure is placed and checked against the square
+inside, exactly as before, but the wall itself is hollow behind its curve, as thick as the others, with the inside following
+it. It stays solid along the bottom, under the top, at each corner, and where a screw, the seam or the plate's joint is fixed
+to it, each solid stretch widening out to the curve at a slope steep enough to print without support. That takes out about
+half the plastic a solid wall would have needed. A bow under 1.5 mm is left solid. The top carries on out along the slope of the surface it meets, and a top panel there
 follows the curve. A bow is at least 0.5 mm, and at most 20 mm or an eighth of the width. A bowed wall can't have a hole,
 vent, wall part, connector or lettering, and can't be used with a round on that end of the side profile, a top edge fillet,
 or, at the front, an opening. The side walls can't bow, because the shell's pieces print standing on them.
