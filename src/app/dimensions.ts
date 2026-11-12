@@ -15,7 +15,7 @@ type Point = [number, number, number];
 const LIFT = 1;
 
 // Where a and b are on the part's surface, floor or wall, and how far each runs.
-function frameOf(model: SceneModel, c: SceneComponent): { point(a: number, b: number): Point; size: [number, number] } | null {
+export function frameOf(model: SceneModel, c: SceneComponent): { point(a: number, b: number): Point; size: [number, number] } | null {
   const depth = model.surfaces.at(-1)?.y1 ?? 0;
   if (c.inWall) {
     const side = c.inWall.wall === "left" || c.inWall.wall === "right";

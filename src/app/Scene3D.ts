@@ -141,6 +141,7 @@ export class Scene3D {
   private markerRoot = new THREE.Group();
   private handleRoot = new THREE.Group();
   private guideLines: THREE.LineSegments | null = null;
+  private shading: THREE.Mesh | null = null;
   private handles: { handle: ShapeHandle; pick: THREE.Mesh; line: THREE.LineSegments }[] = [];
   private handleDrag: { id: string; start: number; origin: THREE.Vector3; axis: THREE.Vector3; across: THREE.Vector3 | null; startAcross: number } | null = null;
   private model: SceneModel | null = null;
@@ -997,6 +998,29 @@ export class Scene3D {
   private rightPressed: { x: number; y: number } | null = null;
   // The browser's own menu would cover the app's.
   private stopMenu = (event: Event) => event.preventDefault();
+
+  // Squares shaded where a dragged part would be refused, or none.
+  setShading(squares: [number, number, number][][]) {
+    if (this.shading) {
+      this.shading.geometry.dispose();
+      (this.shading.material as THREE.Material).dispose();
+      this.scene.remove(this.shading);
+      this.shading = null;
+    }
+    if (squares.length) {
+      const positions: number[] = [];
+      for (const [p0, p1, p2, p3] of squares) positions.push(...p0!, ...p1!, ...p2!, ...p0!, ...p2!, ...p3!);
+      const geometry = new THREE.BufferGeometry();
+      geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+      this.shading = new THREE.Mesh(
+        geometry,
+        new THREE.MeshBasicMaterial({ color: this.colors.invalid, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }),
+      );
+      this.shading.renderOrder = 8;
+      this.scene.add(this.shading);
+    }
+    this.requestFrame();
+  }
 
   // Lines a dragged part has snapped to, drawn over everything, or none.
   setGuides(segments: [[number, number, number], [number, number, number]][]) {

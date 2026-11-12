@@ -68,7 +68,9 @@ middle that moves it anywhere across its face. Each changes its numbers in half 
 it goes.
 
 A dragged part snaps into line, within 1.5 mm, with a neighbour's centre or edge, the middle of its surface, wall or floor, or the
-same gap as the row it's joining, with a dashed line along what it's lined up with. Hold Alt to drag without snapping.
+same gap as the row it's joining, with a dashed line along what it's lined up with. Hold Alt to drag without snapping. While it's
+dragged, the parts of its surface or the floor where it would be refused are shaded red, once they've been worked out: a spot
+every 6 mm is checked in the background after it's selected, which takes a few seconds on a busy design.
 
 A selected part shows its distances to the ends and edges of its surface, wall or floor in the view. Click one and type what it
 should be, and the part moves to match.

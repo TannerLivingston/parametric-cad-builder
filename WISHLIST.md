@@ -18,7 +18,6 @@ click or drag in the view.
 - [ ] **Type a distance to a neighbour onto the view,** as a part's distances to its edges can be, and for labels, holes and
   plate items too.
 - [ ] **More fixes from a problem:** a fix for a label, hole or screw in the wrong place, as a part has.
-- [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
 - [ ] **A built-in tutorial** that guides a newcomer step by step through making a basic synth: choosing a shape, adding
   buttons, knobs and a screen, a board on the floor, labels, a seam if it's too wide for the bed, fixing what the problem list
   says, and exporting the files to print. Each step points at the control to use and checks the design to know whether it's
@@ -41,6 +40,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Show where a part can go** while it's dragged, shading in red where it would be refused on its surface or the floor,
+  checked every 6 mm in the background. Not yet for parts in a wall or on a curve.
 - [x] **Select parts with a box,** Shift-dragged on empty space in the view, and **look at a problem** by clicking it again.
 - [x] **Type a size onto the view:** a selected part's distances to the ends and edges of where it sits, shown beside it, to click
   and type what each should be.

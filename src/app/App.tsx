@@ -33,6 +33,7 @@ import { handlesFor, type HandleSpec } from "./shapeHandles.js";
 import { facingFor } from "./lookAt.js";
 import { guideSegments, snapDrag } from "./snap.js";
 import { centreOf, dimensionsFor, placeForDimension, type Side } from "./dimensions.js";
+import { reachCells, refusedSquares, type Cell } from "./reach.js";
 import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -153,6 +154,15 @@ export function App() {
   const sceneRef = useRef<Scene3D | null>(null);
   const toggleRef = useRef<(id: string) => void>(() => {});
   const lookRef = useRef<() => void>(() => {});
+  // Where the selected part can't go, worked out a little at a time, and shaded while it's dragged.
+  const dragging = useRef<string | null>(null);
+  const reach = useRef<{ key: string; id: string; cells: Cell[] }>({ key: "", id: "", cells: [] });
+  const showReach = () => {
+    const { model: scene3d } = latest.current;
+    const id = dragging.current;
+    if (!id || !scene3d || reach.current.id !== id) return;
+    sceneRef.current?.setShading(refusedSquares(scene3d, id, reach.current.cells));
+  };
   // Whether Alt is held, which drags without snapping.
   const altHeld = useRef(false);
   useEffect(() => {
@@ -291,7 +301,10 @@ export function App() {
           setGroup([]);
         },
         onToggle: (id) => toggleInGroup(id),
-        onDragStart: () => {},
+        onDragStart: (id) => {
+          dragging.current = id;
+          showReach();
+        },
         onDrag: (id, a, b) => {
           const { config: current, applyConfig: apply, model: scene3d } = latest.current;
           const mount = scene3d?.components.find((c) => c.id === id)?.mount;
@@ -303,6 +316,8 @@ export function App() {
           apply(updateComponent(current, id, patch), false);
         },
         onDragEnd: () => {
+          dragging.current = null;
+          sceneRef.current?.setShading([]);
           sceneRef.current?.setGuides([]);
           latest.current.commit(latest.current.text);
         },
@@ -770,6 +785,28 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selected, nudge, rotate, restore, applyConfig, tab, fasteners, selectedFastener]);
+
+  useEffect(() => {
+    if (!selected || !model || !result?.ok || dragging.current) return;
+    // The same answer holds wherever the part itself is, so its own place is left out of the key.
+    const key = JSON.stringify({ ...config, components: (config.components ?? []).map((c: RawConfig) => (c.id === selected ? { ...c, u: 0, v: 0, x: 0, y: 0 } : c)) });
+    if (reach.current.key === key && reach.current.id === selected) return;
+    reach.current = { key, id: selected, cells: [] };
+    const cells = reachCells(config, model, selected);
+    const work = () => {
+      if (reach.current.key !== key) return;
+      const until = performance.now() + 25;
+      while (performance.now() < until) {
+        const next = cells.next();
+        if (next.done) return showReach();
+        reach.current.cells.push(next.value);
+      }
+      showReach();
+      window.setTimeout(work, 0);
+    };
+    // Not cancelled when the part moves, since the answer doesn't change: a new key stops it instead.
+    window.setTimeout(work, 200);
+  }, [selected, text, result?.ok]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Turns the view square onto what's selected, near enough to see it well: F, or a double-click.
   lookRef.current = () => {
