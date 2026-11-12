@@ -167,3 +167,55 @@ export function partOfLabel(config: RawConfig, path: string): string | null {
   const label = match ? list(config.labels)[Number(match[1])] : undefined;
   return typeof label?.component === "string" ? label.component : null;
 }
+
+const mm = (value: unknown) => `${Math.round(Number(value) * 100) / 100} mm`;
+const wallName = (wall: unknown) => `the ${String(wall)} wall`;
+
+// What something is, in a line, with its main sizes, for when the pointer rests on it in the view.
+// `partNames` gives each part type's name.
+export function describeThing(config: RawConfig, path: string, partNames: Record<string, string> = {}): string | null {
+  const at = (pattern: RegExp, list: unknown) => {
+    const match = pattern.exec(path);
+    return match && Array.isArray(list) ? (list[Number(match[1])] as RawConfig | undefined) ?? null : null;
+  };
+  const plate: RawConfig = config.plate ?? {};
+  if (path.startsWith(FASTENER_PREFIX)) return "A screw, with a brass insert. Click to move it on the Screws tab.";
+  const component = /^components:(.+)$/.exec(path);
+  if (component) {
+    const c = list(config.components).find((item) => item.id === component[1]);
+    if (!c) return null;
+    const name = partNames[c.type] ?? c.type;
+    const where = "wall" in c ? `in ${wallName(c.wall)}` : "x" in c ? "on the floor" : `on ${c.surface ?? config.enclosure?.surfaces?.[0]?.id}`;
+    return `${c.id}: ${name}, ${where}`;
+  }
+  const label = at(/^labels\[(\d+)\]$/, config.labels);
+  if (label) {
+    const where = typeof label.component === "string" ? `beside ${label.component}` : typeof label.wall === "string" ? `on ${wallName(label.wall)}` : `on ${label.surface ?? config.enclosure?.surfaces?.[0]?.id}`;
+    return `Label "${label.text}", ${mm(label.size ?? 5)} tall, ${where}`;
+  }
+  const hole = at(/^wallHoles\[(\d+)\]$/, config.wallHoles);
+  if (hole) return `Hole in ${wallName(hole.wall)}, ${mm(hole.width)} by ${mm(hole.height)}`;
+  const vent = at(/^vents\[(\d+)\]$/, config.vents);
+  if (vent) return `Vent in ${wallName(vent.wall)}, ${mm(vent.width)} by ${mm(vent.height)}`;
+  const seam = at(/^seams\[(\d+)\]$/, config.seams);
+  if (seam) return `Seam at ${mm(seam.x)} from the left${seam.lip ? `, with a ${mm(seam.lip)} lip` : ""}`;
+  const foot = at(/^plate\.feet\[(\d+)\]$/, plate.feet);
+  if (foot) return `Rubber foot, ${mm(foot.diameter ?? 10)} across`;
+  const support = at(/^plate\.supports\[(\d+)\]$/, plate.supports);
+  if (support) return "Support, up from the plate to the top";
+  const pin = at(/^plate\.pins\[(\d+)\]$/, plate.pins);
+  if (pin) return `Pin, ${mm(pin.diameter)} across and ${mm(pin.height)} tall`;
+  const tie = at(/^plate\.cableTies\[(\d+)\]$/, plate.cableTies);
+  if (tie) return "Cable tie bridge";
+  if (at(/^plate\.countersunkHoles\[(\d+)\]$/, plate.countersunkHoles)) return "Hole in the plate, for a screw from below";
+  const weight = at(/^plate\.weights\[(\d+)\]$/, plate.weights);
+  if (weight) return `Weight pocket, ${mm(weight.width)} by ${mm(weight.depth)}`;
+  if (path === "plate.seamX") return "Where the plate splits into pieces";
+  const box = at(/^opening\.keepOut\[(\d+)\]$/, config.opening?.keepOut);
+  if (box) return `Room kept clear in the opening, up to ${mm(box.top)} high`;
+  if (path === "opening" && config.opening) return `The opening, ${mm(config.opening.xMin)} to ${mm(config.opening.xMax)} from the left`;
+  const surface = at(/^enclosure\.surfaces\[(\d+)\]$/, config.enclosure?.surfaces);
+  if (surface) return `Surface "${surface.id}", ending ${mm(surface.y)} back at ${mm(surface.z)} high${surface.bulge ? `, curved by ${mm(surface.bulge)}` : ""}`;
+  if (path === WALLS_PATH) return `The walls, ${mm(config.enclosure?.wall ?? 3)} thick`;
+  return null;
+}

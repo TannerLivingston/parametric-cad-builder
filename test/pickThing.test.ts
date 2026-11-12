@@ -1,6 +1,6 @@
 // Working out what's at a click in the view, as its path in the config.
 import { describe, expect, it } from "vitest";
-import { FASTENER_PREFIX, partOfLabel, thingAt, WALLS_PATH } from "../src/app/pickThing.js";
+import { describeThing, FASTENER_PREFIX, partOfLabel, thingAt, WALLS_PATH } from "../src/app/pickThing.js";
 import { validateConfig } from "../src/validate.js";
 import { buildSceneModel, issueSpot } from "../src/app/sceneModel.js";
 
@@ -134,3 +134,20 @@ describe("the rest that's found by clicking", () => {
 });
 
 const on3 = (surface: string, u: number, v: number) => ({ kind: "surface", surface, u, v }) as const;
+
+describe("what something is, on hover", () => {
+  it("names it with its main sizes", () => {
+    const config = { ...design(), components: [{ id: "b", type: "arcade-24mm", surface: "deck", u: 60, v: 40 }], labels: [...design().labels, { text: "GO", component: "b" }] };
+    expect(describeThing(config, "components:b", { "arcade-24mm": "24 mm arcade button" })).toBe("b: 24 mm arcade button, on deck");
+    expect(describeThing(config, "labels[0]")).toBe('Label "GAIN", 5 mm tall, on panel');
+    expect(describeThing(config, "labels[1]")).toBe('Label "IN", 5 mm tall, on the rear wall');
+    expect(describeThing(config, "labels[3]")).toBe('Label "GO", 5 mm tall, beside b');
+    expect(describeThing(config, "wallHoles[0]")).toBe("Hole in the rear wall, 14 mm by 8 mm");
+    expect(describeThing(config, "seams[0]")).toBe("Seam at 150 mm from the left");
+    expect(describeThing(config, "plate.weights[0]")).toBe("Weight pocket, 40 mm by 20 mm");
+    expect(describeThing(config, "enclosure.surfaces[1]")).toBe('Surface "panel", ending 150 mm back at 60 mm high');
+    expect(describeThing(config, WALLS_PATH)).toBe("The walls, 3 mm thick");
+    expect(describeThing(config, `${FASTENER_PREFIX}p1`)).toMatch(/^A screw/);
+    expect(describeThing(config, "labels[9]")).toBeNull();
+  });
+});

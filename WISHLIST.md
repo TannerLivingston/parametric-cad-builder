@@ -21,8 +21,6 @@ click or drag in the view.
   neighbour, and type what it should be.
 - [ ] **More fixes from a problem:** turning the view to look at it, and a fix for a label, hole or screw in the wrong place, as a
   part has.
-- [ ] **Hover to see what something is,** with its name and main sizes, before clicking.
-- [ ] **Look at what's selected:** a key or double-click turns the view to face a surface or wall squarely, or zooms to a part.
 - [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
 - [ ] **A built-in tutorial** that guides a newcomer step by step through making a basic synth: choosing a shape, adding
   buttons, knobs and a screen, a board on the floor, labels, a seam if it's too wide for the bed, fixing what the problem list
@@ -46,6 +44,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Hover to see what something is,** with its name and main sizes, and **look at what's selected** with F or a
+  double-click, square onto it and near.
 - [x] **Plainer names and notes on the fields:** u and v read "Across (u)" and "Back (v)", and the less obvious fields, such as a
   curve, a bow, a lip or a round, have a note on hover saying what they change, with a dotted line under their name.
 - [x] **Fix a part's problem with one button:** a part that has one can move to the nearest spot, up to 40 mm away, where it has

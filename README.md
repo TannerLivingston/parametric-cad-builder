@@ -51,6 +51,10 @@ selected, with the Shape tab open at its fields. Escape, or a press anywhere els
 
 A field whose name is underlined with dots has a note: rest the pointer on it to see what it changes.
 
+Resting the pointer on something in the view says what it is, with its main sizes. **F**, or a double-click, turns the view square
+onto what's selected and brings it near: a part or label from above its surface or outside its wall, the plate from above, and
+what's under it from below.
+
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
 tab that fixes it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for

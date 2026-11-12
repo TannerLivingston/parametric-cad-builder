@@ -26,10 +26,11 @@ import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
 import { ontoAnotherSurface, ontoWords, placingPart, spotFor, type Placing } from "./placeEdit.js";
 import { spotAt } from "./pickSpot.js";
-import { FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } from "./pickThing.js";
+import { describeThing, FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } from "./pickThing.js";
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
+import { facingFor } from "./lookAt.js";
 import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -123,6 +124,7 @@ export function App() {
   const [measuring, setMeasuring] = useState(false);
   // Something waiting to be put where the next click in the view lands.
   const [placing, setPlacing] = useState<Placing | null>(null);
+  const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; title: string; choices: MenuChoice[]; array?: { part: string } | { path: string } } | null>(null);
   const [placingMissed, setPlacingMissed] = useState(false);
   // What was last clicked in the view or focused in the Shape tab, other than a part, as its path
@@ -143,6 +145,7 @@ export function App() {
   const viewportRef = useRef<HTMLDivElement>(null);
   const sceneRef = useRef<Scene3D | null>(null);
   const toggleRef = useRef<(id: string) => void>(() => {});
+  const lookRef = useRef<() => void>(() => {});
   const engineRef = useRef<EngineClient | null>(null);
 
   const parsed = useMemo(() => parseConfig(text), [text]);
@@ -281,6 +284,15 @@ export function App() {
           if (!spec) return;
           handleBase.current ??= latest.current.config;
           latest.current.applyConfig(spec.apply(handleBase.current, delta, deltaAcross), false);
+        },
+        onLook: () => lookRef.current(),
+        onHover: (at, part, faces) => {
+          if (!at) return setHover(null);
+          const { config: current } = latest.current;
+          const path = part ? `components:${part}` : whatsAt(faces).path;
+          const names = Object.fromEntries(Object.entries(partsOf(current)).map(([type, p]) => [type, p.name]));
+          const text = path ? describeThing(current, path, names) : null;
+          setHover(text ? { x: at.x, y: at.y, text } : null);
         },
         onHandleEnd: () => {
           if (!handleBase.current) return;
@@ -656,6 +668,10 @@ export function App() {
         return;
       }
       if (typing) return;
+      if (event.key.toLowerCase() === "f" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        lookRef.current();
+        return;
+      }
       const step = event.shiftKey ? 0.1 : 1;
       const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] };
       const move = moves[event.key];
@@ -707,6 +723,17 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selected, nudge, rotate, restore, applyConfig, tab, fasteners, selectedFastener]);
+
+  // Turns the view square onto what's selected, near enough to see it well: F, or a double-click.
+  lookRef.current = () => {
+    const index = (config.components ?? []).findIndex((c: RawConfig) => c.id === selected);
+    const path = index >= 0 ? `components[${index}]` : picked;
+    if (!path || !model) return;
+    const box = issueSpot({ path }, config, model, fasteners);
+    if (!box) return;
+    setHover(null);
+    sceneRef.current?.lookAt(box, facingFor(config, model, path));
+  };
 
   // Ctrl+C and Ctrl+V copy the selected parts and paste them, here or in another design, while the
   // cursor isn't in a field, where they copy and paste text as usual.
@@ -1419,6 +1446,11 @@ export function App() {
             dropPart(type, part, event.clientX, event.clientY);
           }}
         />
+        {hover && !menu ? (
+          <div className="view-hover" role="tooltip" style={{ left: Math.min(hover.x + 14, window.innerWidth - 300), top: hover.y + 16 }}>
+            {hover.text}
+          </div>
+        ) : null}
         {menu ? (
           <div className="view-menu" role="menu" aria-label={menu.title} style={{ left: Math.min(menu.x, window.innerWidth - 220), top: Math.min(menu.y, window.innerHeight - 40 - (menu.array ? 160 : 32 * menu.choices.length)) }}>
             <p>{menu.array ? `${menu.title}: make an array` : menu.title}</p>

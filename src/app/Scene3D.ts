@@ -41,6 +41,11 @@ export interface SceneEvents {
   // A handle on the shape dragged along its arrow, by this much from where it started, and let go.
   onHandleDrag(id: string, delta: number, deltaAcross: number): void;
   onHandleEnd(id: string): void;
+  // The pointer resting on the model, not dragging: where on the page, the part under it if any,
+  // and the faces. Null when it's left the model or the view.
+  onHover(at: { x: number; y: number } | null, part: string | null, faces: PickedFace[]): void;
+  // A double-click on the view, to look at what's selected.
+  onLook(): void;
 }
 
 // A point on the shape that can be dragged along a line to change a size, such as a seam's place
@@ -170,6 +175,8 @@ export class Scene3D {
     this.camera.up.set(0, 0, 1);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.addEventListener("change", () => this.requestFrame());
+    // A note on what was under the pointer is out of date once the view turns.
+    this.controls.addEventListener("start", () => this.events.onHover(null, null, []));
 
     const materialFor = (color: string) =>
       new THREE.MeshStandardMaterial({ color, roughness: 0.75, metalness: 0, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
@@ -190,6 +197,9 @@ export class Scene3D {
     canvas.addEventListener("contextmenu", this.stopMenu);
     canvas.addEventListener("pointermove", this.handleMove);
     canvas.addEventListener("pointerup", this.handleUp);
+    canvas.addEventListener("pointerleave", this.leaveView);
+    canvas.addEventListener("dblclick", () => this.events.onLook());
+    canvas.addEventListener("pointerdown", this.leaveView);
     canvas.addEventListener("pointercancel", this.handleUp);
     canvas.addEventListener("lostpointercapture", this.handleUp);
     this.observer = new ResizeObserver(() => this.resize());
@@ -597,6 +607,22 @@ export class Scene3D {
     this.showDesign();
   }
 
+  // Turns the view to look at a box, from a direction if given, such as square onto a wall, or else
+  // from where it's looking now, near enough that it fills a good part of the view.
+  lookAt(box: { min: [number, number, number]; max: [number, number, number] }, facing?: [number, number, number]) {
+    const bounds = new THREE.Box3(new THREE.Vector3(...box.min), new THREE.Vector3(...box.max));
+    const centre = bounds.getCenter(new THREE.Vector3());
+    const radius = Math.max(bounds.getSize(new THREE.Vector3()).length() / 2, 25) * 1.6;
+    const direction = facing ? new THREE.Vector3(...facing).normalize() : this.camera.position.clone().sub(this.controls.target).normalize();
+    // Straight down or up, the camera needs a way to call up that isn't the same way.
+    if (Math.abs(direction.z) > 0.999) direction.y -= 0.001;
+    const distance = radius / Math.sin(THREE.MathUtils.degToRad(this.camera.fov / 2)) / Math.min(1, this.camera.aspect);
+    this.camera.position.copy(centre).addScaledVector(direction.normalize(), distance);
+    this.controls.target.copy(centre);
+    this.controls.update();
+    this.requestFrame();
+  }
+
   setView(preset: ViewPreset) {
     this.fit(new THREE.Vector3(...PRESETS[preset]).normalize());
   }
@@ -887,7 +913,7 @@ export class Scene3D {
     return this.raycaster.ray;
   }
 
-  private markerAt(event: PointerEvent): Marker | null {
+  private markerAt(event: { clientX: number; clientY: number }): Marker | null {
     if (this.fasteners) return null;
     this.rayFrom(event);
     const hits = this.visibleHits(this.raycaster.intersectObjects(this.markers.map((m) => m.pick)));
@@ -929,6 +955,27 @@ export class Scene3D {
     const { u, v } = surfaceCoordinates(component.surface!, [x, hit.y, hit.z - (component.onTopPanel ? this.gap : 0)]);
     return [u, v];
   }
+
+  // At most once a frame, what the pointer rests on, for a note on it.
+  private hoverAt: { clientX: number; clientY: number } | null = null;
+  private hoverQueued = false;
+  private queueHover(event: PointerEvent) {
+    this.hoverAt = { clientX: event.clientX, clientY: event.clientY };
+    if (this.hoverQueued || event.buttons) return;
+    this.hoverQueued = true;
+    requestAnimationFrame(() => {
+      this.hoverQueued = false;
+      const at = this.hoverAt;
+      if (!at || this.drag || this.handleDrag) return;
+      const part = this.markerAt(at)?.component.id ?? null;
+      const faces = part ? [] : this.pickFaces(at);
+      this.events.onHover(part || faces.length ? { x: at.clientX, y: at.clientY } : null, part, faces);
+    });
+  }
+  private leaveView = () => {
+    this.hoverAt = null;
+    this.events.onHover(null, null, []);
+  };
 
   private rightPressed: { x: number; y: number } | null = null;
   // The browser's own menu would cover the app's.
@@ -1120,6 +1167,7 @@ export class Scene3D {
     }
     if (!this.drag) {
       this.renderer.domElement.style.cursor = this.picking ? "crosshair" : this.markerAt(event) ? "grab" : "";
+      if (!this.picking && !this.measuring) this.queueHover(event);
       return;
     }
     const component = this.model?.components.find((c) => c.id === this.drag!.id);

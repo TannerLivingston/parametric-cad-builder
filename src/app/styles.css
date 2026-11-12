@@ -871,3 +871,16 @@ label.noted {
 label.noted input {
   cursor: text;
 }
+
+/* What the pointer rests on in the view, in a line beside it. */
+.view-hover {
+  position: fixed;
+  z-index: 15;
+  max-width: 280px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--text);
+  color: var(--bg);
+  font-size: 12px;
+  pointer-events: none;
+}
