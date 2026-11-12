@@ -67,6 +67,9 @@ from the middle of its arc, by how much it curves. A label, a hole or vent in a 
 middle that moves it anywhere across its face. Each changes its numbers in half millimetres, and the validator judges it as
 it goes.
 
+A dragged part snaps into line, within 1.5 mm, with a neighbour's centre or edge, the middle of its surface, wall or floor, or the
+same gap as the row it's joining, with a dashed line along what it's lined up with. Hold Alt to drag without snapping.
+
 A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the
 **Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
 

@@ -31,6 +31,7 @@ import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
 import { facingFor } from "./lookAt.js";
+import { guideSegments, snapDrag } from "./snap.js";
 import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -146,6 +147,20 @@ export function App() {
   const sceneRef = useRef<Scene3D | null>(null);
   const toggleRef = useRef<(id: string) => void>(() => {});
   const lookRef = useRef<() => void>(() => {});
+  // Whether Alt is held, which drags without snapping.
+  const altHeld = useRef(false);
+  useEffect(() => {
+    const track = (event: KeyboardEvent) => (altHeld.current = event.altKey);
+    const reset = () => (altHeld.current = false);
+    window.addEventListener("keydown", track);
+    window.addEventListener("keyup", track);
+    window.addEventListener("blur", reset);
+    return () => {
+      window.removeEventListener("keydown", track);
+      window.removeEventListener("keyup", track);
+      window.removeEventListener("blur", reset);
+    };
+  }, []);
   const engineRef = useRef<EngineClient | null>(null);
 
   const parsed = useMemo(() => parseConfig(text), [text]);
@@ -275,10 +290,16 @@ export function App() {
           const { config: current, applyConfig: apply, model: scene3d } = latest.current;
           const mount = scene3d?.components.find((c) => c.id === id)?.mount;
           const step = 0.5;
-          const patch = mount === "wall" ? { at: snap(a, step), z: snap(b, step) } : mount === "floor" ? { x: snap(a, step), y: snap(b, step) } : { u: snap(a, step), v: snap(b, step) };
+          // Into line with what's near, unless Alt is held, with guides for the lines it's on.
+          const snapped = scene3d && !altHeld.current ? snapDrag(scene3d, id, a, b) : { a: snap(a, step), b: snap(b, step), guides: [] };
+          sceneRef.current?.setGuides(scene3d ? guideSegments(scene3d, id, snapped.guides) : []);
+          const patch = mount === "wall" ? { at: snapped.a, z: snapped.b } : mount === "floor" ? { x: snapped.a, y: snapped.b } : { u: snapped.a, v: snapped.b };
           apply(updateComponent(current, id, patch), false);
         },
-        onDragEnd: () => latest.current.commit(latest.current.text),
+        onDragEnd: () => {
+          sceneRef.current?.setGuides([]);
+          latest.current.commit(latest.current.text);
+        },
         onHandleDrag: (id, delta, deltaAcross) => {
           const spec = handleSpecs.current.find((h) => h.id === id);
           if (!spec) return;

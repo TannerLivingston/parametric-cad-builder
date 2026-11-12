@@ -136,6 +136,7 @@ export class Scene3D {
   private markers: Marker[] = [];
   private markerRoot = new THREE.Group();
   private handleRoot = new THREE.Group();
+  private guideLines: THREE.LineSegments | null = null;
   private handles: { handle: ShapeHandle; pick: THREE.Mesh; line: THREE.LineSegments }[] = [];
   private handleDrag: { id: string; start: number; origin: THREE.Vector3; axis: THREE.Vector3; across: THREE.Vector3 | null; startAcross: number } | null = null;
   private model: SceneModel | null = null;
@@ -980,6 +981,27 @@ export class Scene3D {
   private rightPressed: { x: number; y: number } | null = null;
   // The browser's own menu would cover the app's.
   private stopMenu = (event: Event) => event.preventDefault();
+
+  // Lines a dragged part has snapped to, drawn over everything, or none.
+  setGuides(segments: [[number, number, number], [number, number, number]][]) {
+    if (this.guideLines) {
+      this.guideLines.geometry.dispose();
+      (this.guideLines.material as THREE.Material).dispose();
+      this.scene.remove(this.guideLines);
+      this.guideLines = null;
+    }
+    if (segments.length) {
+      const points = segments.flatMap(([from, to]) => [new THREE.Vector3(...from), new THREE.Vector3(...to)]);
+      this.guideLines = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(points),
+        new THREE.LineDashedMaterial({ color: this.colors.selected, dashSize: 3, gapSize: 2, depthTest: false, transparent: true }),
+      );
+      this.guideLines.computeLineDistances();
+      this.guideLines.renderOrder = 9;
+      this.scene.add(this.guideLines);
+    }
+    this.requestFrame();
+  }
 
   // Shows these handles, in place of any before, while something with sizes to drag is selected.
   setHandles(handles: ShapeHandle[]) {

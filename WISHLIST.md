@@ -15,8 +15,6 @@ click or drag in the view.
 - [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
   and the fields on the other tabs.
 - [ ] **Select several parts with a dragged box,** and several labels, holes or plate items, as Shift-click selects parts.
-- [ ] **Snapping while dragging,** with guide lines: to a grid, to a neighbour's centre or edge, to the middle of a surface,
-  and to equal spacing in a row.
 - [ ] **Type a size onto the view:** click a dimension shown beside a selection, such as its distance to an edge or a
   neighbour, and type what it should be.
 - [ ] **More fixes from a problem:** turning the view to look at it, and a fix for a label, hole or screw in the wrong place, as a
@@ -44,6 +42,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Snapping while dragging a part,** with dashed guides: to a neighbour's centre or edge, the middle of its surface, wall or
+  floor, and the row's own gap. Alt drags without it. Handles and labels don't snap yet.
 - [x] **Hover to see what something is,** with its name and main sizes, and **look at what's selected** with F or a
   double-click, square onto it and near.
 - [x] **Plainer names and notes on the fields:** u and v read "Across (u)" and "Back (v)", and the less obvious fields, such as a
