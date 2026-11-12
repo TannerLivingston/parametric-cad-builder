@@ -94,7 +94,9 @@ them, in this design or another: where they were if that adds no problem, or els
 doesn't. In a field, the keys copy and paste text as usual.
 
 A part with a problem has **Move it to the nearest spot that fits**: it goes the least distance, in any direction, to where it has
-no problems of its own and nothing else is made worse, up to 40 mm away.
+no problems of its own and nothing else is made worse, up to 40 mm away. A label, hole, vent, seam or plate item with a problem has
+the same, at the top of the Shape tab while it's selected, with the problem beside it. It searches sixteen directions, so a gap
+narrower than a millimetre between two limits can be missed.
 
 A selected part can be copied in rows, mirrored across the enclosure's centre, centred, or lined up with another part on the same
 surface. Drag parts in the 3D view, or use the keys above. Changes

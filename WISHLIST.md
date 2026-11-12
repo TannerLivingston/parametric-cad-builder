@@ -16,7 +16,8 @@ click or drag in the view.
 - [ ] **Select several labels, holes or plate items,** as Shift-click and a box select parts.
 - [ ] **Type a distance to a neighbour onto the view,** as a part's distances to its edges can be, and for labels, holes and
   plate items too.
-- [ ] **More fixes from a problem:** a fix for a label, hole or screw in the wrong place, as a part has.
+- [ ] **A finer search for the nearest spot that fits,** that finds a narrow band between two limits, such as a hole between a
+  bottom round and a top round.
 - [ ] **Small drawings for the less obvious fields,** such as u and v, bulge and bow, beside their notes.
 
 ## Shape
@@ -33,6 +34,7 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Fix a label, hole, vent, seam or plate item's problem with one button,** as a part's: the nearest spot where it has none.
 - [x] **Light up a single number:** the cursor in the width, front height, a round, the corner radius, a bow, a wall's, the
   top's or the floor's thickness, a surface's depth or height, or a seam's lip lights up just the part of the shape it sizes.
 - [x] **A built-in tutorial** for making a basic synth, in ten steps from a plain box to the files to print. Each step points at

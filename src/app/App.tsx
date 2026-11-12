@@ -36,7 +36,7 @@ import { centreOf, dimensionsFor, placeForDimension, type Side } from "./dimensi
 import { reachCells, refusedSquares, type Cell } from "./reach.js";
 import { firstUnfinished, TUTORIAL, tutorialStart, type TutorialState } from "./tutorial.js";
 import { TutorialPanel } from "./TutorialPanel.js";
-import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
+import { copyParts, duplicateComponent, duplicateThing, nearestFit, nearestFitThing, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -1178,7 +1178,27 @@ export function App() {
         </div>
 
         {tab === "shape" ? (
-          <ShapePanel config={config} onChange={(next) => applyConfig(next)} picked={picked} onField={setFocusedField} onPick={(path) => {
+          <ShapePanel
+            banner={(() => {
+              // What's picked has a problem of its own: say so, and offer to move it to where it fits.
+              const problem = picked ? errors.find((issue) => issue.path === picked || issue.path.startsWith(`${picked}.`)) : undefined;
+              if (!picked || !problem || !/^(labels|wallHoles|vents|seams|plate\.\w+)\[\d+\]$/.test(picked)) return null;
+              return (
+                <div className="fix-bar" role="status">
+                  <span>{problem.message}</span>
+                  <button
+                    onClick={() => {
+                      const next = nearestFitThing(config, picked);
+                      if (next) applyConfig(next);
+                      else setNotice(`There's nowhere within 40 mm that the ${nameOfThing(picked)} fits. The problem says what's in the way.`);
+                    }}
+                  >
+                    Move it to the nearest spot that fits
+                  </button>
+                </div>
+              );
+            })()}
+            config={config} onChange={(next) => applyConfig(next)} picked={picked} onField={setFocusedField} onPick={(path) => {
               setPicked(path);
               if (path) setSelected(null);
             }} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />

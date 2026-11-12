@@ -1,7 +1,7 @@
 // The Shape tab: the enclosure itself, as fields rather than JSON. It only writes the config,
 // so anything it can't do is still open in the Config tab, and every problem still comes from
 // the validator.
-import { useEffect, useRef, type FocusEvent } from "react";
+import { type ReactNode, useEffect, useRef, type FocusEvent } from "react";
 import type { RawConfig } from "./configEdit.js";
 import { ColorField, NumberField, TextField } from "./fields.js";
 import {
@@ -65,7 +65,7 @@ const LABEL_SIDES = ["below", "above", "left", "right"] as const;
 // no view to click in, and it goes in the middle.
 // `picked` is the path in the config of what was clicked in the view, whose fields are marked and
 // scrolled to. `onPick` says which fields have the focus, so that the view can light up what they're for.
-export function ShapePanel({ config, onChange, onPlace, picked, onPick, onField }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; onPick?(path: string | null): void; onField?(path: string | null): void }) {
+export function ShapePanel({ config, onChange, onPlace, picked, onPick, onField, banner }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; onPick?(path: string | null): void; onField?(path: string | null): void; banner?: ReactNode }) {
   const place = (placing: Placing) => (onPlace ? onPlace(placing) : onChange(placing.middle(config)));
   const root = useRef<HTMLDivElement>(null);
   // Fields for one thing in the design, marked when it's the one picked.
@@ -101,6 +101,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick, onField 
 
   return (
     <div className="tab-body shape-form" ref={root} onFocus={focused} onBlur={() => onField?.(null)}>
+      {banner}
       <section className="fields single">
         <TextField label="Name" value={String(config.name ?? "")} onCommit={(name) => onChange({ ...config, name })} />
       </section>

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { validateConfig } from "../src/validate.js";
 import { errorCount } from "../src/app/configEdit.js";
-import { arrayPitch, arrayThing, copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "../src/app/thingKeys.js";
+import { arrayPitch, arrayThing, copyParts, duplicateComponent, duplicateThing, nearestFit, nearestFitThing, nudgeThing, pasteParts, removeThing, rotateThing } from "../src/app/thingKeys.js";
 
 const design = (): any => ({
   schemaVersion: 1,
@@ -160,5 +160,33 @@ describe("moving a part to the nearest spot that fits", () => {
   });
   it("is nothing for a part with no problems", () => {
     expect(nearestFit(two(110), "button-2")).toBeNull();
+  });
+});
+
+describe("moving a label or hole to the nearest spot that fits", () => {
+  const box = (holes: any[]): any => ({
+    schemaVersion: 1,
+    name: "box",
+    enclosure: { width: 200, frontHeight: 40, surfaces: [{ id: "deck", y: 100, z: 40 }] },
+    wallHoles: holes,
+    components: [],
+  });
+  const own = (c: any, path: string) => {
+    const r = validateConfig(c, { wiring: false });
+    return r.ok ? 0 : r.errors.filter((e) => e.path === path || e.path.startsWith(`${path}.`)).length;
+  };
+
+  it("moves a hole clear of another, and leaves the other alone", () => {
+    const start = box([{ wall: "rear", at: 60, z: 20, width: 14, height: 8 }, { wall: "rear", at: 66, z: 20, width: 14, height: 8 }]);
+    expect(own(start, "wallHoles[1]")).toBeGreaterThan(0);
+    const fixed = nearestFitThing(start, "wallHoles[1]")!;
+    expect(own(fixed, "wallHoles[1]")).toBe(0);
+    expect(fixed.wallHoles[0]).toEqual(start.wallHoles[0]);
+    expect(Math.hypot(fixed.wallHoles[1].at - 66, fixed.wallHoles[1].z - 20)).toBeLessThanOrEqual(20);
+  });
+
+  it("is nothing for one with no problem, or what isn't on a list", () => {
+    expect(nearestFitThing(box([{ wall: "rear", at: 60, z: 20, width: 14, height: 8 }]), "wallHoles[0]")).toBeNull();
+    expect(nearestFitThing(box([]), "enclosure.wall")).toBeNull();
   });
 });

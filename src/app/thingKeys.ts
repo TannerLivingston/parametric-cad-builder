@@ -294,3 +294,34 @@ export function nearestFit(config: RawConfig, id: string): RawConfig | null {
   }
   return null;
 }
+
+// The same for a label, hole, vent, seam or something on the plate, by its path: the nearest place
+// where it has no problem of its own, and nothing else is made worse. A seam moves only across.
+export function nearestFitThing(config: RawConfig, path: string): RawConfig | null {
+  const where = whereOf(path);
+  if (!where) return null;
+  const items = listOf(config, where);
+  const item = items[where.index];
+  const axes = item && axesOf(item, where.key);
+  if (!item || !axes) return null;
+  const own = (issue: { path: string }) => issue.path === path || issue.path.startsWith(`${path}.`);
+  const problems = (c: RawConfig) => {
+    const result = validateConfig(c, { wiring: false });
+    const errors = result.ok ? [] : result.errors;
+    return { own: errors.filter(own).length, all: errors.length };
+  };
+  const start = problems(config);
+  if (start.own === 0) return null;
+  const at = (da: number, db: number) => withList(config, where, items.map((it, i) => (i === where.index ? moved(it, axes, da, db) : it)));
+  for (let distance = 1; distance <= FIT_REACH; distance++) {
+    const tries: [number, number][] = axes[1]
+      ? Array.from({ length: FIT_DIRECTIONS }, (_, i) => [distance * Math.cos((i / FIT_DIRECTIONS) * 2 * Math.PI), distance * Math.sin((i / FIT_DIRECTIONS) * 2 * Math.PI)])
+      : [[distance, 0], [-distance, 0]];
+    for (const [da, db] of tries) {
+      const candidate = at(da, db);
+      const now = problems(candidate);
+      if (now.own === 0 && now.all <= start.all - start.own) return candidate;
+    }
+  }
+  return null;
+}
