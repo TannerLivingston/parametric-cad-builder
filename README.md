@@ -50,7 +50,8 @@ the other parts left out, so anything already beside it shows as a problem once 
 hole, vent, seam, support, pin, plate hole, cable tie bridge, weight pocket or foot there, whichever can go on it. What's added is
 selected, with the Shape tab open at its fields. Escape, or a press anywhere else, closes it.
 
-A field whose name is underlined with dots has a note: rest the pointer on it to see what it changes.
+A field whose name is underlined with dots has a note: rest the pointer on it to see what it changes. The least obvious, u and
+v, a curve, a bow, a lip and the rounds, have a **?** beside their name with a small drawing as well.
 
 Resting the pointer on something in the view says what it is, with its main sizes. **F**, or a double-click, turns the view square
 onto what's selected and brings it near: a part or label from above its surface or outside its wall, the plate from above, and

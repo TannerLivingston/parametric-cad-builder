@@ -1049,3 +1049,43 @@ input.view-dimension {
 .fix-bar button {
   align-self: flex-start;
 }
+
+/* A "?" beside a field's name, with a note and a drawing on hover or focus. */
+.field-help {
+  position: relative;
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  line-height: 14px;
+  text-align: center;
+  text-decoration: none;
+  cursor: help;
+}
+
+.field-pop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  position: fixed;
+  z-index: 30;
+  width: 190px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: left;
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.field-drawing {
+  display: block;
+  color: var(--muted);
+}

@@ -1,4 +1,39 @@
 import { useEffect, useRef, useState } from "react";
+import { FIELD_DRAWINGS } from "./fieldDrawings.js";
+
+// The note on a field, and a drawing where there is one: shown on a "?" beside the field's name,
+// when the pointer rests on it or it has the focus. Without a drawing, the note is the label's title.
+function FieldHelp({ label }: { label: string }) {
+  const drawing = FIELD_DRAWINGS[label];
+  const note = FIELD_NOTES[label];
+  // Placed against the window, so the sidebar's edge doesn't cut it off.
+  const [at, setAt] = useState<{ left: number; top: number } | null>(null);
+  if (!drawing || !note) return null;
+  const show = (event: { currentTarget: HTMLElement }) => {
+    const r = event.currentTarget.getBoundingClientRect();
+    setAt({ left: Math.max(8, Math.min(r.left, window.innerWidth - 216)), top: Math.min(r.bottom + 4, window.innerHeight - 200) });
+  };
+  return (
+    <span
+      className="field-help"
+      tabIndex={0}
+      aria-label={note}
+      onClick={(event) => event.preventDefault()}
+      onMouseEnter={show}
+      onFocus={show}
+      onMouseLeave={() => setAt(null)}
+      onBlur={() => setAt(null)}
+    >
+      ?
+      {at ? (
+        <span className="field-pop" role="tooltip" style={{ left: at.left, top: at.top }}>
+          {drawing}
+          <span>{note}</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 // A short note on what a field changes, shown when the pointer rests on it, for those whose name
 // alone doesn't say. Keyed by the field's label, so every field of that name gets it.
@@ -42,8 +77,11 @@ export function NumberField({ label, value, onCommit, step = 0.5, field }: { lab
   const [draft, setDraft] = useState<string | null>(null);
   const note = FIELD_NOTES[label];
   return (
-    <label title={note} className={note ? "noted" : undefined} data-field={field}>
-      {label}
+    <label title={FIELD_DRAWINGS[label] ? undefined : note} className={note ? "noted" : undefined} data-field={field}>
+      <span>
+        {label}
+        <FieldHelp label={label} />
+      </span>
       <input
         type="number"
         step={step}
@@ -67,8 +105,11 @@ export function TextField({ label, value, onCommit, placeholder }: { label: stri
   const [draft, setDraft] = useState<string | null>(null);
   const note = FIELD_NOTES[label];
   return (
-    <label title={note} className={note ? "noted" : undefined}>
-      {label}
+    <label title={FIELD_DRAWINGS[label] ? undefined : note} className={note ? "noted" : undefined}>
+      <span>
+        {label}
+        <FieldHelp label={label} />
+      </span>
       <input
         type="text"
         spellCheck={false}

@@ -15,7 +15,6 @@ click or drag in the view.
 - [ ] **Light up what a field is for on the other tabs,** such as the Print and Screws tabs' numbers.
 - [ ] **Select several labels, holes or plate items,** as Shift-click and a box select parts.
 - [ ] **Type distances onto the view for labels, holes and plate items,** as for parts.
-- [ ] **Small drawings for the less obvious fields,** such as u and v, bulge and bow, beside their notes.
 
 ## Shape
 
@@ -31,6 +30,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Small drawings for the less obvious fields:** u and v, a curve, a bow, a seam's lip and the three rounds, on a "?"
+  beside their name.
 - [x] **Type a distance to a neighbour onto the view:** a selected part's distances measure to the nearest part in its way on
   each side, where there is one.
 - [x] **A finer search for the nearest spot that fits,** a millimetre apart in rings half a millimetre apart, in the background
