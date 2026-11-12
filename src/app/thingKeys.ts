@@ -10,7 +10,7 @@ import { arrayComponent, MAX_COPIES, unusedIds } from "./layoutEdit.js";
 type Where = { key: string; plate: boolean; index: number };
 type Axes = [string, string | null];
 
-function whereOf(path: string): Where | null {
+export function whereOf(path: string): Where | null {
   const match = /^(plate\.)?(labels|wallHoles|vents|seams|feet|supports|pins|cableTies|countersunkHoles|weights)\[(\d+)\]$/.exec(path);
   if (!match) return null;
   const plate = Boolean(match[1]);
@@ -19,7 +19,7 @@ function whereOf(path: string): Where | null {
   return { key: match[2]!, plate, index: Number(match[3]) };
 }
 
-function listOf(config: RawConfig, where: Where): RawConfig[] {
+export function listOf(config: RawConfig, where: Where): RawConfig[] {
   const list = where.plate ? config.plate?.[where.key] : config[where.key];
   return Array.isArray(list) ? list : [];
 }
@@ -32,7 +32,7 @@ function withList(config: RawConfig, where: Where, items: RawConfig[]): RawConfi
 }
 
 // The two numbers that say where something is, across and up as the arrows see it.
-function axesOf(item: RawConfig, key: string): Axes | null {
+export function axesOf(item: RawConfig, key: string): Axes | null {
   if (key === "seams") return ["x", null];
   if (key === "labels" && typeof item.component === "string") return null;
   if ("wall" in item) return ["at", "z"];
@@ -81,7 +81,7 @@ const TRIES = 60;
 const GAP = 2; // the least room left between a copy and its original
 
 // Its size across and up, as far as it says; a part's is the validator's to judge.
-function sizeOf(item: RawConfig, key: string): [number, number] {
+export function sizeOf(item: RawConfig, key: string): [number, number] {
   const turned = item.rotationDeg === 90 || item.rotationDeg === 270;
   if (key === "labels") {
     const outline = textOutline(String(item.text ?? ""), Number(item.size ?? 5));

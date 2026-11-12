@@ -13,7 +13,6 @@ The aim: anything set by typing a number or picking from a list in the sidebar s
 click or drag in the view.
 
 - [ ] **Light up what a field is for on the other tabs,** such as the Print and Screws tabs' numbers.
-- [ ] **Type distances onto the view for labels, holes and plate items,** as for parts.
 
 ## Shape
 
@@ -29,6 +28,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Type distances onto the view for labels, holes, vents and plate items,** measured to the parts around them and the edges,
+  as for parts.
 - [x] **Select several labels, holes, vents, seams or plate items** with Shift-click in the view, to nudge, turn or delete
   together. A box doesn't take them yet.
 - [x] **Small drawings for the less obvious fields:** u and v, a curve, a bow, a seam's lip and the three rounds, on a "?"

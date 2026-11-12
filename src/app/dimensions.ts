@@ -1,7 +1,9 @@
 // The distances from a selected part to the edges of where it sits, shown in the view beside it, to
 // click and type what each should be. On a top surface: to its left and right ends and its front
 // and back edges. On the floor: to the walls. In a wall: to its ends, the bottom and the top.
+import type { RawConfig } from "./configEdit.js";
 import type { SceneComponent, SceneModel } from "./sceneModel.js";
+import { axesOf, listOf, sizeOf, whereOf } from "./thingKeys.js";
 
 export type Side = "left" | "right" | "front" | "back";
 
@@ -102,4 +104,22 @@ export function centreOf(model: SceneModel, c: SceneComponent): Point | null {
     return [c.a, s.y0 + c.b * s.cos, s.z0 + c.b * s.sin];
   }
   return frameOf(model, c)?.point(c.a, c.b) ?? null;
+}
+
+// A label, hole, vent or plate item, stood in for by a part of its size where it is, so that its
+// distances can be measured the same way: to the parts around it, and the edges of where it sits.
+export const ITEM_ID = "\u0000item";
+export function itemAsComponent(config: RawConfig, model: SceneModel, path: string): SceneComponent | null {
+  const where = whereOf(path);
+  const item = where ? listOf(config, where)[where.index] : undefined;
+  const axes = item && where ? axesOf(item, where.key) : null;
+  if (!item || !where || !axes || !axes[1]) return null;
+  const [across, up] = sizeOf(item, where.key);
+  const box = { shape: "rect" as const, hu: across / 2, hv: up / 2 };
+  const base = { id: ITEM_ID, a: Number(item[axes[0]]), b: Number(item[axes[1]]), printedPart: 0, onTopPanel: false, above: null, below: null, floor: null, inWall: null, surface: null };
+  if (typeof item.wall === "string") return { ...base, mount: "wall", inWall: { wall: item.wall, face: box, body: box, depth: 0 } } as SceneComponent;
+  if (axes[0] === "x") return { ...base, mount: "floor", floor: { ...box, height: 0 } } as SceneComponent;
+  const id = item.surface ?? config.enclosure?.surfaces?.[0]?.id;
+  const surface = model.surfaces.find((s) => s.id === id && !s.curveOf);
+  return surface ? ({ ...base, mount: "panel", surface, above: { ...box, height: 0 } } as SceneComponent) : null;
 }

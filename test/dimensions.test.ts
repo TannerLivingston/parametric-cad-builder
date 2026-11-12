@@ -1,6 +1,6 @@
 // A selected part's distances to the edges of where it sits, and typing what they should be.
 import { describe, expect, it } from "vitest";
-import { dimensionsFor, placeForDimension } from "../src/app/dimensions.js";
+import { dimensionsFor, itemAsComponent, placeForDimension } from "../src/app/dimensions.js";
 
 const deck = { id: "deck", index: 0, y0: 0, z0: 40, y1: 80, z1: 40, thickness: 3, length: 80, angle: 0, cos: 1, sin: 0 };
 const base = { printedPart: 0, onTopPanel: false, below: null, surface: null, floor: null, above: null, inWall: null };
@@ -57,5 +57,38 @@ describe("sizes typed onto the view", () => {
     ]);
     expect(placeForDimension(withNeighbours, "b", "left", 5)).toEqual([45, 30]);
     expect(placeForDimension(withNeighbours, "b", "back", 10)).toEqual([60, 45]);
+  });
+});
+
+describe("sizes typed onto the view for what's on a list", () => {
+  const config: any = {
+    enclosure: { width: 300, surfaces: [{ id: "deck", y: 80, z: 40 }] },
+    labels: [{ text: "GAIN", surface: "deck", u: 100, v: 20, size: 5 }],
+    wallHoles: [{ wall: "rear", at: 60, z: 20, width: 14, height: 8 }],
+    seams: [{ x: 150 }],
+    plate: { pins: [{ x: 40, y: 50, diameter: 4, height: 4 }] },
+  };
+  it("stands a hole, a label or a plate item in as a part of its size where it is", () => {
+    const hole = itemAsComponent(config, model, "wallHoles[0]")!;
+    expect([hole.mount, hole.a, hole.b, hole.inWall?.wall, hole.inWall?.face.hu]).toEqual(["wall", 60, 20, "rear", 7]);
+    const pin = itemAsComponent(config, model, "plate.pins[0]")!;
+    expect([pin.mount, pin.a, pin.b, pin.floor?.hu]).toEqual(["floor", 40, 50, 2]);
+    const label = itemAsComponent(config, model, "labels[0]")!;
+    expect([label.mount, label.surface?.id, label.a, label.b]).toEqual(["panel", "deck", 100, 20]);
+    // A seam has only the one number, so nothing to measure both ways.
+    expect(itemAsComponent(config, model, "seams[0]")).toBeNull();
+  });
+
+  it("measures it to the parts around it and the edges, like a part", () => {
+    const pin = itemAsComponent(config, model, "plate.pins[0]")!;
+    const withPin = { ...model, components: [...model.components, pin] };
+    // The board "m" sits to its right, 80 to 120 across and 35 to 65 back.
+    const dims = dimensionsFor(withPin, pin.id);
+    expect(dims.map((d) => [d.side, d.to, d.value])).toEqual([
+      ["left", null, 38],
+      ["right", "m", 38],
+      ["front", null, 48],
+      ["back", null, 98],
+    ]);
   });
 });

@@ -20,7 +20,7 @@ import { PrintCost } from "./PrintCost.js";
 import { loadPrinted, markPrinted, reprintStatus, savePrinted, type PrintedRecord } from "./reprint.js";
 import { applyProfile, loadProfile } from "./printerProfile.js";
 import { Scene3D, type PickedFace, type SceneColors, type ViewPreset } from "./Scene3D.js";
-import { buildSceneModel, fieldSpot, issueSpot, measureBetween, nearestNeighbour, sectionRange, snap, type SectionAxis } from "./sceneModel.js";
+import { buildSceneModel, fieldSpot, issueSpot, type SceneModel, measureBetween, nearestNeighbour, sectionRange, snap, type SectionAxis } from "./sceneModel.js";
 import { ScrewsPanel } from "./ScrewsPanel.js";
 import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
@@ -32,7 +32,7 @@ import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
 import { facingFor } from "./lookAt.js";
 import { guideSegments, snapDrag } from "./snap.js";
-import { centreOf, dimensionsFor, placeForDimension, type Side } from "./dimensions.js";
+import { centreOf, dimensionsFor, itemAsComponent, placeForDimension, type Side } from "./dimensions.js";
 import { reachCells, refusedSquares, type Cell } from "./reach.js";
 import { firstUnfinished, TUTORIAL, tutorialStart, type TutorialState } from "./tutorial.js";
 import { TutorialPanel } from "./TutorialPanel.js";
@@ -1154,6 +1154,32 @@ export function App() {
     };
   });
 
+  // What has its distances shown in the view, to type onto: the selected part on the Layout tab, or
+  // a label, hole, vent or plate item picked on the Shape tab, stood in for by a part of its size.
+  const typedSizes = ((): { model: SceneModel; id: string; move(a: number, b: number): void } | null => {
+    if (!model || placing) return null;
+    if (tab === "layout" && selectedComponent && !group.length) {
+      return {
+        model,
+        id: selectedComponent.id,
+        move: (a, b) => {
+          const patch = "wall" in selectedComponent ? { at: a, z: b } : "x" in selectedComponent ? { x: a, y: b } : { u: a, v: b };
+          applyConfig(updateComponent(config, selectedComponent.id, patch));
+        },
+      };
+    }
+    const item = tab === "shape" && picked && !pickedGroup.length ? itemAsComponent(config, model, picked) : null;
+    if (!item || !picked) return null;
+    return {
+      model: { ...model, components: [...model.components, item] },
+      id: item.id,
+      move: (a, b) => {
+        const next = nudgeThing(config, picked, a - item.a, b - item.b);
+        if (next) applyConfig(next);
+      },
+    };
+  })();
+
   const printedPartName = (index: number) => (result?.ok ? (result.plan.printedParts[index]?.name ?? `part ${index + 1}`) : `part ${index + 1}`);
   const buildSummary = !lastBuild
     ? valid
@@ -1655,8 +1681,8 @@ export function App() {
             dropPart(type, part, event.clientX, event.clientY);
           }}
         />
-        {tab === "layout" && selectedComponent && !group.length && model && !placing
-          ? dimensionsFor(model, selectedComponent.id).map((dimension) => {
+        {typedSizes
+          ? dimensionsFor(typedSizes.model, typedSizes.id).map((dimension) => {
               const at = sceneRef.current?.project(dimension.at);
               if (!at || dimension.value < 0) return null;
               const words = dimension.to ?? { left: "the left end", right: "the right end", front: "the front edge", back: "the back edge" }[dimension.side];
@@ -1665,11 +1691,8 @@ export function App() {
                 const value = Number(text);
                 // Left as it was, it changes nothing, rather than nudging the part by a rounding.
                 if (text.trim() === "" || !Number.isFinite(value) || value === dimension.value) return;
-                const centre = placeForDimension(model, selectedComponent.id, dimension.side, value);
-                if (!centre) return;
-                const [a, b] = centre;
-                const patch = "wall" in selectedComponent ? { at: a, z: b } : "x" in selectedComponent ? { x: a, y: b } : { u: a, v: b };
-                applyConfig(updateComponent(config, selectedComponent.id, patch));
+                const centre = placeForDimension(typedSizes.model, typedSizes.id, dimension.side, value);
+                if (centre) typedSizes.move(centre[0], centre[1]);
               };
               return editingSide === dimension.side ? (
                 <input
