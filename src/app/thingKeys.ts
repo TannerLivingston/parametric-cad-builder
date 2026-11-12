@@ -4,6 +4,7 @@
 // the key means nothing for that thing, such as turning a hole or deleting the walls.
 import { textOutline } from "../lettering.js";
 import { errorCount, tidy, type RawConfig } from "./configEdit.js";
+import { validateConfig } from "../validate.js";
 import { arrayComponent, MAX_COPIES, unusedIds } from "./layoutEdit.js";
 
 type Where = { key: string; plate: boolean; index: number };
@@ -264,4 +265,32 @@ export function pasteParts(config: RawConfig, text: string): { config: RawConfig
   const still = place(0, 0);
   if (errorCount(still) <= baseline) return { config: still, ids: [...renamed.values()] };
   return { config: besideOriginal(config, ["u", "v"], place), ids: [...renamed.values()] };
+}
+
+// The nearest place to where a part is now at which it has no problems of its own, and nothing else
+// is made worse, searched outward a millimetre at a time in sixteen directions. Null if there's
+// none within reach, or it has no problems to begin with.
+const FIT_REACH = 40;
+const FIT_DIRECTIONS = 16;
+export function nearestFit(config: RawConfig, id: string): RawConfig | null {
+  const components: RawConfig[] = config.components ?? [];
+  const original = components.find((c) => c.id === id);
+  if (!original) return null;
+  const problems = (c: RawConfig) => {
+    const result = validateConfig(c, { wiring: false });
+    const errors = result.ok ? [] : result.errors;
+    return { own: errors.filter((issue) => issue.componentIds.includes(id)).length, all: errors.length };
+  };
+  const start = problems(config);
+  if (start.own === 0) return null;
+  const axes: Axes = "wall" in original ? ["at", "z"] : "x" in original ? ["x", "y"] : ["u", "v"];
+  for (let distance = 1; distance <= FIT_REACH; distance++) {
+    for (let i = 0; i < FIT_DIRECTIONS; i++) {
+      const angle = (i / FIT_DIRECTIONS) * 2 * Math.PI;
+      const candidate = { ...config, components: components.map((c) => (c.id === id ? moved(c, axes, distance * Math.cos(angle), distance * Math.sin(angle)) : c)) };
+      const now = problems(candidate);
+      if (now.own === 0 && now.all <= start.all - start.own) return candidate;
+    }
+  }
+  return null;
 }

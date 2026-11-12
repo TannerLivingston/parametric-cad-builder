@@ -71,6 +71,9 @@ Ctrl+C (or Cmd+C) copies the selected parts, with their knobs, caps and labels a
 them, in this design or another: where they were if that adds no problem, or else moved together to the nearest place that
 doesn't. In a field, the keys copy and paste text as usual.
 
+A part with a problem has **Move it to the nearest spot that fits**: it goes the least distance, in any direction, to where it has
+no problems of its own and nothing else is made worse, up to 40 mm away.
+
 A selected part can be copied in rows, mirrored across the enclosure's centre, centred, or lined up with another part on the same
 surface. Drag parts in the 3D view, or use the keys above. Changes
 write back to the config, and editing the config text updates the view. Everything saves as a draft in the browser.

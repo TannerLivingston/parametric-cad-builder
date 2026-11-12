@@ -30,7 +30,7 @@ import { FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } f
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
-import { copyParts, duplicateComponent, duplicateThing, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
+import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -1103,6 +1103,19 @@ export function App() {
               <section className="inspector" aria-label="Selected part">
                 <h2>{selectedComponent.id}</h2>
                 <p className="muted">{selectedPart.name}</p>
+                {invalid.has(selectedComponent.id) ? (
+                  <div className="row">
+                    <button
+                      onClick={() => {
+                        const next = nearestFit(config, selectedComponent.id);
+                        if (next) applyConfig(next);
+                        else setNotice(`There's nowhere within 40 mm of where ${selectedComponent.id} is that it fits. The problem list says what's in the way.`);
+                      }}
+                    >
+                      Move it to the nearest spot that fits
+                    </button>
+                  </div>
+                ) : null}
                 <div className="fields">
                   {"wall" in selectedComponent ? (
                     <>

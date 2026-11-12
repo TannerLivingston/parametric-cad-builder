@@ -19,8 +19,8 @@ click or drag in the view.
   and to equal spacing in a row.
 - [ ] **Type a size onto the view:** click a dimension shown beside a selection, such as its distance to an edge or a
   neighbour, and type what it should be.
-- [ ] **Click a problem to fix it:** a problem's box selects what it's about and looks at it, and offers the fix where there
-  is one, such as moving a part the distance the message asks for.
+- [ ] **More fixes from a problem:** turning the view to look at it, and a fix for a label, hole or screw in the wrong place, as a
+  part has.
 - [ ] **Hover to see what something is,** with its name and main sizes, before clicking.
 - [ ] **Look at what's selected:** a key or double-click turns the view to face a surface or wall squarely, or zooms to a part.
 - [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
@@ -47,6 +47,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Fix a part's problem with one button:** a part that has one can move to the nearest spot, up to 40 mm away, where it has
+  none and nothing else is made worse.
 - [x] **Copy and paste parts,** with their knobs, caps, labels and any custom part they are, within a design and between designs.
 - [x] **Select several parts** with Shift-click, in the view or the parts list, to nudge, turn or delete together, put in one
   row or column, or space evenly. The view's Shift-click is untried in the app, the list's is.

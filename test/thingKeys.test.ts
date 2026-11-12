@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { validateConfig } from "../src/validate.js";
 import { errorCount } from "../src/app/configEdit.js";
-import { arrayPitch, arrayThing, copyParts, duplicateComponent, duplicateThing, nudgeThing, pasteParts, removeThing, rotateThing } from "../src/app/thingKeys.js";
+import { arrayPitch, arrayThing, copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "../src/app/thingKeys.js";
 
 const design = (): any => ({
   schemaVersion: 1,
@@ -136,5 +136,29 @@ describe("copying and pasting parts", () => {
   it("leaves text that isn't copied parts alone", () => {
     expect(pasteParts(design(), "hello")).toBeNull();
     expect(pasteParts(design(), JSON.stringify({ kind: "other" }))).toBeNull();
+  });
+});
+
+describe("moving a part to the nearest spot that fits", () => {
+  const two = (u: number): any => ({
+    ...design(),
+    labels: [],
+    components: [
+      { id: "button-1", type: "arcade-24mm", surface: "deck", u: 60, v: 40 },
+      { id: "button-2", type: "arcade-24mm", surface: "deck", u, v: 40 },
+    ],
+  });
+  it("moves it just far enough that it has no problems, and leaves the rest alone", () => {
+    const start = two(75);
+    const own = (c: any) => { const r = validateConfig(c, { wiring: false }); return r.ok ? 0 : r.errors.filter((e) => e.componentIds.includes("button-2")).length; };
+    expect(own(start)).toBeGreaterThan(0);
+    const fixed = nearestFit(start, "button-2")!;
+    expect(own(fixed)).toBe(0);
+    const moved = fixed.components.find((c: any) => c.id === "button-2");
+    expect(Math.hypot(moved.u - 75, moved.v - 40)).toBeLessThanOrEqual(20);
+    expect(fixed.components.find((c: any) => c.id === "button-1")).toEqual(start.components[0]);
+  });
+  it("is nothing for a part with no problems", () => {
+    expect(nearestFit(two(110), "button-2")).toBeNull();
   });
 });
