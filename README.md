@@ -50,6 +50,8 @@ the other parts left out, so anything already beside it shows as a problem once 
 hole, vent, seam, support, pin, plate hole, cable tie bridge, weight pocket or foot there, whichever can go on it. What's added is
 selected, with the Shape tab open at its fields. Escape, or a press anywhere else, closes it.
 
+On the Print tab, the pointer or cursor on a fit test row lights up the parts whose holes it sizes.
+
 A field whose name is underlined with dots has a note: rest the pointer on it to see what it changes. The least obvious, u and
 v, a curve, a bow, a lip and the rounds, have a **?** beside their name with a small drawing as well.
 

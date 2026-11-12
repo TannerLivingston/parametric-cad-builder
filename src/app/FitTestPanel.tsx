@@ -16,6 +16,8 @@ interface FitTestPanelProps {
   onShow(plan: FitTestPlan | null): void;
   onExport(plan: FitTestPlan, index: number, name: string, format: "stl" | "step"): void;
   onChange(config: RawConfig): void;
+  // The row the pointer or cursor is on, so the parts it decides can be lit up, or null.
+  onRow?(row: FitRow | null): void;
 }
 
 const dots = (count: number) => `${count} ${count === 1 ? "dot" : "dots"}`;
@@ -34,7 +36,7 @@ function RowChoice({ row, onPick }: { row: FitRow; onPick(value: number): void }
   );
 }
 
-export function FitTestPanel({ config, plan, showing, onShow, onExport, onChange }: FitTestPanelProps) {
+export function FitTestPanel({ config, plan, showing, onShow, onExport, onChange, onRow }: FitTestPanelProps) {
   const test = useMemo(() => planFitTest(plan), [plan]);
   const [profile, setProfile] = useState(loadProfile);
   if (test.rows.length === 0) return null;
@@ -64,7 +66,7 @@ export function FitTestPanel({ config, plan, showing, onShow, onExport, onChange
       ))}
       <p className="hint">Print each piece as exported. The first is the fixings every design needs, and is the one to start with. You'll need: {test.hardware.join("; ")}. Dots in the left margin number the rows, and dots behind each hole number its size.</p>
       {test.rows.map((row) => (
-        <div className="fit-row" key={row.number}>
+        <div className="fit-row" key={row.number} onMouseEnter={() => onRow?.(row)} onMouseLeave={() => onRow?.(null)} onFocus={() => onRow?.(row)} onBlur={() => onRow?.(null)}>
           <h3>Row {row.number}: {row.title}</h3>
           <p className="hint">{row.how}</p>
           <RowChoice row={row} onPick={(value) => onChange(applyFit(config, row, value))} />

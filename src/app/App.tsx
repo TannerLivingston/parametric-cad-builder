@@ -515,9 +515,12 @@ export function App() {
     };
   }, []);
 
+  // Parts lit up with the selection, without being selected: those a fit test row decides, while
+  // the pointer or cursor is on it.
+  const [litParts, setLitParts] = useState<string[]>([]);
   useEffect(() => {
-    sceneRef.current?.setModel(model, selected, invalid, new Set(group));
-  }, [model, selected, invalid, seeThrough, group]);
+    sceneRef.current?.setModel(model, selected, invalid, new Set([...group, ...litParts]));
+  }, [model, selected, invalid, seeThrough, group, litParts]);
 
   useEffect(() => {
     sceneRef.current?.setInternals(seeThrough);
@@ -677,6 +680,7 @@ export function App() {
   }, [stepParts?.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (tab !== "print") setStep(null);
+    setLitParts([]);
   }, [tab]);
 
   useEffect(() => {
@@ -1629,6 +1633,7 @@ export function App() {
             ) : null}
             {result?.ok ? (
               <FitTestPanel
+                onRow={(row) => setLitParts(row ? (config.components ?? []).filter((c: RawConfig) => row.parts.includes(c.type)).map((c: RawConfig) => c.id) : [])}
                 config={config}
                 plan={result.plan}
                 showing={fitPreview !== null}

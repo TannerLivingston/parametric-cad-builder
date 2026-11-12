@@ -12,7 +12,6 @@ proven the numbers. Move an item to the done list once it's built.
 The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
 click or drag in the view.
 
-- [ ] **Light up what a field is for on the other tabs,** such as the Print and Screws tabs' numbers.
 
 ## Shape
 
@@ -28,6 +27,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Light up what a field is for on the other tabs:** a fit test row's parts on the Print tab. The Screws tab's numbers are
+  the selected screw's, which is lit up already.
 - [x] **Type distances onto the view for labels, holes, vents and plate items,** measured to the parts around them and the edges,
   as for parts.
 - [x] **Select several labels, holes, vents, seams or plate items** with Shift-click in the view, to nudge, turn or delete
