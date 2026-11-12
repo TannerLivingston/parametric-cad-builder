@@ -88,9 +88,16 @@ describe("a curved surface, planned", () => {
     expect(chainHeight(built.profile.outer, 40)).toBeCloseTo(40);
   });
 
-  it("can't carry lettering or a top panel", () => {
-    const label = hooded({ labels: [{ text: "HI", surface: "hood", u: 150, v: 20 }] });
-    expect(errors(label).map((e) => e.message).join()).toMatch(/curved/);
+  it("letters on a flat of its own let into it, but can't be a top panel", () => {
+    const label = hooded({ labels: [{ text: "HI", surface: "hood", u: 80, v: 20 }] });
+    expect(errors(label)).toEqual([]);
+    const built = plan(label);
+    const flat = built.flats.find((f) => f.componentId === "labels[0]")!;
+    expect(flat.curve).toBe("hood");
+    expect(built.labels[0]!.on).toMatchObject({ kind: "surface", surface: flat.surface.id, u: 80, v: 20 });
+    // Refused as a part would be, near the seam or the curve's end, or too close to a part's flat.
+    expect(errors(hooded({ labels: [{ text: "HI", surface: "hood", u: 150, v: 20 }] })).map((e) => e.message).join()).toMatch(/seam/);
+    expect(errors(hooded({ labels: [{ text: "HI", surface: "hood", u: 80, v: 1 }] })).map((e) => e.message).join()).toMatch(/end of the curve/);
     const panel = hooded({ topPanels: [{ surface: "hood" }] });
     expect(errors(panel).map((e) => e.code)).toContain("TOP_PANEL_INVALID");
   });
@@ -180,6 +187,11 @@ describe("a curved surface, built", () => {
     expect(box[1][1]).toBeCloseTo(120, 0);
     expect(box[1][2]).toBeCloseTo(45, 1);
     expect(shell.shape.blobSTEP().size).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("builds lettering on a curve, on its flat", async () => {
+    const built = plan(hooded({ labels: [{ text: "HOOD", surface: "hood", u: 80, v: 25 }] }));
+    expect(await buildProblems(built, buildEnclosure(built))).toEqual([]);
   }, 120_000);
 
   it("builds dipping in, in one piece", async () => {

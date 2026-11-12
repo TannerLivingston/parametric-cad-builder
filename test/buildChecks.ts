@@ -35,8 +35,12 @@ export async function buildProblems(buildPlan: BuildPlan, enclosure: Enclosure =
     if (!mesh.watertight) problems.push(`${label}: mesh not watertight`);
     const expected = buildPlan.cutouts.filter((c) => c.printedPart === part.index).reduce((sum, c) => sum + cutoutVolume(c, findSurface(buildPlan.profile, c.surface)!.thickness, cutoutUp(buildPlan, c)), 0);
     const removed = measureVolume(part.blank) - measureVolume(part.cut);
-    if (expected > 0 && Math.abs(removed - expected) / expected > 0.01) {
-      problems.push(`${label}: removed ${removed.toFixed(1)} mm3, expected ${expected.toFixed(1)}`);
+    // Lettering comes out with the holes: somewhere between nothing and its whole box for each label.
+    const lettering = buildPlan.labels.filter((l) => l.printedPart === part.index).reduce((sum, l) => sum + l.across * l.up * l.depth, 0);
+    const low = expected * 0.99;
+    const high = (expected + lettering) * 1.01;
+    if (expected > 0 && (removed < low || removed > high)) {
+      problems.push(`${label}: removed ${removed.toFixed(1)} mm3, expected ${expected.toFixed(1)}${lettering ? ` and up to ${lettering.toFixed(1)} of lettering` : ""}`);
     }
     const [sx, sy, sz] = mesh.size;
     const fits = (sx <= x + 0.01 && sy <= y + 0.01) || (sx <= y + 0.01 && sy <= x + 0.01);

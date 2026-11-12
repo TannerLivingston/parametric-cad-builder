@@ -1,7 +1,8 @@
 // Parts on a curved surface, each on a flat let into it.
 import { beforeAll, describe, expect, it } from "vitest";
-import { buildEnclosure, initEngine, planPrint, validateConfig, type BuildPlan } from "../src/index.js";
-import { chainHeight, surfacePoint } from "../src/profile.js";
+import { measureVolume } from "replicad";
+import { buildEnclosure, cutoutUp, cutoutVolume, initEngine, planPrint, validateConfig, type BuildPlan } from "../src/index.js";
+import { chainHeight, findSurface, surfacePoint } from "../src/profile.js";
 import { FLAT_MARGIN, FLAT_STEP, partReach } from "../src/flats.js";
 import { library } from "../src/library.js";
 import { buildSceneModel, curveCoordinates } from "../src/app/sceneModel.js";
@@ -139,12 +140,14 @@ describe("a flat let into a curve, built", () => {
 
   it("builds with a label engraved on the flat", async () => {
     const built = plan(hooded({ labels: [{ text: "VOL", component: "dial", side: "above", size: 4 }] }));
-    // Sound, and with a little more taken out of the dial's half than its hole alone: the letters.
-    const problems = await buildProblems(built, buildEnclosure(built));
-    expect(problems.filter((problem) => !problem.includes("removed"))).toEqual([]);
-    const [, removed, expected] = problems[0]!.match(/removed ([\d.]+) mm3, expected ([\d.]+)/)!.map(Number);
-    expect(removed! - expected!).toBeGreaterThan(3);
-    expect(removed! - expected!).toBeLessThan(15);
+    // Sound, with a little more taken out of the dial's half than its hole alone: the letters.
+    const enclosure = buildEnclosure(built);
+    expect(await buildProblems(built, enclosure)).toEqual([]);
+    const part = enclosure.parts.find((p) => p.index === built.labels[0]!.printedPart)!;
+    const hole = built.cutouts.filter((c) => c.printedPart === part.index).reduce((sum, c) => sum + cutoutVolume(c, findSurface(built.profile, c.surface)!.thickness, cutoutUp(built, c)), 0);
+    const letters = measureVolume(part.blank) - measureVolume(part.cut) - hole;
+    expect(letters).toBeGreaterThan(3);
+    expect(letters).toBeLessThan(15);
   }, 240_000);
 
   it("builds on a curve that dips", async () => {

@@ -6,7 +6,7 @@ import { configSchema, type Config, type Cutout, type FloorPart, type PanelPart,
 import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
 import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
-import { flatFor, LABEL_GAP, curveLength, flatId, flatStart, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
+import { curveFlat, flatFor, LABEL_GAP, curveLength, flatId, flatStart, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
 import { bowAt, bowRise, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
 import { shellPrintsOnSide } from "./printing.js";
 import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, creaseGeometry, layoutCreaseScrews, type CreaseJoint } from "./crease.js";
@@ -800,9 +800,11 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
     } else if ("wall" in label) {
       on = { kind: "wall", wall: label.wall, at: label.at, z: label.z };
     } else {
-      const surface = label.surface ? findSurface(profile, label.surface) : profile.surfaces[0];
-      if (label.surface && isCurved(profile, label.surface)) return fail(`is on surface "${label.surface}", which is curved, and lettering needs a flat one.`);
-      if (surface?.curveOf) return fail(`needs a surface, because the first one, "${surface.curveOf}", is curved.`);
+      const curve = label.surface ?? profile.surfaces[0]!.curveOf;
+      // On a curve, it's on the flat let into it for it, if that could be had.
+      const flat = curve && isCurved(profile, curve) ? profile.flats?.find((f) => f.id === flatId(curve, path)) : undefined;
+      if (curve && isCurved(profile, curve) && !flat) return;
+      const surface = flat ?? (label.surface ? findSurface(profile, label.surface) : profile.surfaces[0]);
       if (!surface) return fail(`is on surface "${label.surface}", which doesn't exist.`);
       on = { kind: "surface", surface: surface.id, u: label.u, v: label.v };
     }
@@ -1751,14 +1753,9 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
 function planFlats(config: Config, parts: Record<string, Part>, profile: Profile, minWeb: number, issues: Issues): CurveFlat[] {
   const e = config.enclosure;
   const flats: CurveFlat[] = [];
-  config.components.forEach((component, index) => {
-    if (!("u" in component)) return;
-    const curve = component.surface ?? profile.surfaces[0]!.curveOf;
-    const part = parts[component.type];
-    if (!curve || !isCurved(profile, curve) || part?.mount !== "panel") return;
-    const path = `components[${index}]`;
-    const fail = (message: string) => issues.error("SURFACE_CURVED", `"${component.id}" ${message}`, path, [component.id]);
-    const flat = flatFor(profile.surfaces, curve, component, part, config.labels);
+  // A part's flat, or a label's: refused if it doesn't fit, or else kept.
+  const plan = (flat: CurveFlat, curve: string, name: string, path: string, ids: string[]) => {
+    const fail = (message: string) => issues.error("SURFACE_CURVED", `${name} ${message}`, path, ids);
     const length = curveLength(profile.surfaces, curve);
     const t = flat.surface.thickness;
     const span = `It needs a flat from v ${mm(flat.vLow)} to ${mm(flat.vHigh)} let into "${curve}", which`;
@@ -1776,10 +1773,29 @@ function planFlats(config: Config, parts: Record<string, Part>, profile: Profile
     }
     const other = flats.find((o) => o.curve === curve && o.uLow - t < flat.uHigh + t + minWeb && o.uHigh + t > flat.uLow - t - minWeb && o.vLow < flat.vHigh + minWeb && o.vHigh > flat.vLow - minWeb);
     if (other) {
-      issues.error("SURFACE_CURVED", `"${component.id}" and "${other.componentId}" are too close on the curve of "${curve}", where each needs a flat of its own. Move them ${mm(2 * t + minWeb)} apart across it, or ${mm(minWeb)} along it, past what each takes up.`, path, [component.id, other.componentId]);
+      const otherName = other.componentId.startsWith("labels[") ? `the label at ${other.componentId}` : `"${other.componentId}"`;
+      issues.error("SURFACE_CURVED", `${name} and ${otherName} are too close on the curve of "${curve}", where each needs a flat of its own. Move them ${mm(2 * t + minWeb)} apart across it, or ${mm(minWeb)} along it, past what each takes up.`, path, [...ids, ...(other.componentId.startsWith("labels[") ? [] : [other.componentId])]);
       return;
     }
     flats.push(flat);
+  };
+  config.components.forEach((component, index) => {
+    if (!("u" in component)) return;
+    const curve = component.surface ?? profile.surfaces[0]!.curveOf;
+    const part = parts[component.type];
+    if (!curve || !isCurved(profile, curve) || part?.mount !== "panel") return;
+    plan(flatFor(profile.surfaces, curve, component, part, config.labels), curve, `"${component.id}"`, `components[${index}]`, [component.id]);
+  });
+  // Lettering on a curve by itself gets a flat of its own too, as big as it is, a margin round it.
+  config.labels.forEach((label, index) => {
+    if (!("u" in label)) return;
+    const curve = label.surface ?? profile.surfaces[0]!.curveOf;
+    if (!curve || !isCurved(profile, curve)) return;
+    const outline = textOutline(label.text, label.size);
+    const turned = label.rotationDeg === 90 || label.rotationDeg === 270;
+    const half: [number, number] = turned ? [outline.height / 2, outline.width / 2] : [outline.width / 2, outline.height / 2];
+    const path = `labels[${index}]`;
+    plan(curveFlat(profile.surfaces, curve, path, label.u, label.v, half), curve, `Label "${label.text}"`, path, []);
   });
   return flats;
 }

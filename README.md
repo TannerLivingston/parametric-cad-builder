@@ -865,8 +865,9 @@ up, and as thick as the surface: sunk into a curve that rises, with a pad undern
 over a pocket. Its ends are a 0.2 mm step from the curve, and its sides slope at 45 degrees, so it needs no support. A flat
 has to stay 1 mm inside the curve's ends, clear of the walls, seams and other flats, and within 4 mm of the curve at its
 middle, so a big part needs a gentle curve. A part's own label goes on its flat, which grows on that side to take it, and
-so does a knob or key cap wider than the part. Dragging a part in the view follows the curve. A curve still can't carry
-lettering placed on its own, or be a top panel. It has to curve by at least 0.5 mm and at most 0.4 of its length,
+so does a knob or key cap wider than the part. Dragging a part in the view follows the curve. Lettering placed on a curve by
+itself gets a flat of its own the same way, as big as the words with the same margin, and is refused where a part's would be. A
+curve still can't be a top panel. It has to curve by at least 0.5 mm and at most 0.4 of its length,
 stay under the slope limit all along, and can't end in a rear top round.
 
 **`bow`** makes the `front` or `rear` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
