@@ -15,8 +15,8 @@ click or drag in the view.
 - [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
   and the fields on the other tabs.
 - [ ] **Select several parts with a dragged box,** and several labels, holes or plate items, as Shift-click selects parts.
-- [ ] **Type a size onto the view:** click a dimension shown beside a selection, such as its distance to an edge or a
-  neighbour, and type what it should be.
+- [ ] **Type a distance to a neighbour onto the view,** as a part's distances to its edges can be, and for labels, holes and
+  plate items too.
 - [ ] **More fixes from a problem:** turning the view to look at it, and a fix for a label, hole or screw in the wrong place, as a
   part has.
 - [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
@@ -42,6 +42,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Type a size onto the view:** a selected part's distances to the ends and edges of where it sits, shown beside it, to click
+  and type what each should be.
 - [x] **Snapping while dragging a part,** with dashed guides: to a neighbour's centre or edge, the middle of its surface, wall or
   floor, and the row's own gap. Alt drags without it. Handles and labels don't snap yet.
 - [x] **Hover to see what something is,** with its name and main sizes, and **look at what's selected** with F or a

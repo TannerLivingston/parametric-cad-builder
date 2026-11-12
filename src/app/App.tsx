@@ -32,6 +32,7 @@ import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
 import { facingFor } from "./lookAt.js";
 import { guideSegments, snapDrag } from "./snap.js";
+import { dimensionsFor, placeForDimension, type Side } from "./dimensions.js";
 import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -125,6 +126,10 @@ export function App() {
   const [measuring, setMeasuring] = useState(false);
   // Something waiting to be put where the next click in the view lands.
   const [placing, setPlacing] = useState<Placing | null>(null);
+  // Bumped when the view turns, so that what's drawn over it is placed again.
+  const [, setViewTick] = useState(0);
+  const [editingSide, setEditingSide] = useState<Side | null>(null);
+  useEffect(() => setEditingSide(null), [selected]);
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; title: string; choices: MenuChoice[]; array?: { part: string } | { path: string } } | null>(null);
   const [placingMissed, setPlacingMissed] = useState(false);
@@ -307,6 +312,7 @@ export function App() {
           latest.current.applyConfig(spec.apply(handleBase.current, delta, deltaAcross), false);
         },
         onLook: () => lookRef.current(),
+        onViewChange: () => setViewTick((n) => n + 1),
         onHover: (at, part, faces) => {
           if (!at) return setHover(null);
           const { config: current } = latest.current;
@@ -1467,6 +1473,52 @@ export function App() {
             dropPart(type, part, event.clientX, event.clientY);
           }}
         />
+        {tab === "layout" && selectedComponent && !group.length && model && !placing
+          ? dimensionsFor(model, selectedComponent.id).map((dimension) => {
+              const at = sceneRef.current?.project(dimension.at);
+              if (!at || dimension.value < 0) return null;
+              const words = { left: "the left end", right: "the right end", front: "the front edge", back: "the back edge" }[dimension.side];
+              const place = (text: string) => {
+                setEditingSide(null);
+                const value = Number(text);
+                // Left as it was, it changes nothing, rather than nudging the part by a rounding.
+                if (text.trim() === "" || !Number.isFinite(value) || value === dimension.value) return;
+                const centre = placeForDimension(model, selectedComponent.id, dimension.side, value);
+                if (!centre) return;
+                const [a, b] = centre;
+                const patch = "wall" in selectedComponent ? { at: a, z: b } : "x" in selectedComponent ? { x: a, y: b } : { u: a, v: b };
+                applyConfig(updateComponent(config, selectedComponent.id, patch));
+              };
+              return editingSide === dimension.side ? (
+                <input
+                  key={dimension.side}
+                  className="view-dimension"
+                  style={{ left: at.x, top: at.y }}
+                  type="number"
+                  step={0.5}
+                  autoFocus
+                  onFocus={(event) => event.target.select()}
+                  defaultValue={dimension.value}
+                  aria-label={`Distance to ${words}`}
+                  onBlur={(event) => place(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") place((event.target as HTMLInputElement).value);
+                    if (event.key === "Escape") setEditingSide(null);
+                  }}
+                />
+              ) : (
+                <button
+                  key={dimension.side}
+                  className="view-dimension"
+                  style={{ left: at.x, top: at.y }}
+                  title={`${dimension.value} mm to ${words}. Click to type what it should be.`}
+                  onClick={() => setEditingSide(dimension.side)}
+                >
+                  {dimension.value}
+                </button>
+              );
+            })
+          : null}
         {hover && !menu ? (
           <div className="view-hover" role="tooltip" style={{ left: Math.min(hover.x + 14, window.innerWidth - 300), top: hover.y + 16 }}>
             {hover.text}

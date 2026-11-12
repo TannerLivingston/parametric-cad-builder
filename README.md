@@ -70,6 +70,9 @@ it goes.
 A dragged part snaps into line, within 1.5 mm, with a neighbour's centre or edge, the middle of its surface, wall or floor, or the
 same gap as the row it's joining, with a dashed line along what it's lined up with. Hold Alt to drag without snapping.
 
+A selected part shows its distances to the ends and edges of its surface, wall or floor in the view. Click one and type what it
+should be, and the part moves to match.
+
 A part on a top surface goes onto another one when it's dragged over it, and a part from the library can be dragged from the
 **Add** button onto the view, where it goes on the surface, wall or floor it's dropped on.
 

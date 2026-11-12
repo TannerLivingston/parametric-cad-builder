@@ -46,6 +46,8 @@ export interface SceneEvents {
   onHover(at: { x: number; y: number } | null, part: string | null, faces: PickedFace[]): void;
   // A double-click on the view, to look at what's selected.
   onLook(): void;
+  // The view has turned, moved or been resized, so what's drawn over it needs placing again.
+  onViewChange(): void;
 }
 
 // A point on the shape that can be dragged along a line to change a size, such as a seam's place
@@ -175,7 +177,10 @@ export class Scene3D {
     container.append(this.renderer.domElement);
     this.camera.up.set(0, 0, 1);
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
-    this.controls.addEventListener("change", () => this.requestFrame());
+    this.controls.addEventListener("change", () => {
+      this.requestFrame();
+      this.events.onViewChange();
+    });
     // A note on what was under the pointer is out of date once the view turns.
     this.controls.addEventListener("start", () => this.events.onHover(null, null, []));
 
@@ -622,6 +627,14 @@ export class Scene3D {
     this.controls.target.copy(centre);
     this.controls.update();
     this.requestFrame();
+  }
+
+  // Where a point of the design shows on the page, or null if it's behind the camera.
+  project(point: [number, number, number]): { x: number; y: number } | null {
+    const screen = new THREE.Vector3(...point).project(this.camera);
+    if (screen.z > 1) return null;
+    const rect = this.renderer.domElement.getBoundingClientRect();
+    return { x: rect.left + ((screen.x + 1) / 2) * rect.width, y: rect.top + ((1 - screen.y) / 2) * rect.height };
   }
 
   setView(preset: ViewPreset) {
