@@ -194,7 +194,8 @@ function outerForms(plan: BuildPlan): OuterForms {
   const rise = bowRise(plan.profile, e.bow);
   let body = hasBow(e.bow)
     ? extrudedPath(bowedOuterPath(plan.profile, e.bow), 0, e.width).intersect(bowedPlan(plan, -1, maxHeight + Math.max(rise.front, rise.rear, 0) + 1))
-    : hasRounds(plan)
+    : // The outline with its true arcs, for a round on the side profile or a curved surface.
+      hasRounds(plan) || surfaces.some((s) => s.curveOf)
       ? extrudedPath(plan.profile.outerPath, 0, e.width).intersect(roundedPlan(0, e.width, 0, depth, e.cornerRadius, -1, maxHeight + 1))
       : roundedVerticals(extrudedProfile(outer, 0, 0, e.width), e.cornerRadius, e.cornerRadius);
   if (e.topEdgeFillet > 0) {

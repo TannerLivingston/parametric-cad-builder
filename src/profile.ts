@@ -282,7 +282,7 @@ export function buildProfile(
     ...(outerRound
       ? [step(outerRound.end), { to: outerRound.start, via: arcMiddle(outerRound.center, rt, outerRound.end, outerRound.start) }]
       : [step(corner)]),
-    ...[...sharpTop.slice(0, -1)].reverse().map(step),
+    ...topBackToFront(surfaces),
     ...(rf > 0 ? [step([0, rf]), { to: [rf, 0] as Point2, via: arcMiddle([rf, rf], rf, [0, rf], [rf, 0]) }] : []),
   ];
   // Open at the bottom, between any lips left by bottom rounds.
@@ -314,6 +314,29 @@ export function buildProfile(
     outerPath,
     cavityPath,
   };
+}
+
+// The top of the outside, from the back to the front: a line to the start of each surface, and for a
+// curve, one true arc across all its short flats, through the corner in their middle. Its flats come
+// in a power of two and their corners are on the arc, so that corner is the top of the arc itself.
+function topBackToFront(surfaces: Surface[]): PathStep[] {
+  const steps: PathStep[] = [];
+  for (let i = surfaces.length - 1; i >= 0; ) {
+    const s = surfaces[i]!;
+    if (!s.curveOf) {
+      steps.push({ to: [s.y0, s.z0] });
+      i--;
+      continue;
+    }
+    let first = i;
+    while (first > 0 && surfaces[first - 1]!.curveOf === s.curveOf) first--;
+    const flats = surfaces.slice(first, i + 1);
+    const middle = flats[flats.length / 2];
+    if (flats.length % 2 === 0 && middle) steps.push({ to: [flats[0]!.y0, flats[0]!.z0], via: [middle.y0, middle.z0] });
+    else steps.push(...[...flats].reverse().map((flat): PathStep => ({ to: [flat.y0, flat.z0] })));
+    i = first - 1;
+  }
+  return steps;
 }
 
 // How far front and rear the space inside reaches for the whole of a band of heights, which bottom

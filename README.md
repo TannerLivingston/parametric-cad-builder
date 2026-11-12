@@ -854,9 +854,9 @@ been printed yet, including this.
 ```
 
 A surface's **`bulge`** makes it a curve, seen from the side: an arc between its two ends that rises that many mm above the
-straight line between them at its middle, or dips below it if negative. It's built as a run of 4 to 32 short flats, as many
-as keep them within 0.05 mm of the arc, so the STL and STEP files have flats rather than a true arc. The view leaves out
-the lines where they meet. The wall under it follows at the surface's thickness, and seams, lips, the plate and wiring all
+straight line between them at its middle, or dips below it if negative. Its outside is a true arc, so the STEP file has the
+curve itself. Everything worked out about it, and the inside under it, uses a run of 4 to 32 short flats instead, as many as
+keep them within 0.05 mm of the arc. The view leaves out the lines where they meet. The wall under it follows at the surface's thickness, and seams, lips, the plate and wiring all
 work under it. A curve can run smoothly into its neighbour, which two flat surfaces can't.
 
 A part on a curve gets a flat of its own let into it, because it needs a flat face above and below. It's placed with `u` and

@@ -162,6 +162,26 @@ describe("a curved surface, built", () => {
     expect(withoutCurveCreases(edges, flat.profile.surfaces)).toBe(edges);
   }, 120_000);
 
+  it("is one true arc on the outside, not its flats, so the STEP file has the curve itself", () => {
+    const dome = hooded({ seams: [], components: [] });
+    dome.enclosure = { width: 180, frontHeight: 30, surfaces: [{ id: "dome", y: 120, z: 30, bulge: 15 }] };
+    const built = plan(dome);
+    const shell = buildEnclosure(built).parts.find((p) => p.kind === "shell")!;
+    // Round faces that run across the width, from front to back: not corners or holes.
+    const round = shell.shape.faces.filter((face) => {
+      if (face.geomType !== "CYLINDRE") return false;
+      const [[, y0], [, y1]] = face.boundingBox.bounds;
+      return y1 - y0 > 100;
+    });
+    // The outside over the curve is one face; the inside follows its flats.
+    expect(round).toHaveLength(1);
+    const box = round[0]!.boundingBox.bounds;
+    expect(box[0][1]).toBeCloseTo(0, 0);
+    expect(box[1][1]).toBeCloseTo(120, 0);
+    expect(box[1][2]).toBeCloseTo(45, 1);
+    expect(shell.shape.blobSTEP().size).toBeGreaterThan(0);
+  }, 120_000);
+
   it("builds dipping in, in one piece", async () => {
     const built = plan(hooded({ seams: [], enclosure: { ...hooded().enclosure, width: 200 }, components: [] }, -5));
     expect(await buildProblems(built, buildEnclosure(built))).toEqual([]);

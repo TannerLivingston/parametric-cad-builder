@@ -16,7 +16,7 @@ Nothing open here for now: everything on it so far is in the done list below.
 
 ## Shape
 
-- [ ] A true arc for a curve in the STEP file, and lettering placed on a curve by itself.
+- [ ] Lettering placed on a curve by itself, on a flat of its own as a part's label has.
 - [ ] A bowed wall that's hollow, with the inside following it, and bowed side walls.
 - [ ] A tongue and groove along the seam, with keys, as the real Desk Synth has. It needs a wall of 4 mm or more there, and the
   seam's lip does the same job in a thinner one, so this only matters for matching the real shell.
@@ -28,6 +28,8 @@ Nothing open here for now: everything on it so far is in the done list below.
 
 ## Done
 
+- [x] **A true arc for a curve's outside,** so the STEP file has the curve itself, not its flats. The inside under it still
+  follows the flats, within 0.05 mm.
 - [x] **Light up what a field is for on the other tabs:** a fit test row's parts on the Print tab. The Screws tab's numbers are
   the selected screw's, which is lit up already.
 - [x] **Type distances onto the view for labels, holes, vents and plate items,** measured to the parts around them and the edges,
