@@ -328,3 +328,57 @@ export function issueSpot(issue: Pick<Issue, "path" | "where">, config: RawConfi
   }
   return null;
 }
+
+// The part of the shape one number sizes, to light up while its field has the cursor: the right
+// wall for the width, the front edge for the front height, a crease for a surface's depth and
+// height, a corner, a round's edge, a bowed wall, a wall's or the floor's thickness, a seam's lip.
+// Null for a number that has no one place.
+export function fieldSpot(path: string, config: RawConfig, model: SceneModel): IssueBox | null {
+  const e = config.enclosure ?? {};
+  const width = model.width;
+  const depth = model.surfaces.at(-1)?.y1 ?? 0;
+  const front = model.surfaces[0]?.z0 ?? 0;
+  const rear = model.surfaces.at(-1)?.z1 ?? 0;
+  const top = Math.max(0, ...model.surfaces.flatMap((s) => [s.z0, s.z1]));
+  const at = (pattern: RegExp) => {
+    const match = pattern.exec(path);
+    return match ? Number(match[1]) : null;
+  };
+  if (path === "enclosure.width") return { min: [width - 1, 0, 0], max: [width + 1, depth, top] };
+  if (path === "enclosure.frontHeight") return { min: [0, -1, front - 1], max: [width, 1, front + 1] };
+  if (path === "enclosure.cornerRadius") {
+    const r = Math.max(Number(e.cornerRadius ?? 0), 2);
+    return { min: [0, 0, 0], max: [r, r, front] };
+  }
+  const round = /^enclosure\.rounds\.(frontBottom|rearTop|rearBottom)$/.exec(path)?.[1];
+  if (round) {
+    const r = Math.max(Number(e.rounds?.[round] ?? 0), 2);
+    if (round === "frontBottom") return { min: [0, 0, 0], max: [width, r, r] };
+    if (round === "rearTop") return { min: [0, depth - r, rear - r], max: [width, depth, rear] };
+    return { min: [0, depth - r, 0], max: [width, depth, r] };
+  }
+  const bow = /^enclosure\.bow\.(front|rear)$/.exec(path)?.[1];
+  if (bow) {
+    const b = Math.max(Number(e.bow?.[bow] ?? 0), 1);
+    return bow === "front" ? { min: [0, -b, 0], max: [width, 0, front] } : { min: [0, depth, 0], max: [width, depth + b, rear] };
+  }
+  if (path === "enclosure.wall") return { min: [0, 0, 0], max: [model.wall, depth, Math.min(front, rear)] };
+  if (path === "enclosure.floorThickness") return { min: [0, 0, 0], max: [width, depth, model.floorThickness] };
+  if (path === "enclosure.panelThickness") {
+    const s = model.surfaces[0];
+    return s ? { min: [0, s.y0, Math.min(s.z0, s.z1) - model.panelThickness], max: [width, s.y1, Math.max(s.z0, s.z1)] } : null;
+  }
+  const crease = at(/^enclosure\.surfaces\[(\d+)\]\.[yz]$/);
+  if (crease !== null) {
+    const id = e.surfaces?.[crease]?.id;
+    const own = model.surfaces.filter((s) => s.id === id || s.curveOf === id).at(-1);
+    return own ? { min: [0, own.y1 - 1, own.z1 - 1], max: [width, own.y1 + 1, own.z1 + 1] } : null;
+  }
+  const lip = at(/^seams\[(\d+)\]\.lip$/);
+  if (lip !== null) {
+    const seam = config.seams?.[lip];
+    if (!seam) return null;
+    return { min: [seam.x, 0, 0], max: [seam.x + Math.max(Number(seam.lip ?? 0), 1), depth, top] };
+  }
+  return null;
+}

@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { describeThing, FASTENER_PREFIX, partOfLabel, thingAt, WALLS_PATH } from "../src/app/pickThing.js";
 import { validateConfig } from "../src/validate.js";
-import { buildSceneModel, issueSpot } from "../src/app/sceneModel.js";
+import { buildSceneModel, fieldSpot, issueSpot } from "../src/app/sceneModel.js";
 
 const design = (): any => ({
   schemaVersion: 1,
@@ -149,5 +149,27 @@ describe("what something is, on hover", () => {
     expect(describeThing(config, WALLS_PATH)).toBe("The walls, 3 mm thick");
     expect(describeThing(config, `${FASTENER_PREFIX}p1`)).toMatch(/^A screw/);
     expect(describeThing(config, "labels[9]")).toBeNull();
+  });
+});
+
+describe("lighting up the one number a field sizes", () => {
+  const config = { ...design(), enclosure: { ...design().enclosure, cornerRadius: 6, rounds: { rearTop: 10 }, bow: { front: 4 } } };
+  const model = buildSceneModel(config)!;
+  const spot = (path: string) => fieldSpot(path, config, model);
+
+  it("finds each one's own place on the shape", () => {
+    expect(spot("enclosure.width")).toEqual({ min: [299, 0, 0], max: [301, 150, 60] });
+    expect(spot("enclosure.frontHeight")).toEqual({ min: [0, -1, 39], max: [300, 1, 41] });
+    expect(spot("enclosure.cornerRadius")).toEqual({ min: [0, 0, 0], max: [6, 6, 40] });
+    expect(spot("enclosure.rounds.rearTop")).toEqual({ min: [0, 140, 50], max: [300, 150, 60] });
+    expect(spot("enclosure.bow.front")).toEqual({ min: [0, -4, 0], max: [300, 0, 40] });
+    // A surface's depth and height are where it ends, along its crease.
+    expect(spot("enclosure.surfaces[0].y")).toEqual({ min: [0, 79, 39], max: [300, 81, 41] });
+    expect(spot("seams[0].lip")).toEqual({ min: [150, 0, 0], max: [151, 150, 60] });
+  });
+
+  it("is nothing for a number with no one place", () => {
+    expect(spot("name")).toBeNull();
+    expect(spot("seams[5].lip")).toBeNull();
   });
 });

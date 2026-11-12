@@ -12,8 +12,7 @@ proven the numbers. Move an item to the done list once it's built.
 The aim: anything set by typing a number or picking from a list in the sidebar should, within reason, also be something to
 click or drag in the view.
 
-- [ ] **Light up a single number** when its field has the cursor, such as a round or the corner radius, not only a whole card,
-  and the fields on the other tabs.
+- [ ] **Light up what a field is for on the other tabs,** such as the Print and Screws tabs' numbers.
 - [ ] **Select several labels, holes or plate items,** as Shift-click and a box select parts.
 - [ ] **Type a distance to a neighbour onto the view,** as a part's distances to its edges can be, and for labels, holes and
   plate items too.
@@ -34,6 +33,8 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Light up a single number:** the cursor in the width, front height, a round, the corner radius, a bow, a wall's, the
+  top's or the floor's thickness, a surface's depth or height, or a seam's lip lights up just the part of the shape it sizes.
 - [x] **A built-in tutorial** for making a basic synth, in ten steps from a plain box to the files to print. Each step points at
   its control, checks the design, says what's missing, and keeps Next shut until it's done. It ends on a complete card. The
   last step and that card are untried in the app, since they need a real download; the checks are tested to the end.

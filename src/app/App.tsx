@@ -20,7 +20,7 @@ import { PrintCost } from "./PrintCost.js";
 import { loadPrinted, markPrinted, reprintStatus, savePrinted, type PrintedRecord } from "./reprint.js";
 import { applyProfile, loadProfile } from "./printerProfile.js";
 import { Scene3D, type PickedFace, type SceneColors, type ViewPreset } from "./Scene3D.js";
-import { buildSceneModel, issueSpot, measureBetween, nearestNeighbour, sectionRange, snap, type SectionAxis } from "./sceneModel.js";
+import { buildSceneModel, fieldSpot, issueSpot, measureBetween, nearestNeighbour, sectionRange, snap, type SectionAxis } from "./sceneModel.js";
 import { ScrewsPanel } from "./ScrewsPanel.js";
 import { VersionsPanel } from "./VersionsPanel.js";
 import { ShapePanel } from "./ShapePanel.js";
@@ -543,11 +543,14 @@ export function App() {
     sceneRef.current?.setHandles(handleSpecs.current);
   }, [picked, text, tab, handlesDropped]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // What's picked is lit up where it is now, so it follows as its numbers change.
+  // What's picked is lit up where it is now, so it follows as its numbers change, or just the part
+  // of it one number sizes while that number's field has the cursor.
+  const [focusedField, setFocusedField] = useState<string | null>(null);
   useEffect(() => {
-    if (picked === null && shownIssue) return;
-    sceneRef.current?.setHighlight(picked && model ? issueSpot({ path: picked }, config, model, fasteners) : null, "selection");
-  }, [picked, text]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (picked === null && focusedField === null && shownIssue) return;
+    const field = focusedField && model ? fieldSpot(focusedField, config, model) : null;
+    sceneRef.current?.setHighlight(field ?? (picked && model ? issueSpot({ path: picked }, config, model, fasteners) : null), "selection");
+  }, [picked, text, focusedField]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     sceneRef.current?.setMeasuring(measuring);
@@ -1175,7 +1178,7 @@ export function App() {
         </div>
 
         {tab === "shape" ? (
-          <ShapePanel config={config} onChange={(next) => applyConfig(next)} picked={picked} onPick={(path) => {
+          <ShapePanel config={config} onChange={(next) => applyConfig(next)} picked={picked} onField={setFocusedField} onPick={(path) => {
               setPicked(path);
               if (path) setSelected(null);
             }} {...(lastBuild && valid ? { onPlace: setPlacing } : {})} />

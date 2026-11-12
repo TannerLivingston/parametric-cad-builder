@@ -65,7 +65,7 @@ const LABEL_SIDES = ["below", "above", "left", "right"] as const;
 // no view to click in, and it goes in the middle.
 // `picked` is the path in the config of what was clicked in the view, whose fields are marked and
 // scrolled to. `onPick` says which fields have the focus, so that the view can light up what they're for.
-export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; onPick?(path: string | null): void }) {
+export function ShapePanel({ config, onChange, onPlace, picked, onPick, onField }: { config: RawConfig; onChange(next: RawConfig): void; onPlace?(placing: Placing): void; picked?: string | null; onPick?(path: string | null): void; onField?(path: string | null): void }) {
   const place = (placing: Placing) => (onPlace ? onPlace(placing) : onChange(placing.middle(config)));
   const root = useRef<HTMLDivElement>(null);
   // Fields for one thing in the design, marked when it's the one picked.
@@ -77,8 +77,11 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
     if (fields && !fields.contains(document.activeElement)) fields.scrollIntoView?.({ block: "center" });
   }, [picked]);
   const focused = (event: FocusEvent<HTMLDivElement>) => {
-    const path = (event.target as HTMLElement).closest?.("[data-path]")?.getAttribute("data-path");
+    const target = event.target as HTMLElement;
+    const path = target.closest?.("[data-path]")?.getAttribute("data-path");
     if (path && path !== picked) onPick?.(path);
+    // And the one number, where its field says which, to light up just its part of the shape.
+    onField?.(target.closest?.("[data-field]")?.getAttribute("data-field") ?? null);
   };
   const { enclosure: e, fabrication, topPanels, seams, wallHoles, opening, plate } = shapeValues(config);
   const labels: RawConfig[] = config.labels ?? [];
@@ -97,7 +100,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
   };
 
   return (
-    <div className="tab-body shape-form" ref={root} onFocus={focused}>
+    <div className="tab-body shape-form" ref={root} onFocus={focused} onBlur={() => onField?.(null)}>
       <section className="fields single">
         <TextField label="Name" value={String(config.name ?? "")} onCommit={(name) => onChange({ ...config, name })} />
       </section>
@@ -105,8 +108,8 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
       <section>
         <h2>Size</h2>
         <div className="fields">
-          <NumberField label="Width" value={e.width} onCommit={number((width) => updateEnclosure(config, { width }))} />
-          <NumberField label="Front height" value={e.frontHeight} onCommit={number((frontHeight) => updateEnclosure(config, { frontHeight }))} />
+          <NumberField label="Width" field="enclosure.width" value={e.width} onCommit={number((width) => updateEnclosure(config, { width }))} />
+          <NumberField label="Front height" field="enclosure.frontHeight" value={e.frontHeight} onCommit={number((frontHeight) => updateEnclosure(config, { frontHeight }))} />
         </div>
       </section>
 
@@ -121,8 +124,8 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
             <div {...card(`enclosure.surfaces[${index}]`)} key={index}>
               <div className="fields">
                 <TextField label="Name" value={surface.id} onCommit={(name) => onChange(renameSurface(config, surface.id, name))} />
-                <NumberField label="Depth" value={surface.y} onCommit={number((y) => updateSurface(config, surface.id, { y }))} />
-                <NumberField label="Height" value={surface.z} onCommit={number((z) => updateSurface(config, surface.id, { z }))} />
+                <NumberField label="Depth" field={`enclosure.surfaces[${index}].y`} value={surface.y} onCommit={number((y) => updateSurface(config, surface.id, { y }))} />
+                <NumberField label="Height" field={`enclosure.surfaces[${index}].z`} value={surface.z} onCommit={number((z) => updateSurface(config, surface.id, { z }))} />
                 <TextField label="Thickness" placeholder={String(e.panelThickness)} value={surface.thickness === undefined ? "" : String(surface.thickness)} onCommit={optional((thickness) => setSurfaceThickness(config, surface.id, thickness))} />
                 <TextField label="Curve" placeholder="flat" value={surface.bulge === undefined ? "" : String(surface.bulge)} onCommit={optional((bulge) => setSurfaceBulge(config, surface.id, bulge))} />
               </div>
@@ -178,21 +181,21 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
       <section>
         <h2>Edges</h2>
         <div className="fields">
-          <NumberField label="Corner radius" value={e.cornerRadius} onCommit={number((cornerRadius) => updateEnclosure(config, { cornerRadius }))} />
-          <NumberField label="Front bottom round" value={e.rounds.frontBottom} onCommit={number((radius) => setRound(config, "frontBottom", radius))} />
-          <NumberField label="Rear top round" value={e.rounds.rearTop} onCommit={number((radius) => setRound(config, "rearTop", radius))} />
-          <NumberField label="Rear bottom round" value={e.rounds.rearBottom} onCommit={number((radius) => setRound(config, "rearBottom", radius))} />
-          <NumberField label="Front wall bow" value={e.bow.front} onCommit={number((bow) => setBow(config, "front", bow))} />
-          <NumberField label="Rear wall bow" value={e.bow.rear} onCommit={number((bow) => setBow(config, "rear", bow))} />
+          <NumberField label="Corner radius" field="enclosure.cornerRadius" value={e.cornerRadius} onCommit={number((cornerRadius) => updateEnclosure(config, { cornerRadius }))} />
+          <NumberField label="Front bottom round" field="enclosure.rounds.frontBottom" value={e.rounds.frontBottom} onCommit={number((radius) => setRound(config, "frontBottom", radius))} />
+          <NumberField label="Rear top round" field="enclosure.rounds.rearTop" value={e.rounds.rearTop} onCommit={number((radius) => setRound(config, "rearTop", radius))} />
+          <NumberField label="Rear bottom round" field="enclosure.rounds.rearBottom" value={e.rounds.rearBottom} onCommit={number((radius) => setRound(config, "rearBottom", radius))} />
+          <NumberField label="Front wall bow" field="enclosure.bow.front" value={e.bow.front} onCommit={number((bow) => setBow(config, "front", bow))} />
+          <NumberField label="Rear wall bow" field="enclosure.bow.rear" value={e.bow.rear} onCommit={number((bow) => setBow(config, "rear", bow))} />
         </div>
       </section>
 
       <section {...card(WALLS_PATH, "walls")}>
         <h2>Walls</h2>
         <div className="fields">
-          <NumberField label="Wall" value={e.wall} step={0.1} onCommit={number((wall) => updateEnclosure(config, { wall }))} />
-          <NumberField label="Top" value={e.panelThickness} step={0.1} onCommit={number((panelThickness) => updateEnclosure(config, { panelThickness }))} />
-          <NumberField label="Floor" value={e.floorThickness} step={0.1} onCommit={number((floorThickness) => updateEnclosure(config, { floorThickness }))} />
+          <NumberField label="Wall" field="enclosure.wall" value={e.wall} step={0.1} onCommit={number((wall) => updateEnclosure(config, { wall }))} />
+          <NumberField label="Top" field="enclosure.panelThickness" value={e.panelThickness} step={0.1} onCommit={number((panelThickness) => updateEnclosure(config, { panelThickness }))} />
+          <NumberField label="Floor" field="enclosure.floorThickness" value={e.floorThickness} step={0.1} onCommit={number((floorThickness) => updateEnclosure(config, { floorThickness }))} />
           <ColorField label="Colour" value={e.color} onCommit={(color) => onChange(updateEnclosure(config, { color }))} />
         </div>
       </section>
@@ -492,7 +495,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
         {seams.map((seam, index) => (
           <div {...card(`seams[${index}]`, "fields")} key={index}>
             <NumberField label={seams.length > 1 ? `Seam ${index + 1} at x` : "Split at x"} value={seam.x} onCommit={number((x) => updateSeam(config, index, { x }))} />
-            <NumberField label="Lip past it" value={seam.lip} onCommit={number((lip) => updateSeam(config, index, { lip }))} />
+            <NumberField label="Lip past it" field={`seams[${index}].lip`} value={seam.lip} onCommit={number((lip) => updateSeam(config, index, { lip }))} />
             {seams.length > 1 ? <button className="danger" onClick={() => onChange(removeSeam(config, index))}>Remove seam</button> : null}
           </div>
         ))}

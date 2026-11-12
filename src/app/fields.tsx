@@ -36,11 +36,13 @@ export const FIELD_NOTES: Record<string, string> = {
 
 // Keeps what you're typing until you leave the field or press Enter, so a half-typed
 // number doesn't jump the part around.
-export function NumberField({ label, value, onCommit, step = 0.5 }: { label: string; value: number; onCommit(value: string): void; step?: number }) {
+// `field` is the one number's path in the config, such as enclosure.cornerRadius, for lighting up
+// just its part of the shape while the field has the cursor.
+export function NumberField({ label, value, onCommit, step = 0.5, field }: { label: string; value: number; onCommit(value: string): void; step?: number; field?: string }) {
   const [draft, setDraft] = useState<string | null>(null);
   const note = FIELD_NOTES[label];
   return (
-    <label title={note} className={note ? "noted" : undefined}>
+    <label title={note} className={note ? "noted" : undefined} data-field={field}>
       {label}
       <input
         type="number"
