@@ -914,3 +914,117 @@ input.view-dimension {
   background: color-mix(in srgb, var(--accent) 12%, transparent);
   pointer-events: none;
 }
+
+/* The tutorial's card, over the bottom of the view. */
+.tutorial {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 14;
+  width: min(360px, calc(100% - 24px));
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 0.22);
+}
+
+.tutorial h2 {
+  margin: 4px 0 6px;
+  font-size: 16px;
+}
+
+.tutorial p {
+  margin: 0 0 8px;
+  line-height: 1.45;
+}
+
+.tutorial-count {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.tutorial-steps {
+  display: flex;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+
+.tutorial-dot {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+
+.tutorial-dot.current {
+  background: var(--accent-soft);
+}
+
+.tutorial-dot.done {
+  background: var(--good);
+}
+
+.tutorial-status {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--warning-soft);
+  color: var(--warning);
+  font-size: 13px;
+}
+
+.tutorial-status.ok {
+  background: color-mix(in srgb, var(--good) 14%, transparent);
+  color: var(--good);
+}
+
+.tutorial button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.tutorial button.primary:disabled {
+  opacity: 0.45;
+}
+
+.tutorial button.quiet {
+  margin-left: auto;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+
+/* Finished: plainly so. */
+.tutorial.done {
+  border-color: var(--good);
+  text-align: center;
+}
+
+.tutorial-tick {
+  width: 48px;
+  height: 48px;
+  margin: 4px auto 6px;
+  border-radius: 50%;
+  background: var(--good);
+  color: #fff;
+  font-size: 28px;
+  line-height: 48px;
+}
+
+.tutorial.done h2 {
+  font-size: 20px;
+}
+
+/* The control the tutorial's step is about. */
+.tutorial-target {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 3px;
+  animation: tutorial-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes tutorial-pulse {
+  50% {
+    outline-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+}

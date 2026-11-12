@@ -55,6 +55,12 @@ Resting the pointer on something in the view says what it is, with its main size
 onto what's selected and brings it near: a part or label from above its surface or outside its wall, the plate from above, and
 what's under it from below.
 
+**Tutorial** in the header starts a new design and takes you through making a basic synth, in ten steps: making room, sloping
+the back, four buttons, two knobs, a screen, a board on the floor, labels on the knobs, a seam for the printer, clearing the
+problems, and downloading the files. Each step outlines the control to use and checks the design, saying what's still missing,
+and Next only opens once it's done. If an earlier step comes undone, it goes back to it. It ends on a card that says it's
+complete, and the design stays as an ordinary one. Undo brings back what you had before it.
+
 These tabs only write the config, so the validator checks them like anything else, and clicking a problem takes you to the
 tab that fixes it. Clicking it again turns the view to it. **Save** and **Open** keep designs as JSON files. **Copy link** copies a link with the whole design in it, compressed after the
 `#`, so it never reaches a server, and opening the link loads it, with Undo to go back. It works wherever the app does, so for

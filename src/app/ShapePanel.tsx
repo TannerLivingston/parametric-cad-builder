@@ -172,7 +172,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
             </div>
           );
         })}
-        <button onClick={() => onChange(addSurface(config))}>Add a surface</button>
+        <button data-tutorial="add-surface" onClick={() => onChange(addSurface(config))}>Add a surface</button>
       </section>
 
       <section>
@@ -485,7 +485,7 @@ export function ShapePanel({ config, onChange, onPlace, picked, onPick }: { conf
           <NumberField label="Bed y" value={fabrication.buildVolume.y} onCommit={number((size) => setBed(config, "y", size))} />
           <NumberField label="Bed z" value={fabrication.buildVolume.z} onCommit={number((size) => setBed(config, "z", size))} />
         </div>
-        <label className="check">
+        <label className="check" data-tutorial="seam">
           <input type="checkbox" checked={seams.length > 0} onChange={(event) => onChange(setSeam(config, event.target.checked ? e.width / 2 : null))} />
           Split the shell into pieces, for a small bed
         </label>

@@ -34,6 +34,8 @@ import { facingFor } from "./lookAt.js";
 import { guideSegments, snapDrag } from "./snap.js";
 import { centreOf, dimensionsFor, placeForDimension, type Side } from "./dimensions.js";
 import { reachCells, refusedSquares, type Cell } from "./reach.js";
+import { firstUnfinished, TUTORIAL, tutorialStart, type TutorialState } from "./tutorial.js";
+import { TutorialPanel } from "./TutorialPanel.js";
 import { copyParts, duplicateComponent, duplicateThing, nearestFit, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
@@ -130,6 +132,8 @@ export function App() {
   // Bumped when the view turns, so that what's drawn over it is placed again.
   const [, setViewTick] = useState(0);
   const [editingSide, setEditingSide] = useState<Side | null>(null);
+  // The tutorial: which step it's on, whether it's finished, and whether the files were downloaded in it.
+  const [tutorial, setTutorial] = useState<{ step: number; finished: boolean; exported: boolean } | null>(null);
   const [selectBox, setSelectBox] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   useEffect(() => setEditingSide(null), [selected]);
   const [hover, setHover] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -934,6 +938,7 @@ export function App() {
     try {
       const bytes = await engineRef.current!.bundle(result.plan, only);
       download(bytes, `${fileName(String(config.name ?? "enclosure"))}-${only ? "reprint" : "print"}.zip`, "application/zip");
+      setTutorial((t) => t && { ...t, exported: true });
     } catch (error) {
       setNotice(`Export failed: ${(error as Error).message}`);
     }
@@ -1053,6 +1058,19 @@ export function App() {
   const valid = result?.ok === true;
   const neighbour = model && selectedComponent ? nearestNeighbour(model, selectedComponent.id) : null;
   const measurement = measured.length === 2 ? measureBetween(measured[0]!, measured[1]!) : null;
+  const tutorialState: TutorialState = { config, issues: [...errors, ...warnings], ok: result?.ok === true, exported: tutorial?.exported ?? false };
+  // Never ahead of the design: if an earlier step comes undone, it goes back to it.
+  const tutorialStep = tutorial && !tutorial.finished ? Math.min(tutorial.step, firstUnfinished(tutorialState, tutorial.step)) : 0;
+  const tutorialTarget = tutorial && !tutorial.finished ? TUTORIAL[tutorialStep]?.target : undefined;
+  useEffect(() => {
+    // The control the step is about is outlined, wherever it is now.
+    const marked = tutorialTarget ? [...document.querySelectorAll(tutorialTarget)] : [];
+    for (const element of marked) element.classList.add("tutorial-target");
+    return () => {
+      for (const element of marked) element.classList.remove("tutorial-target");
+    };
+  });
+
   const printedPartName = (index: number) => (result?.ok ? (result.plan.printedParts[index]?.name ?? `part ${index + 1}`) : `part ${index + 1}`);
   const buildSummary = !lastBuild
     ? valid
@@ -1135,16 +1153,25 @@ export function App() {
           <button onClick={() => restore("undo")} disabled={!canUndo}>Undo</button>
           <button onClick={() => restore("redo")} disabled={!canRedo}>Redo</button>
           <button onClick={() => loadDesign(exampleText, "Reset to the Desk Synth example. Undo brings your last design back.")}>Reset</button>
+          <button
+            onClick={() => {
+              loadDesign(formatConfig(tutorialStart()), "Started the tutorial with a new design. Undo brings your last design back.");
+              setTutorial({ step: 0, finished: false, exported: false });
+              setTab("shape");
+            }}
+          >
+            Tutorial
+          </button>
         </div>
       </header>
 
       <aside className="panel">
         <div className="tabs" role="tablist">
-          <button role="tab" aria-selected={tab === "shape"} onClick={() => setTab("shape")}>Shape</button>
-          <button role="tab" aria-selected={tab === "layout"} onClick={() => setTab("layout")}>Layout</button>
-          <button role="tab" aria-selected={tab === "screws"} onClick={() => setTab("screws")}>Screws</button>
-          <button role="tab" aria-selected={tab === "print"} onClick={() => setTab("print")}>Print</button>
-          <button role="tab" aria-selected={tab === "config"} onClick={() => setTab("config")}>Config</button>
+          <button role="tab" data-tab="shape" aria-selected={tab === "shape"} onClick={() => setTab("shape")}>Shape</button>
+          <button role="tab" data-tab="layout" aria-selected={tab === "layout"} onClick={() => setTab("layout")}>Layout</button>
+          <button role="tab" data-tab="screws" aria-selected={tab === "screws"} onClick={() => setTab("screws")}>Screws</button>
+          <button role="tab" data-tab="print" aria-selected={tab === "print"} onClick={() => setTab("print")}>Print</button>
+          <button role="tab" data-tab="config" aria-selected={tab === "config"} onClick={() => setTab("config")}>Config</button>
         </div>
 
         {tab === "shape" ? (
@@ -1386,7 +1413,7 @@ export function App() {
               {valid ? <p className="hint">Files come out placed as they should print, on the {result.plan.config.fabrication.buildVolume.x} mm bed, so don't turn them in the slicer.</p> : null}
               {valid && printReports.length ? <PrintCost reports={printReports} /> : null}
               <div className="row">
-                <button onClick={() => void exportBundle()} disabled={!valid}>Download everything</button>
+                <button data-tutorial="download" onClick={() => void exportBundle()} disabled={!valid}>Download everything</button>
                 {changedNames.length ? <button onClick={() => void exportBundle(changedNames)} disabled={!valid}>Download what changed</button> : null}
                 <button onClick={recordPrinted} disabled={!valid || printReports.length === 0}>Mark as printed</button>
               </div>
@@ -1583,6 +1610,17 @@ export function App() {
               );
             })
           : null}
+        {tutorial ? (
+          <TutorialPanel
+            state={tutorialState}
+            step={tutorialStep}
+            finished={tutorial.finished}
+            printedParts={result?.ok ? result.plan.printedParts.length : 0}
+            onBack={() => setTutorial({ ...tutorial, step: Math.max(0, tutorialStep - 1) })}
+            onNext={() => setTutorial(tutorialStep + 1 >= TUTORIAL.length ? { ...tutorial, finished: true } : { ...tutorial, step: tutorialStep + 1 })}
+            onLeave={() => setTutorial(null)}
+          />
+        ) : null}
         {selectBox ? (
           <div
             className="select-box"

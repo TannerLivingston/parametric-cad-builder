@@ -18,12 +18,6 @@ click or drag in the view.
 - [ ] **Type a distance to a neighbour onto the view,** as a part's distances to its edges can be, and for labels, holes and
   plate items too.
 - [ ] **More fixes from a problem:** a fix for a label, hole or screw in the wrong place, as a part has.
-- [ ] **A built-in tutorial** that guides a newcomer step by step through making a basic synth: choosing a shape, adding
-  buttons, knobs and a screen, a board on the floor, labels, a seam if it's too wide for the bed, fixing what the problem list
-  says, and exporting the files to print. Each step points at the control to use and checks the design to know whether it's
-  been done right, saying what's still missing, and the next step stays locked until it has. It ends on a finished screen that
-  makes it plain the tutorial is complete, with the synth shown and the design kept as an ordinary one afterwards. It can be
-  left at any point, but not skipped ahead.
 - [ ] **Small drawings for the less obvious fields,** such as u and v, bulge and bow, beside their notes.
 
 ## Shape
@@ -40,6 +34,9 @@ click or drag in the view.
 
 ## Done
 
+- [x] **A built-in tutorial** for making a basic synth, in ten steps from a plain box to the files to print. Each step points at
+  its control, checks the design, says what's missing, and keeps Next shut until it's done. It ends on a complete card. The
+  last step and that card are untried in the app, since they need a real download; the checks are tested to the end.
 - [x] **Show where a part can go** while it's dragged, shading in red where it would be refused on its surface or the floor,
   checked every 6 mm in the background. Not yet for parts in a wall or on a curve.
 - [x] **Select parts with a box,** Shift-dragged on empty space in the view, and **look at a problem** by clicking it again.
