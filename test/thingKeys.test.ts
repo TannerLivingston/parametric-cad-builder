@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { validateConfig } from "../src/validate.js";
 import { errorCount } from "../src/app/configEdit.js";
-import { arrayPitch, arrayThing, duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "../src/app/thingKeys.js";
+import { arrayPitch, arrayThing, copyParts, duplicateComponent, duplicateThing, nudgeThing, pasteParts, removeThing, rotateThing } from "../src/app/thingKeys.js";
 
 const design = (): any => ({
   schemaVersion: 1,
@@ -101,5 +101,40 @@ describe("arrays from the menu", () => {
     expect(parts.components.map((c: any) => [c.id, c.u, c.v])).toEqual([["button-1", 60, 40], ["button-2", 90, 40], ["button-3", 60, 70], ["button-4", 90, 70]]);
     expect(arrayThing(design(), { path: "wallHoles[0]" }, { columns: 1, rows: 1, stepAlong: 20, stepAcross: 12 })).toBeNull();
     expect(arrayThing(design(), { path: "seams[0]" }, { columns: 3, rows: 1, stepAlong: 20, stepAcross: 0 })).toBeNull();
+  });
+});
+
+describe("copying and pasting parts", () => {
+  it("copies them with their labels and any custom part, and nothing for no parts", () => {
+    const withCustom = { ...design(), customParts: { mine: { name: "Mine" } }, components: [...design().components, { id: "m-1", type: "mine", surface: "deck", u: 200, v: 40 }] };
+    const clip = JSON.parse(copyParts(withCustom, ["button-1", "m-1"])!);
+    expect(clip.components.map((c: any) => c.id)).toEqual(["button-1", "m-1"]);
+    expect(clip.labels).toEqual([{ text: "GO", component: "button-1" }]);
+    expect(Object.keys(clip.customParts)).toEqual(["mine"]);
+    expect(copyParts(design(), ["nothing"])).toBeNull();
+  });
+
+  it("pastes them beside where they were, renamed, with their labels following", () => {
+    const start = design();
+    const pasted = pasteParts(start, copyParts(start, ["button-1"])!)!;
+    expect(pasted.ids).toEqual(["button-2"]);
+    const copy = pasted.config.components.find((c: any) => c.id === "button-2");
+    expect(copy).toMatchObject({ type: "arcade-24mm", surface: "deck", v: 40 });
+    expect(copy.u).not.toBe(60);
+    expect(pasted.config.labels.filter((l: any) => l.text === "GO").map((l: any) => l.component)).toEqual(["button-1", "button-2"]);
+    expect(errorCount(pasted.config)).toBeLessThanOrEqual(errorCount(start));
+  });
+
+  it("pastes into a design without the part's surface or custom part, onto its first surface", () => {
+    const from = { ...design(), customParts: { mine: { name: "Mine" } }, components: [{ id: "m-1", type: "mine", surface: "lid", u: 50, v: 20 }] };
+    const into = { ...design(), components: [] };
+    const pasted = pasteParts(into, copyParts(from, ["m-1"])!)!;
+    expect(pasted.config.components[0]).toMatchObject({ id: "m-1", surface: "deck" });
+    expect(pasted.config.customParts).toEqual({ mine: { name: "Mine" } });
+  });
+
+  it("leaves text that isn't copied parts alone", () => {
+    expect(pasteParts(design(), "hello")).toBeNull();
+    expect(pasteParts(design(), JSON.stringify({ kind: "other" }))).toBeNull();
   });
 });

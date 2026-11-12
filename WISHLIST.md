@@ -23,7 +23,6 @@ click or drag in the view.
   is one, such as moving a part the distance the message asks for.
 - [ ] **Hover to see what something is,** with its name and main sizes, before clicking.
 - [ ] **Look at what's selected:** a key or double-click turns the view to face a surface or wall squarely, or zooms to a part.
-- [ ] **Copy and paste parts,** with their knobs and labels, within a design and between designs.
 - [ ] **Show where a part can go** while it's being dragged, by shading the areas that would be refused.
 - [ ] **A built-in tutorial** that guides a newcomer step by step through making a basic synth: choosing a shape, adding
   buttons, knobs and a screen, a board on the floor, labels, a seam if it's too wide for the bed, fixing what the problem list
@@ -48,6 +47,7 @@ click or drag in the view.
 
 ## Done
 
+- [x] **Copy and paste parts,** with their knobs, caps, labels and any custom part they are, within a design and between designs.
 - [x] **Select several parts** with Shift-click, in the view or the parts list, to nudge, turn or delete together, put in one
   row or column, or space evenly. The view's Shift-click is untried in the app, the list's is.
 - [x] **Drag the rest:** a label, a hole or vent in a wall, a support, pin, foot, weight pocket, cable tie bridge or hole in the

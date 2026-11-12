@@ -67,6 +67,10 @@ A part on a top surface goes onto another one when it's dragged over it, and a p
 Shift-click parts, in the view or the parts list, to select several. The arrow keys, R and Delete then act on all of them, and
 the Layout tab can put them in the same row or column as the first, space them evenly between the outermost, or delete them.
 
+Ctrl+C (or Cmd+C) copies the selected parts, with their knobs, caps and labels and any custom part they are, and Ctrl+V pastes
+them, in this design or another: where they were if that adds no problem, or else moved together to the nearest place that
+doesn't. In a field, the keys copy and paste text as usual.
+
 A selected part can be copied in rows, mirrored across the enclosure's centre, centred, or lined up with another part on the same
 surface. Drag parts in the 3D view, or use the keys above. Changes
 write back to the config, and editing the config text updates the view. Everything saves as a draft in the browser.

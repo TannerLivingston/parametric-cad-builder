@@ -211,3 +211,57 @@ export function arrayThing(config: RawConfig, target: { part: string } | { path:
   }
   return withList(config, where, [...items, ...copies]);
 }
+
+// Parts copied, as text, so that they can be pasted into this design or another: with their knobs,
+// caps and labels, and any custom part they are, which the other design may not have.
+export const CLIP_KIND = "enclosure-parts";
+
+export function copyParts(config: RawConfig, ids: string[]): string | null {
+  const components: RawConfig[] = (config.components ?? []).filter((c: RawConfig) => ids.includes(c.id));
+  if (!components.length) return null;
+  const labels = (config.labels ?? []).filter((label: RawConfig) => ids.includes(label.component));
+  const custom: Record<string, unknown> = config.customParts ?? {};
+  const customParts = Object.fromEntries(components.filter((c) => c.type in custom).map((c) => [c.type, custom[c.type]]));
+  return JSON.stringify({ kind: CLIP_KIND, components, labels, customParts });
+}
+
+// Puts copied parts in, each with the next free id in its numbering: where they were if that adds no
+// problem, or else all moved together across, then up, to the nearest place that doesn't. A part
+// on a surface this design hasn't goes on its first. Null for text that isn't copied parts.
+export function pasteParts(config: RawConfig, text: string): { config: RawConfig; ids: string[] } | null {
+  let clip: any;
+  try {
+    clip = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (clip?.kind !== CLIP_KIND || !Array.isArray(clip.components) || !clip.components.length) return null;
+  const surfaces = new Set((config.enclosure?.surfaces ?? []).map((s: RawConfig) => s.id));
+  const first = config.enclosure?.surfaces?.[0]?.id;
+  let named: RawConfig = config;
+  const renamed = new Map<string, string>();
+  for (const component of clip.components as RawConfig[]) {
+    const [id] = unusedIds(named, component.id, 1) as [string];
+    renamed.set(component.id, id);
+    named = { ...named, components: [...(named.components ?? []), { id }] };
+  }
+  const customParts = { ...(clip.customParts ?? {}), ...(config.customParts ?? {}) };
+  const place = (da: number, db: number): RawConfig => {
+    const pasted = (clip.components as RawConfig[]).map((component) => {
+      const axes: Axes = "wall" in component ? ["at", "z"] : "x" in component ? ["x", "y"] : ["u", "v"];
+      const onSurface = "u" in component && component.surface !== undefined && !surfaces.has(component.surface) ? { surface: first } : {};
+      return { ...moved(component, axes, da, db), ...onSurface, id: renamed.get(component.id) };
+    });
+    const labels = (clip.labels ?? []).map((label: RawConfig) => ({ ...label, component: renamed.get(label.component) }));
+    return {
+      ...config,
+      components: [...(config.components ?? []), ...pasted],
+      ...(labels.length ? { labels: [...(config.labels ?? []), ...labels] } : {}),
+      ...(Object.keys(customParts).length ? { customParts } : {}),
+    };
+  };
+  const baseline = errorCount(config);
+  const still = place(0, 0);
+  if (errorCount(still) <= baseline) return { config: still, ids: [...renamed.values()] };
+  return { config: besideOriginal(config, ["u", "v"], place), ids: [...renamed.values()] };
+}

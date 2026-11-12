@@ -30,7 +30,7 @@ import { FASTENER_PREFIX, nameOfThing, partOfLabel, thingAt, type PickExtras } f
 import { menuFor, type MenuChoice, type MenuTarget } from "./viewMenu.js";
 import { ArrayMenuForm } from "./ArrayMenuForm.js";
 import { handlesFor, type HandleSpec } from "./shapeHandles.js";
-import { duplicateComponent, duplicateThing, nudgeThing, removeThing, rotateThing } from "./thingKeys.js";
+import { copyParts, duplicateComponent, duplicateThing, nudgeThing, pasteParts, removeThing, rotateThing } from "./thingKeys.js";
 import { bedsFor, describeBed } from "../bedLayout.js";
 import { ReferencePanel, type LoadedReference } from "./ReferencePanel.js";
 import { referenceMiddle, referenceTransform, startingPlace } from "../reference.js";
@@ -707,6 +707,39 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [selected, nudge, rotate, restore, applyConfig, tab, fasteners, selectedFastener]);
+
+  // Ctrl+C and Ctrl+V copy the selected parts and paste them, here or in another design, while the
+  // cursor isn't in a field, where they copy and paste text as usual.
+  useEffect(() => {
+    const typing = (event: Event) => (event.target as HTMLElement)?.matches?.("input, textarea, select") ?? false;
+    const onCopy = (event: ClipboardEvent) => {
+      const { config: current, selected: first, group: others } = latest.current;
+      if (typing(event) || !first || !event.clipboardData) return;
+      const text = copyParts(current, [first, ...others]);
+      if (!text) return;
+      event.preventDefault();
+      event.clipboardData.setData("text/plain", text);
+      setNotice(others.length ? `Copied ${others.length + 1} parts.` : `Copied ${first}.`);
+    };
+    const onPaste = (event: ClipboardEvent) => {
+      if (typing(event) || !event.clipboardData) return;
+      const { config: current, applyConfig: apply } = latest.current;
+      const pasted = pasteParts(current, event.clipboardData.getData("text/plain"));
+      if (!pasted) return;
+      event.preventDefault();
+      apply(pasted.config);
+      setSelected(pasted.ids[0] ?? null);
+      setGroup(pasted.ids.slice(1));
+      setPicked(null);
+      setTab("layout");
+    };
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("paste", onPaste);
+    return () => {
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("paste", onPaste);
+    };
+  }, []);
 
   const handleTextChange = (next: string) => {
     setText(next);
