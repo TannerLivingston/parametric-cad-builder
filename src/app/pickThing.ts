@@ -198,7 +198,7 @@ export function describeThing(config: RawConfig, path: string, partNames: Record
   const vent = at(/^vents\[(\d+)\]$/, config.vents);
   if (vent) return `Vent in ${wallName(vent.wall)}, ${mm(vent.width)} by ${mm(vent.height)}`;
   const seam = at(/^seams\[(\d+)\]$/, config.seams);
-  if (seam) return `Seam at ${mm(seam.x)} from the left${seam.lip ? `, with a ${mm(seam.lip)} lip` : ""}`;
+  if (seam) return `Seam at ${mm(seam.x)} from the left${seam.lip ? `, with a ${mm(seam.lip)} lip` : ""}${seam.tongue ? `, with a ${mm(seam.tongue)} tongue` : ""}`;
   const foot = at(/^plate\.feet\[(\d+)\]$/, plate.feet);
   if (foot) return `Rubber foot, ${mm(foot.diameter ?? 10)} across`;
   const support = at(/^plate\.supports\[(\d+)\]$/, plate.supports);

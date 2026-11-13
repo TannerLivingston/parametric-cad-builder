@@ -230,11 +230,15 @@ export const openingSchema = z.strictObject({
 // `lip` steps the joint in the shell's skin: for this far past the seam, the left half keeps the
 // outer half of the wall, and of the top where the shell has one, over a step cut back in the right
 // half. It hides the joint line and lines the halves up. 0 leaves the joint flat.
+// `tongue` is the other way to line them up, as the real Desk Synth's seam does: the middle third of
+// the skin reaches this far past the seam from the left half, into a groove in the right one. It
+// needs a thicker skin than a lip, and the two can't both be had.
 export const seamSchema = z.strictObject({
   x: length,
   ribWidth: length.default(9),
   ribHalfThickness: length.default(5),
   lip: z.number().nonnegative().default(0),
+  tongue: z.number().nonnegative().default(0),
 });
 
 // Engraved text. It goes with a part, moving when the part does, or at a spot on a surface or wall.

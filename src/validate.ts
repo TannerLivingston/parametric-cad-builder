@@ -7,7 +7,7 @@ import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, p
 import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
 import { curveFlat, flatFor, LABEL_GAP, curveLength, flatId, flatStart, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
-import { bowAt, bowRise, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
+import { bowAt, bowRise, hasBow, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
 import { shellPrintsOnSide } from "./printing.js";
 import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, creaseGeometry, layoutCreaseScrews, type CreaseJoint } from "./crease.js";
 import { blocksTopDriver, tabGussetDepth, TOP_TAB_LENGTH, TOP_TAB_THICKNESS, MIN_TOP_SCREWS, MIN_TOP_SCREW_SPACING, TOP_POST_DIAMETER, postBottomAt, topScrewProblem, topTabExtent, type TopJoint, type TopObstacles, type TopPiece, type TopScrew, type TopScrewWall, GROOVE_DEPTH, MIN_TONGUE_ROOT, TONGUE_FIT, TONGUE_INSET, TONGUE_ROOT } from "./top.js";
@@ -26,6 +26,11 @@ export const MIN_PART_WIDTH = 40;
 export const PIN_ALLOWANCE = 1.5; // the rib keeps this much behind each pin
 export const LIP_GAP = 0.2; // round a seam's lip, in the step it fits over
 export const MIN_LIP = 1;
+export const MIN_TONGUE = 1; // shorter doesn't line the pieces up
+export const TONGUE_GAP = 0.2; // each side of a seam's tongue, in its groove
+// A seam's tongue is this much of the skin's thickness, in its middle.
+export const SEAM_TONGUE_SHARE = 1 / 3;
+export const seamTongueHalf = (thinnest: number) => (thinnest * SEAM_TONGUE_SHARE) / 2;
 export const MIN_LABEL_SIZE = 3.5;
 const MIN_STANDOFF_WALL = 0.8; // two lines from a 0.4 mm nozzle
 const LABEL_CLEAR = 0.6; // from any hole, or another label
@@ -192,6 +197,7 @@ export interface PlannedSeam extends SeamFasteners {
   ribWidth: number;
   ribHalfThickness: number;
   lip: number;
+  tongue: number;
   pinLength: number;
 }
 
@@ -1685,6 +1691,21 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
         issues.error("SEAM_INVALID", `A lip takes half of the ${mm(thinnest)} skin, leaving ${mm(thinnest / 2 - LIP_GAP)} for the step it fits over, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(2 * (minWeb + LIP_GAP))}, or leave the joint flat.`, `${path}.lip`);
       }
     }
+    if (seam.tongue > 0) {
+      const reach = seam.ribHalfThickness + seam.ribWidth;
+      if (seam.lip > 0) issues.error("SEAM_INVALID", "A seam can have a lip or a tongue, not both. Set one of them to 0.", `${path}.tongue`);
+      if (hasBow(e.bow)) issues.error("SEAM_INVALID", "A tongue follows a square wall's skin, so it can't be had with a bowed wall. Use a lip, or straighten the wall.", `${path}.tongue`);
+      if (seam.tongue < MIN_TONGUE) issues.error("SEAM_INVALID", `A tongue of ${mm(seam.tongue)} is too short to line the pieces up. Make it at least ${mm(MIN_TONGUE)}, or 0 for none.`, `${path}.tongue`);
+      if (seam.tongue > reach) issues.error("SEAM_INVALID", `A tongue of ${mm(seam.tongue)} reaches past the room kept clear round the seam, ${mm(reach)} either side. Make it shorter.`, `${path}.tongue`);
+      // The groove takes the middle third of the skin and a gap each side, and what's left either side has to hold.
+      const thinnest = Math.min(e.wall, ...profile.surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness));
+      const groove = 2 * seamTongueHalf(thinnest) + 2 * TONGUE_GAP;
+      const side = (thinnest - groove) / 2;
+      if (side < minWeb) {
+        const needed = (2 * minWeb + 2 * TONGUE_GAP) / (1 - SEAM_TONGUE_SHARE);
+        issues.error("SEAM_INVALID", `A tongue's groove takes ${mm(groove)} of the ${mm(thinnest)} skin, leaving ${mm(side)} either side of it, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(Math.ceil(needed * 10) / 10)}, or use a lip.`, `${path}.tongue`);
+      }
+    }
     // The next seam to the left, whose rib and tabs reach into the same piece.
     const before = config.seams.filter((other) => other.x < seam.x).sort((a, b) => b.x - a.x)[0];
     const leftEnd = before ? before.x + before.ribHalfThickness + before.ribWidth : e.wall;
@@ -1717,7 +1738,9 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
     const skins = [e.wall, ...profile.surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness)];
     // And where a wall bows, on through all of that as well.
     const lip = seam && seam.lip > 0 ? seam.lip + Math.max(...skins) / 2 + Math.max(e.bow.front, e.bow.rear) : 0;
-    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip) : 0;
+    // A tongue ends in a point, as far on again as it is thick each side of the middle.
+    const tongue = seam && seam.tongue > 0 ? seam.tongue + seamTongueHalf(Math.min(...skins)) : 0;
+    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip, tongue) : 0;
     // A bowed wall is furthest out at the middle, or at whichever end of this piece is nearest it.
     // Right of a lip, its skin starts past the step, further on the further out the wall is.
     const before = [...config.seams].sort((a, b) => a.x - b.x)[index - 1];
@@ -1768,7 +1791,7 @@ function planFlats(config: Config, parts: Record<string, Part>, profile: Profile
       return fail(`is too near a wall. Its flat let into "${curve}" needs ${mm(side)} to the sides and ${mm(e.wall + minWeb + t)} to the front and rear.`);
     }
     for (const seam of config.seams) {
-      const needs = Math.max(seam.lip, seam.ribHalfThickness) + t + minWeb;
+      const needs = Math.max(seam.lip, seam.tongue, seam.ribHalfThickness) + t + minWeb;
       if (flat.uLow - t < seam.x + needs && flat.uHigh + t > seam.x - needs) return fail(`is too near the seam at x = ${mm(seam.x)}. Its flat let into "${curve}" has to stay ${mm(needs + t)} from it.`);
     }
     const other = flats.find((o) => o.curve === curve && o.uLow - t < flat.uHigh + t + minWeb && o.uHigh + t > flat.uLow - t - minWeb && o.vLow < flat.vHigh + minWeb && o.vHigh > flat.vLow - minWeb);

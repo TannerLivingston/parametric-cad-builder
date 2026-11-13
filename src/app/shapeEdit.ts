@@ -205,13 +205,15 @@ export function addSeam(config: RawConfig): RawConfig {
   return { ...config, seams: [...seams, { x: tidy((bounds[widest]! + bounds[widest + 1]!) / 2) }] };
 }
 
-// A lip of 0 is the default, a flat joint, so it leaves the file.
-export function updateSeam(config: RawConfig, index: number, change: { x?: number; lip?: number }): RawConfig {
+// A lip or tongue of 0 is the default, a flat joint, so it leaves the file.
+export function updateSeam(config: RawConfig, index: number, change: { x?: number; lip?: number; tongue?: number }): RawConfig {
   const seams: RawConfig[] = config.seams ?? [];
   if (!seams[index]) return config;
-  const { lip: old = 0, ...seam }: RawConfig = { ...seams[index], ...(change.x !== undefined && { x: tidy(change.x) }) };
-  const lip = change.lip ?? old;
-  return { ...config, seams: seams.map((old, i) => (i === index ? (lip > 0 ? { ...seam, lip: tidy(lip) } : seam) : old)) };
+  const { lip: oldLip = 0, tongue: oldTongue = 0, ...seam }: RawConfig = { ...seams[index], ...(change.x !== undefined && { x: tidy(change.x) }) };
+  const lip = change.lip ?? oldLip;
+  const tongue = change.tongue ?? oldTongue;
+  const next = { ...seam, ...(lip > 0 && { lip: tidy(lip) }), ...(tongue > 0 && { tongue: tidy(tongue) }) };
+  return { ...config, seams: seams.map((old, i) => (i === index ? next : old)) };
 }
 
 export function setSeamLip(config: RawConfig, lip: number, index = 0): RawConfig {

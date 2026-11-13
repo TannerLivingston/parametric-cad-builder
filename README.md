@@ -238,6 +238,15 @@ prints. It's 0 by default, a flat joint. It has to be at least 1 mm, stay inside
 the material's minimum web either side, so a 3 mm wall takes one in PETG but not in PETG-GF. In the Shape tab, **Add a seam**
 puts one in the middle of the widest piece, and **Lip past it** sets each one's lip.
 
+A seam's `tongue` lines the pieces up the way the real Desk Synth's seam does: for that many mm past the seam, the middle third
+of the skin, all the way round the wall and the top where there's no top panel, carries on from the left piece into a groove in
+the right one, with 0.2 mm to spare each side. Its end and the groove's come to a point, sloping in at 45 degrees from both
+faces, so that a groove's end is never a flat roof, and a piece between two seams stands on its grooved end without support. It's
+the same thickness all round, a third of the thinnest skin. It has to be at least 1 mm, stay inside the room kept clear round the
+seam, and leave the material's minimum web either side of its groove, which takes a skin of about 4.2 mm in PETG. It can't be had
+with a lip, or with a bowed wall. **Tongue past it** in the Shape tab sets it. The real one also has two keys on the rear wall,
+which aren't made.
+
 ### Rounds on the side profile
 
 ```json
@@ -545,7 +554,8 @@ because compared with the real build:
 - The deck and panel aren't joined at the crease, where the real one uses dowels. The Desk Synth V2 example screws them together.
 - The seam is a plain butt joint. The real one has a tongue along its back and round its rear, 2.5 mm long and 2 mm thick in the
   middle of a wall about 6 mm thick there, in a groove with 0.2 mm each side, and two 4 x 13 mm keys on the rear wall reaching
-  12 mm across. The Desk Synth V2 example has a lip instead.
+  12 mm across. The Desk Synth V2 example has a lip instead. A seam's `tongue` makes one like it, without the keys, but the
+  example's 3.25 mm wall is too thin for its groove.
 - The ridge behind the panel is simplified.
 - The plate has 8 screws, where the real one has 11, because the perfboard takes the row at the rear of the plate. So its joint
   is at x = 140 rather than 127, where both pieces can be screwed down beside it at the front, and only the rear corners are held.

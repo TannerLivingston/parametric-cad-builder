@@ -13,7 +13,7 @@ import type { BuildPlan, PlacedCutout, PlacedLabel, PlacedNotch, PlacedPost, Pla
 import { LIP_GAP, POST_ROOT_DEPTH, TOOL_OVERSHOOT_ABOVE, TOOL_OVERSHOOT_BELOW } from "./validate.js";
 import { CAP_COLLAR, KNOB_GRIP_COUNT, KNOB_POINTER, type PlannedCap, type PlannedKnob } from "./knob.js";
 import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTabExtent, type TopJoint, type TopScrew } from "./top.js";
-import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT } from "./validate.js";
+import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT, seamTongueHalf, TONGUE_GAP } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
 import { flatStart, type CurveFlat } from "./flats.js";
@@ -485,7 +485,7 @@ export function bowHollows(plan: BuildPlan): Shape3D | null {
       ...plan.fasteners.items.filter((f) => near(f.y)).map((f): [number, number] => [f.x - BOW_KEEP, f.x + BOW_KEEP]),
       ...(plan.plate?.screws ?? []).filter(([, y]) => near(y)).map(([x]): [number, number] => [x - BOW_KEEP, x + BOW_KEEP]),
       ...plan.seams.map((seam): [number, number] => {
-        const reach = Math.max(seam.lip, seam.ribHalfThickness, seam.ribWidth / 2) + e.wall + 2;
+        const reach = Math.max(seam.lip, seam.tongue, seam.ribHalfThickness, seam.ribWidth / 2) + e.wall + 2;
         return [seam.x - reach, seam.x + reach];
       }),
       ...(plan.plate?.joints ?? []).map((x): [number, number] => [x - 6, x + 6]),
@@ -966,10 +966,36 @@ function lipAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: Build
   return [left.fuse(lip), right.cut(step)];
 }
 
+// A seam's tongue: for its length past the seam, the left half keeps the middle third of the skin,
+// all the way round the wall and top, and the right half has a groove for it with a gap each side.
+// Each ends in a point, its sides sloping in at 45 degrees from both faces, so that whichever way a
+// piece prints, the end of a groove is never a flat roof. It's the same thickness all round, a third
+// of the thinnest skin, in the middle of each.
+function tongueAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
+  const e = plan.config.enclosure;
+  const skins = [e.wall, ...plan.profile.surfaces.filter((surface) => !plan.config.topPanels.some((panel) => panel.surface === surface.id)).map((surface) => surface.thickness)];
+  const half = seamTongueHalf(Math.min(...skins));
+  // The outline of what's deeper into the skin than its middle and `more`, at x.
+  const outline = (more: number, x: number) => cavityOutline(plan, e.wall / 2 + more, (surface) => surface.thickness / 2 + more, x);
+  // The middle of the skin, `more` either side of it, from `from` to `to` and then to a point.
+  const layer = (more: number, from: number, to: number) => {
+    const straight = outline(-more, from).extrude(to - from).cut(outline(more, from - 1).extrude(to - from + 2)) as Shape3D;
+    // Both sides meet in the middle of the skin, so the point has no flat at all.
+    const outer = outline(-more, to).loftWith(outline(0, to + more), { ruled: true });
+    const inner = outline(more, to).loftWith(outline(0, to + more), { ruled: true });
+    return straight.fuse(outer.cut(inner));
+  };
+  const tongue = right.intersect(layer(half, seam.x, seam.x + seam.tongue));
+  // The groove is the gap bigger all round, its point too.
+  const groove = layer(half + TONGUE_GAP, seam.x - 1, seam.x + seam.tongue);
+  return [left.fuse(tongue), right.cut(groove)];
+}
+
 // Seam inserts print upright, because a shell half prints with its seam facing up.
 function joinAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
   const fit = plan.config.fabrication.fit;
   if (seam.lip > 0) [left, right] = lipAtSeam(left, right, seam, plan);
+  if (seam.tongue > 0) [left, right] = tongueAtSeam(left, right, seam, plan);
   let l = left.cut(compoundShapes(seam.bolts.map((point) => seamBoltLeftHole(seam, point, fit.screwHole))) as Shape3D);
   let r = right.cut(compoundShapes(seam.bolts.map((point) => acrossSeam(fit.insertHole, INSERT_HOLE_DEPTH + 1, seam.x - 1, point))) as Shape3D);
   for (const point of seam.pins) {

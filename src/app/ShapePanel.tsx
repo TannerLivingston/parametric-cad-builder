@@ -497,12 +497,13 @@ export function ShapePanel({ config, onChange, onPlace, picked, alsoPicked = [],
           <div {...card(`seams[${index}]`, "fields")} key={index}>
             <NumberField label={seams.length > 1 ? `Seam ${index + 1} at x` : "Split at x"} value={seam.x} onCommit={number((x) => updateSeam(config, index, { x }))} />
             <NumberField label="Lip past it" field={`seams[${index}].lip`} value={seam.lip} onCommit={number((lip) => updateSeam(config, index, { lip }))} />
+            <NumberField label="Tongue past it" field={`seams[${index}].tongue`} value={seam.tongue ?? 0} onCommit={number((tongue) => updateSeam(config, index, { tongue }))} />
             {seams.length > 1 ? <button className="danger" onClick={() => onChange(removeSeam(config, index))}>Remove seam</button> : null}
           </div>
         ))}
         {seams.length ? (
           <>
-            <p className="hint">A lip hides the joint and lines the pieces up: the left piece's outer skin reaches this far over a step in the right one. 0 leaves it flat.</p>
+            <p className="hint">A lip hides the joint and lines the pieces up: the left piece's outer skin reaches this far over a step in the right one. A tongue lines them up instead, as the real Desk Synth's seam does: the middle third of the skin reaches this far into a groove, which needs walls about 4.2 mm thick. Use one or the other. 0 leaves it flat.</p>
             <button onClick={() => place(PLACING.seam)}>Add a seam</button>
           </>
         ) : null}
