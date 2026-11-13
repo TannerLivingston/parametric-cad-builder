@@ -58,10 +58,14 @@ export async function buildProblems(buildPlan: BuildPlan, enclosure: Enclosure =
     // A top edge fillet can round off the highest point, so height may come in lower.
     // So can a top panel, which takes the highest point off the shell it caps.
     const heightAllowance = part.kind === "shell" ? buildPlan.config.enclosure.topEdgeFillet + (buildPlan.topPieces.length ? planned[2] : 0) : 0;
+    // A bowed side wall's apex can fall between the mesh's points, whose chords cut inside the arc
+    // by up to the mesh's tolerance.
+    const { left, right } = buildPlan.config.enclosure.bow;
+    const across = 0.05 + (left > 0 ? 0.1 : 0) + (right > 0 ? 0.1 : 0);
     // A top piece's plan is how it lies flat for printing, and posts stick out below that.
     const sizeMatches = part.kind === "top"
-      ? Math.abs(sx - planned[0]) <= 0.05 && sy <= planned[1] + 1 && sz <= planned[2] + TOP_POST_LENGTH + 0.05
-      : Math.abs(sx - planned[0]) <= 0.05 && Math.abs(sy - planned[1]) <= 0.05 && sz <= planned[2] + 0.05 && sz >= planned[2] - heightAllowance - 0.05;
+      ? Math.abs(sx - planned[0]) <= across && sy <= planned[1] + 1 && sz <= planned[2] + TOP_POST_LENGTH + 0.05
+      : Math.abs(sx - planned[0]) <= across && Math.abs(sy - planned[1]) <= 0.05 && sz <= planned[2] + 0.05 && sz >= planned[2] - heightAllowance - 0.05;
     if (!sizeMatches) problems.push(`${label}: size ${mesh.size} differs from planned ${planned} (${part.kind})`);
   }
   return problems;

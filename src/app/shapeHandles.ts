@@ -58,7 +58,8 @@ export function handlesFor(config: RawConfig, path: string | null, joints: numbe
   if (path === WALLS_PATH) {
     const last = surfaces.at(-1);
     const handles: HandleSpec[] = [
-      { id: "width", at: [e.width + OUT, middle, e.frontHeight / 2], axis: [1, 0, 0], apply: (c, d) => updateEnclosure(c, { width: snap(e.width + d) }) },
+      // Out past a bowed right wall.
+      { id: "width", at: [e.width + Number(e.bow.right ?? 0) + OUT, middle, e.frontHeight / 2], axis: [1, 0, 0], apply: (c, d) => updateEnclosure(c, { width: snap(e.width + d) }) },
       { id: "frontHeight", at: [-OUT, 0, e.frontHeight], axis: [0, 0, 1], apply: (c, d) => updateEnclosure(c, { frontHeight: snap(e.frontHeight + d) }) },
     ];
     if (last) handles.push({ id: "depth", at: [e.width / 2, depth + OUT, Number(last.z) / 2], axis: [0, 1, 0], apply: (c, d) => updateSurface(c, last.id, { y: snap(depth + d) }) });
@@ -70,6 +71,14 @@ export function handlesFor(config: RawConfig, path: string | null, joints: numbe
       const y = side === "front" ? -bow : depth + bow;
       const height = side === "front" ? e.frontHeight : Number(last?.z ?? e.frontHeight);
       handles.push({ id: `bow.${side}`, at: [e.width / 2, y + outward * OUT, height / 2], axis: [0, outward, 0], apply: (c, d) => setBow(c, side, snap(bow + d)) });
+    }
+    // And a side wall's, lower down than the width's, which is at the same spot on the right.
+    for (const side of ["left", "right"] as const) {
+      const bow = Number(e.bow[side] ?? 0);
+      if (bow <= 0) continue;
+      const outward = side === "left" ? -1 : 1;
+      const x = side === "left" ? -bow : e.width + bow;
+      handles.push({ id: `bow.${side}`, at: [x + outward * OUT, middle, e.frontHeight / 5], axis: [outward, 0, 0], apply: (c, d) => setBow(c, side, snap(bow + d)) });
     }
     return handles;
   }

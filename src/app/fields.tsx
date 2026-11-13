@@ -49,6 +49,8 @@ export const FIELD_NOTES: Record<string, string> = {
   Curve: "How far the surface's arc rises above the straight line between its ends, in mm. 0 is flat; less than 0 dips.",
   "Front wall bow": "How far the front wall bows out at its middle, seen from above, in mm. 0 is straight.",
   "Rear wall bow": "How far the rear wall bows out at its middle, seen from above, in mm. 0 is straight.",
+  "Left wall bow": "How far the left wall bows out at its middle, seen from above, in mm. 0 is straight. Only on a shell in one piece, which prints upright.",
+  "Right wall bow": "How far the right wall bows out at its middle, seen from above, in mm. 0 is straight. Only on a shell in one piece, which prints upright.",
   "Lip past it": "How far the left piece's outer skin reaches over the seam, onto a step in the right piece, in mm. 0 is a flat joint.",
   "Tongue past it": "How far the middle third of the left piece's skin reaches past the seam, into a groove in the right piece, in mm. 0 is none.",
   "Split at x": "Where the shell is split into pieces that each fit the printer's bed, from the left, in mm.",

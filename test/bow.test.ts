@@ -133,7 +133,7 @@ describe("a bowed wall, in the form", () => {
   it("is set for one wall, shows 0 when there's none, and leaves the file at 0", () => {
     const plain = bowed({}, {});
     delete plain.enclosure.bow;
-    expect(shapeValues(plain).enclosure.bow).toEqual({ front: 0, rear: 0 });
+    expect(shapeValues(plain).enclosure.bow).toEqual({ front: 0, rear: 0, left: 0, right: 0 });
     const set = setBow(plain, "front", 6);
     expect(set.enclosure.bow).toEqual({ front: 6 });
     expect(setBow(set, "front", 0).enclosure.bow).toBeUndefined();

@@ -869,7 +869,7 @@ been printed yet, including this.
 ```json
 "enclosure": {
   "surfaces": [{ "id": "deck", "y": 80, "z": 40 }, { "id": "hood", "y": 130, "z": 60, "bulge": 8 }, { "id": "back", "y": 190, "z": 55 }],
-  "bow": { "front": 8, "rear": 5 }
+  "bow": { "front": 8, "rear": 5, "left": 6 }
 }
 ```
 
@@ -890,23 +890,30 @@ itself gets a flat of its own the same way, as big as the words with the same ma
 curve still can't be a top panel. It has to curve by at least 0.5 mm and at most 0.4 of its length,
 stay under the slope limit all along, and can't end in a rear top round.
 
-**`bow`** makes the `front` or `rear` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
-to corner that runs smoothly into each corner's round. Everything in the enclosure is placed and checked against the square
+**`bow`** makes the `front`, `rear`, `left` or `right` wall bow outward, seen from above, by that many mm at its middle, as an arc from corner
+to corner that runs smoothly into each corner's round, or into the next wall's bow where both bow. Everything in the enclosure is placed and checked against the square
 inside, exactly as before, but the wall itself is hollow behind its curve, as thick as the others, with the inside following
 it. It stays solid along the bottom, under the top, at each corner, and where a screw, the seam or the plate's joint is fixed
 to it, each solid stretch widening out to the curve at a slope steep enough to print without support. That takes out about
 half the plastic a solid wall would have needed. A bow under 1.5 mm is left solid. The top carries on out along the slope of the surface it meets, and a top panel there
 follows the curve. A bow is at least 0.5 mm, and at most 20 mm or an eighth of the width. A bowed wall can't have a hole,
 vent, wall part, connector or lettering, and can't be used with a round on that end of the side profile, a top edge fillet,
-or, at the front, an opening. The side walls can't bow, because the shell's pieces print standing on them.
+or, at the front, an opening.
 
-Both are in the Shape tab: **Curve** on each surface, and **Front wall bow** and **Rear wall bow** under Edges.
+A bowed `left` or `right` wall carries the side profile out to its curve as it is, rounds and all, and is at most 20 mm or an
+eighth of the depth. It's hollow the same way, solid at its corners and around the top panels' and plate's screws on it, which with
+top panels come every 35 mm or so, so less comes out of it. A split shell's end pieces print standing on their
+side walls, and the seam's tabs, pins and bolt holes are shaped for that, so a side wall can only bow on a shell in one
+piece, which prints upright, base down. A seam's tongue doesn't meet the side walls, so it's only refused with a bowed front
+or rear.
+
+Both are in the Shape tab: **Curve** on each surface, and a bow for each wall under Edges.
 
 ## Limits for now
 
 - Seams run straight across the width.
 - A curved surface is short flats, not a true arc, and carries parts and their labels but no other lettering. A bowed wall is solid, with a square
-  inside, and only the front and rear can bow.
+  inside, and a side wall can only bow on a shell in one piece.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.

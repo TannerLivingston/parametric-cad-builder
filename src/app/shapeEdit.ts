@@ -81,7 +81,7 @@ export function setRound(config: RawConfig, key: "frontBottom" | "rearTop" | "re
 }
 
 // A bow of 0 is the same as none, so it leaves the file.
-export function setBow(config: RawConfig, side: "front" | "rear", bow: number): RawConfig {
+export function setBow(config: RawConfig, side: "front" | "rear" | "left" | "right", bow: number): RawConfig {
   const { bow: old = {}, ...enclosure } = config.enclosure ?? {};
   const { [side]: _old, ...others } = old;
   const next = bow > 0 ? { ...others, [side]: tidy(bow) } : others;

@@ -188,6 +188,8 @@ export function ShapePanel({ config, onChange, onPlace, picked, alsoPicked = [],
           <NumberField label="Rear bottom round" field="enclosure.rounds.rearBottom" value={e.rounds.rearBottom} onCommit={number((radius) => setRound(config, "rearBottom", radius))} />
           <NumberField label="Front wall bow" field="enclosure.bow.front" value={e.bow.front} onCommit={number((bow) => setBow(config, "front", bow))} />
           <NumberField label="Rear wall bow" field="enclosure.bow.rear" value={e.bow.rear} onCommit={number((bow) => setBow(config, "rear", bow))} />
+          <NumberField label="Left wall bow" field="enclosure.bow.left" value={e.bow.left} onCommit={number((bow) => setBow(config, "left", bow))} />
+          <NumberField label="Right wall bow" field="enclosure.bow.right" value={e.bow.right} onCommit={number((bow) => setBow(config, "right", bow))} />
         </div>
       </section>
 

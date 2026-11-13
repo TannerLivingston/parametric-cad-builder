@@ -298,9 +298,17 @@ export const configSchema = z.strictObject({
         rearBottom: z.number().nonnegative().default(0),
       })
       .prefault({}),
-    // The front or rear wall bowing outward, seen from above, by this much at its middle. Only the
-    // outside curves, and the wall is solid out to it, so nothing can go through one.
-    bow: z.strictObject({ front: z.number().nonnegative().default(0), rear: z.number().nonnegative().default(0) }).prefault({}),
+    // A wall bowing outward, seen from above, by this much at its middle. Only the outside curves,
+    // and the wall is solid out to it, so nothing can go through one. A bowed left or right wall
+    // can't be stood on to print, so it needs a shell in one piece, which prints upright.
+    bow: z
+      .strictObject({
+        front: z.number().nonnegative().default(0),
+        rear: z.number().nonnegative().default(0),
+        left: z.number().nonnegative().default(0),
+        right: z.number().nonnegative().default(0),
+      })
+      .prefault({}),
     color: z.string().min(1).default("#cfc7b4"),
   }),
   topPanels: z.array(topPanelSchema).default([]),

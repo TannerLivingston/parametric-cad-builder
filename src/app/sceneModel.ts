@@ -357,9 +357,12 @@ export function fieldSpot(path: string, config: RawConfig, model: SceneModel): I
     if (round === "rearTop") return { min: [0, depth - r, rear - r], max: [width, depth, rear] };
     return { min: [0, depth - r, 0], max: [width, depth, r] };
   }
-  const bow = /^enclosure\.bow\.(front|rear)$/.exec(path)?.[1];
+  const bow = /^enclosure\.bow\.(front|rear|left|right)$/.exec(path)?.[1];
   if (bow) {
     const b = Math.max(Number(e.bow?.[bow] ?? 0), 1);
+    const high = Math.max(front, rear);
+    if (bow === "left") return { min: [-b, 0, 0], max: [0, depth, high] };
+    if (bow === "right") return { min: [width, 0, 0], max: [width + b, depth, high] };
     return bow === "front" ? { min: [0, -b, 0], max: [width, 0, front] } : { min: [0, depth, 0], max: [width, depth + b, rear] };
   }
   if (path === "enclosure.wall") return { min: [0, 0, 0], max: [model.wall, depth, Math.min(front, rear)] };

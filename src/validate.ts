@@ -7,7 +7,7 @@ import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, p
 import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
 import { curveFlat, flatFor, LABEL_GAP, curveLength, flatId, flatStart, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
-import { bowAt, bowRise, hasBow, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
+import { bowAt, bowRise, hasSideBow, MAX_BOW, MAX_BOW_OF_WIDTH, MIN_BOW } from "./bow.js";
 import { shellPrintsOnSide } from "./printing.js";
 import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THICKNESS, creaseGeometry, layoutCreaseScrews, type CreaseJoint } from "./crease.js";
 import { blocksTopDriver, tabGussetDepth, TOP_TAB_LENGTH, TOP_TAB_THICKNESS, MIN_TOP_SCREWS, MIN_TOP_SCREW_SPACING, TOP_POST_DIAMETER, postBottomAt, topScrewProblem, topTabExtent, type TopJoint, type TopObstacles, type TopPiece, type TopScrew, type TopScrewWall, GROOVE_DEPTH, MIN_TONGUE_ROOT, TONGUE_FIT, TONGUE_INSET, TONGUE_ROOT } from "./top.js";
@@ -1084,9 +1084,12 @@ function planTopPieces(config: Config, profile: Profile, firstIndex: number, lim
       const tongued = root >= MIN_TONGUE_ROOT && vTo > vFrom;
       pieces.push({ printedPart: firstIndex + pieces.length, surface: panel.surface, xMin: from, xMax: to, name, tongue: tongued && meets(n) ? joint(to) : null, groove: tongued && meets(n - 1) ? joint(from) : null });
       const across = surface.length;
-      const fits = (to - from <= bedX && across <= bedY) || (to - from <= bedY && across <= bedX);
+      // Out over a bowed side wall at either end.
+      const middle = Math.min(Math.max(profile.depth / 2, surface.y0), surface.y1);
+      const long = to - from + (from <= 0 ? bowAt(profile.depth, e.bow.left, middle) : 0) + (to >= e.width ? bowAt(profile.depth, e.bow.right, middle) : 0);
+      const fits = (long <= bedX && across <= bedY) || (long <= bedY && across <= bedX);
       if (!fits) {
-        issues.error("PART_TOO_LARGE", `${name} is ${mm(to - from)} x ${mm(across)}, which doesn't fit the ${bedX} x ${bedY} mm bed. Add a split.`, `topPanels[${i}].splits`);
+        issues.error("PART_TOO_LARGE", `${name} is ${mm(long)} x ${mm(across)}, which doesn't fit the ${bedX} x ${bedY} mm bed. Add a split.`, `topPanels[${i}].splits`);
       }
     });
   });
@@ -1101,7 +1104,10 @@ function topPrintedPart(piece: TopPiece, config: Config, profile: Profile): Prin
   const e = config.enclosure;
   const nearest = Math.min(Math.max(e.width / 2, piece.xMin), piece.xMax);
   const out = (surface.index === 0 ? bowAt(e.width, e.bow.front, nearest) : 0) + (surface.index === profile.surfaces.length - 1 ? bowAt(e.width, e.bow.rear, nearest) : 0);
-  const size: [number, number, number] = [piece.xMax - piece.xMin + (piece.tongue?.root ?? 0), surface.length + out / surface.cos, Math.abs(surface.z1 - surface.z0) + Math.abs((out * surface.sin) / surface.cos) + surface.thickness];
+  // And at either end, out over a bowed side wall, as far as the wall is out along this surface.
+  const middle = Math.min(Math.max(profile.depth / 2, surface.y0), surface.y1);
+  const sides = (piece.xMin <= 0 ? bowAt(profile.depth, e.bow.left, middle) : 0) + (piece.xMax >= e.width ? bowAt(profile.depth, e.bow.right, middle) : 0);
+  const size: [number, number, number] = [piece.xMax - piece.xMin + (piece.tongue?.root ?? 0) + sides, surface.length + out / surface.cos, Math.abs(surface.z1 - surface.z0) + Math.abs((out * surface.sin) / surface.cos) + surface.thickness];
   return { index: piece.printedPart, kind: "top", name: piece.name, color, xMin: piece.xMin, xMax: piece.xMax, size };
 }
 
@@ -1543,11 +1549,25 @@ function checkBow(config: Config, profile: Profile, issues: Issues) {
     const least = e.floorThickness + surface.thickness + MIN_BOW_HEIGHT;
     if (height < least) fail(`Bowing the ${side} wall by ${mm(bow)} carries the top down its slope to ${mm(height)} at the middle, and it needs ${mm(least)}. Bow it less, or raise that end.`);
   }
+  // A side wall carries the side profile out as it is, rounds and all, so it only has to be long
+  // enough for its curve.
+  for (const side of ["left", "right"] as const) {
+    const bow = e.bow[side];
+    if (bow <= 0) continue;
+    const fail = (message: string) => issues.error("BOW_INVALID", message, `enclosure.bow.${side}`);
+    const most = Math.min(MAX_BOW, profile.depth * MAX_BOW_OF_WIDTH);
+    if (bow < MIN_BOW) fail(`The ${side} wall bows by ${mm(bow)}, and less than ${mm(MIN_BOW)} is as good as straight. Set it to 0.`);
+    else if (bow > most) fail(`The ${side} wall bows by ${mm(bow)}, and the most a ${mm(profile.depth)} deep one can is ${mm(most)}, because it's solid out to its curve.`);
+    if (e.topEdgeFillet > 0) fail("A top edge fillet can't be used with a bowed wall yet. Set it to 0.");
+    // A split shell's end pieces print standing on their end walls, and its seam's tabs and pins are
+    // shaped for that. A shell in one piece prints upright, so the curve is just a wall.
+    if (config.seams.length) fail(`The ${side} wall can't bow on a shell split at a seam: the ${side} piece prints standing on that wall, and a curve has nothing flat to stand on. Take the seams out, or set the bow to 0.`);
+  }
 }
 
 // Nothing goes through a bowed wall, which is too thick, or is lettered on one, which isn't flat.
 function checkBowedWalls(config: Config, wallHoles: PlannedWallHole[], issues: Issues) {
-  const bowed = (wall: string): wall is "front" | "rear" => (wall === "front" || wall === "rear") && config.enclosure.bow[wall] > 0;
+  const bowed = (wall: string): wall is "front" | "rear" | "left" | "right" => (wall === "front" || wall === "rear" || wall === "left" || wall === "right") && config.enclosure.bow[wall] > 0;
   const why = (wall: string) => `the ${wall} wall bows, so it's solid out to its curve. Move it to another wall, or set that bow to 0.`;
   config.components.forEach((component, i) => {
     if ("wall" in component && bowed(component.wall)) issues.error("BOW_INVALID", `"${component.id}" can't go through the ${component.wall} wall, because ${why(component.wall)}`, `components[${i}].wall`, [component.id]);
@@ -1704,7 +1724,8 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
     if (seam.tongue > 0) {
       const reach = seam.ribHalfThickness + seam.ribWidth;
       if (seam.lip > 0) issues.error("SEAM_INVALID", "A seam can have a lip or a tongue, not both. Set one of them to 0.", `${path}.tongue`);
-      if (hasBow(e.bow)) issues.error("SEAM_INVALID", "A tongue follows a square wall's skin, so it can't be had with a bowed wall. Use a lip, or straighten the wall.", `${path}.tongue`);
+      // The side walls don't reach the seam, so only a bowed front or rear is in its way.
+      if (e.bow.front > 0 || e.bow.rear > 0) issues.error("SEAM_INVALID", "A tongue follows a square wall's skin, so it can't be had with a bowed front or rear wall. Use a lip, or straighten the wall.", `${path}.tongue`);
       if (seam.tongue < MIN_TONGUE) issues.error("SEAM_INVALID", `A tongue of ${mm(seam.tongue)} is too short to line the pieces up. Make it at least ${mm(MIN_TONGUE)}, or 0 for none.`, `${path}.tongue`);
       if (seam.tongue > reach) issues.error("SEAM_INVALID", `A tongue of ${mm(seam.tongue)} reaches past the room kept clear round the seam, ${mm(reach)} either side. Make it shorter.`, `${path}.tongue`);
       // The groove takes the middle third of the skin and a gap each side, and what's left either side has to hold.
@@ -1794,7 +1815,9 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
       return bowAt(e.width, e.bow[side], Math.min(Math.max(e.width / 2, from), xMax));
     };
     const height = Math.max(profile.maxHeight, ...(["front", "rear"] as const).filter((side) => e.bow[side] > 0).map((side) => (side === "front" ? profile.surfaces[0]!.z0 : profile.surfaces.at(-1)!.z1) + (rise[side] * out(side)) / e.bow[side]));
-    const size: [number, number, number] = [xMax - xMin + pins, profile.depth + out("front") + out("rear"), height];
+    // And an end piece reaches out to a bowed side wall's middle.
+    const sides = (index === 0 ? e.bow.left : 0) + (index === bounds.length - 2 ? e.bow.right : 0);
+    const size: [number, number, number] = [xMax - xMin + pins + sides, profile.depth + out("front") + out("rear"), height];
     const name = bounds.length > 2 ? `Shell ${index + 1}` : "Shell";
     parts.push({ index, kind: "shell", name, color: e.color, xMin, xMax, size });
     const fitsFlat = size[0] <= bedX && size[1] <= bedY;
@@ -1804,7 +1827,9 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
       const hint =
         profile.depth > longestBed || size[2] > bedZ
           ? "Seams only split the width, so reduce the depth or height."
-          : `The enclosure needs at least ${Math.ceil(e.width / (longestBed - 3)) - 1} seam(s).`;
+          : hasSideBow(e.bow)
+            ? "A shell with a bowed side wall can't be split at a seam, so make it narrower, or straighten the side walls and add a seam."
+            : `The enclosure needs at least ${Math.ceil(e.width / (longestBed - 3)) - 1} seam(s).`;
       issues.error(
         "PART_TOO_LARGE",
         `Printed part ${index + 1} is ${size.map((s) => mm(s)).join(" x ")}, which doesn't fit the ${bedX} x ${bedY} x ${bedZ} mm build volume. ${hint}`,

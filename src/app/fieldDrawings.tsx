@@ -59,6 +59,19 @@ const bow = svg(
   "how far a wall bows out at its middle, seen from above",
 );
 
+const sideBow = svg(
+  <>
+    <path d="M50 10 H110 Q132 45 110 80 H50 Z" {...outline} />
+    <line x1="110" y1="10" x2="110" y2="80" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+    <line x1="110" y1="45" x2="121" y2="45" {...measure} />
+    {text(140, 40, "bow", true)}
+    {text(80, 48, "seen from")}
+    {text(80, 60, "above")}
+    {text(80, 88, "front")}
+  </>,
+  "how far a side wall bows out at its middle, seen from above",
+);
+
 const lip = svg(
   <>
     <path d="M10 30 H88 V36 H76 V70 H10 Z" {...outline} />
@@ -97,6 +110,8 @@ export const FIELD_DRAWINGS: Record<string, ReactNode> = {
   Curve: curve,
   "Front wall bow": bow,
   "Rear wall bow": bow,
+  "Left wall bow": sideBow,
+  "Right wall bow": sideBow,
   "Lip past it": lip,
   "Front bottom round": round("frontBottom"),
   "Rear top round": round("rearTop"),

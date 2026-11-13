@@ -76,6 +76,12 @@ function bowReach(plan: BuildPlan): number {
   return Math.max(plan.config.enclosure.bow.front, plan.config.enclosure.bow.rear);
 }
 
+// A piece's span across the width, carried out past a bowed side wall at either end.
+function spanOut(plan: BuildPlan, xMin: number, xMax: number): Point2 {
+  const e = plan.config.enclosure;
+  return [xMin <= 0 ? -e.bow.left - 2 : xMin, xMax >= e.width ? e.width + e.bow.right + 2 : xMax];
+}
+
 // A slice of a flat let into a curve, from `low` to `high` along its normal from its face, as wide
 // as the flat at `low` plus `lowMore` each side, and at `high` plus `highMore`. Sloping sides at 45
 // degrees are what keep a flat from needing support when its shell piece prints on its side.
@@ -181,7 +187,7 @@ function surfaceSlab(plan: BuildPlan, surface: Surface): Shape3D {
   ];
   let pen = draw(points[0]!);
   for (const point of points.slice(1)) pen = pen.lineTo(point);
-  return pen.close().sketchOnPlane("YZ", -1).extrude(e.width + 2) as Shape3D;
+  return pen.close().sketchOnPlane("YZ", -1 - e.bow.left).extrude(e.width + 2 + e.bow.left + e.bow.right) as Shape3D;
 }
 
 export function boxSolid([x0, x1]: Point2, [y0, y1]: Point2, [z0, z1]: Point2): Shape3D {
@@ -194,7 +200,7 @@ function outerForms(plan: BuildPlan): OuterForms {
   const { depth } = plan.profile;
   const rise = bowRise(plan.profile, e.bow);
   let body = hasBow(e.bow)
-    ? extrudedPath(bowedOuterPath(plan.profile, e.bow), 0, e.width).intersect(bowedPlan(plan, -1, maxHeight + Math.max(rise.front, rise.rear, 0) + 1))
+    ? extrudedPath(bowedOuterPath(plan.profile, e.bow), -e.bow.left, e.width + e.bow.right).intersect(bowedPlan(plan, -1, maxHeight + Math.max(rise.front, rise.rear, 0) + 1))
     : // The outline with its true arcs, for a round on the side profile or a curved surface.
       hasRounds(plan) || surfaces.some((s) => s.curveOf)
       ? extrudedPath(plan.profile.outerPath, 0, e.width).intersect(roundedPlan(0, e.width, 0, depth, e.cornerRadius, -1, maxHeight + 1))
@@ -460,57 +466,79 @@ export const BOW_HOLLOW_MIN = 1.5; // a bow shallower than this isn't worth holl
 const BOW_KEEP = 9; // mm either side of a screw that stays solid: its boss, the feet it rises on, or a top tab
 export function bowHollows(plan: BuildPlan): Shape3D | null {
   const e = plan.config.enclosure;
-  const { depth, inner, surfaces } = plan.profile;
+  const { depth, inner, surfaces, maxHeight } = plan.profile;
+  const zb = e.floorThickness;
   const pockets: Shape3D[] = [];
-  for (const side of ["front", "rear"] as const) {
+  for (const side of ["front", "rear", "left", "right"] as const) {
     const bow = e.bow[side];
     if (bow < BOW_HOLLOW_MIN) continue;
-    const front = side === "front";
-    // The band between the square inside and the curve, seen from side on: from the bottom band up
-    // to the underside of the top, which carries on along the slope of the surface it meets.
-    const [yInside, zInside] = front ? inner[0]! : inner.at(-1)!;
-    const surface = front ? surfaces[0]! : surfaces.at(-1)!;
-    const zTop = (y: number) => zInside + ((y - yInside) * surface.sin) / surface.cos;
-    const [y0, y1] = front ? [-bow - 1, e.wall + 0.5] : [depth - e.wall - 0.5, depth + bow + 1];
-    const zb = e.floorThickness;
-    const band = draw([y0, zb]).lineTo([y1, zb]).lineTo([y1, zTop(y1)]).lineTo([y0, zTop(y0)]).close().sketchOnPlane("YZ", e.wall).extrude(e.width - 2 * e.wall) as Shape3D;
+    const across = side === "front" || side === "rear"; // the wall runs across the width
+    const outward = side === "front" || side === "left" ? -1 : 1;
+    const length = across ? e.width : depth;
+    let band: Shape3D;
+    if (across) {
+      // The band between the square inside and the curve, seen from side on: from the bottom band up
+      // to the underside of the top, which carries on along the slope of the surface it meets.
+      const front = side === "front";
+      const [yInside, zInside] = front ? inner[0]! : inner.at(-1)!;
+      const surface = front ? surfaces[0]! : surfaces.at(-1)!;
+      const zTop = (y: number) => zInside + ((y - yInside) * surface.sin) / surface.cos;
+      const [y0, y1] = front ? [-bow - 1, e.wall + 0.5] : [depth - e.wall - 0.5, depth + bow + 1];
+      band = draw([y0, zb]).lineTo([y1, zb]).lineTo([y1, zTop(y1)]).lineTo([y0, zTop(y0)]).close().sketchOnPlane("YZ", e.wall).extrude(e.width - 2 * e.wall) as Shape3D;
+    } else {
+      // At a side, the band is the inside's own outline from side on, from the bottom band up,
+      // carried out to the curve.
+      const [x0, x1] = side === "left" ? [-bow - 1, e.wall + 0.5] : [e.width - e.wall - 0.5, e.width + bow + 1];
+      band = hasRounds(plan)
+        ? extrudedPath(plan.profile.cavityPath, x0, x1).intersect(boxSolid([x0 - 1, x1 + 1], [-1, depth + 1], [zb, maxHeight + 1]))
+        : extrudedProfile(inner, zb, x0, x1);
+    }
     // Inside the curve by the wall's thickness, seen from above.
-    const insidePath = planOutline(e.width - 2 * e.wall, depth - 2 * e.wall, Math.max(e.cornerRadius - e.wall, 0), front ? { front: bow, rear: 0 } : { front: 0, rear: bow });
+    const insidePath = planOutline(e.width - 2 * e.wall, depth - 2 * e.wall, Math.max(e.cornerRadius - e.wall, 0), { [side]: bow });
     let pen = draw(insidePath.at(-1)!.to);
     for (const { to, via } of insidePath) pen = via ? pen.threePointsArcTo(to, via) : pen.lineTo(to);
-    const plan2d = pen.close().translate(e.wall, e.wall).sketchOnPlane("XY", zb - 1).extrude(plan.profile.maxHeight + bow + 2) as Shape3D;
+    const plan2d = pen.close().translate(e.wall, e.wall).sketchOnPlane("XY", zb - 1).extrude(maxHeight + bow + 2) as Shape3D;
     let pocket = band.intersect(plan2d);
-    // Solid where something is fixed to the wall.
-    const near = (y: number) => (front ? y < e.wall + 15 : y > depth - e.wall - 15);
-    const keepXs: [number, number][] = [
-      ...plan.fasteners.items.filter((f) => near(f.y)).map((f): [number, number] => [f.x - BOW_KEEP, f.x + BOW_KEEP]),
-      ...(plan.plate?.screws ?? []).filter(([, y]) => near(y)).map(([x]): [number, number] => [x - BOW_KEEP, x + BOW_KEEP]),
-      ...plan.seams.map((seam): [number, number] => {
-        const reach = Math.max(seam.lip, seam.tongue, seam.ribHalfThickness, seam.ribWidth / 2) + e.wall + 2;
-        return [seam.x - reach, seam.x + reach];
-      }),
-      ...(plan.plate?.joints ?? []).map((x): [number, number] => [x - 6, x + 6]),
+    // Solid where something is fixed to the wall: along it, and how far out from the inside.
+    const inside = side === "front" ? e.wall + 0.5 : side === "rear" ? depth - e.wall - 0.5 : side === "left" ? e.wall + 0.5 : e.width - e.wall - 0.5;
+    const near = ([x, y]: Point2) => {
+      const out = across ? y : x;
+      return outward < 0 ? out < inside + 15 : out > inside - 15;
+    };
+    const along = ([x, y]: Point2) => (across ? x : y);
+    const keeps: [number, number][] = [
+      ...plan.fasteners.items.filter((f) => near([f.x, f.y])).map((f): [number, number] => [along([f.x, f.y]) - BOW_KEEP, along([f.x, f.y]) + BOW_KEEP]),
+      ...(plan.plate?.screws ?? []).filter((at) => near(at)).map((at): [number, number] => [along(at) - BOW_KEEP, along(at) + BOW_KEEP]),
+      ...(across
+        ? [
+            ...plan.seams.map((seam): [number, number] => {
+              const reach = Math.max(seam.lip, seam.tongue, seam.ribHalfThickness, seam.ribWidth / 2) + e.wall + 2;
+              return [seam.x - reach, seam.x + reach];
+            }),
+            ...(plan.plate?.joints ?? []).map((x): [number, number] => [x - 6, x + 6]),
+          ]
+        : []),
       // And at each corner, so that it ends in a slope rather than the corner's round.
       [-10, e.wall + e.cornerRadius],
-      [e.width - e.wall - e.cornerRadius, e.width + 10],
+      [length - e.wall - e.cornerRadius, length + 10],
     ];
     // Each solid stretch widens out toward the curve, its ends sloped steeper than 45 degrees, since
-    // a piece stands on its end to print, and a square end would be a roof over the hollow. Wider at
-    // the curve, each slope starts from the outer skin, which runs the piece's whole length.
-    // The slope runs only as deep as the hollow is there, from the square inside out to the curve.
-    const inside = front ? e.wall + 0.5 : depth - e.wall - 0.5;
-    const outward = front ? -1 : 1;
-    for (const [x0, x1] of keepXs) {
-      const deep = Math.max(bowAt(e.width, bow, x0), bowAt(e.width, bow, x1)) + 0.5;
-      const spread = deep * 1.15;
-      const yIn = inside - outward;
-      const yOut = inside + outward * (deep + 1);
-      const keep = draw([x0, yIn]).lineTo([x1, yIn]).lineTo([x1 + spread, yOut]).lineTo([x0 - spread, yOut]).close().sketchOnPlane("XY", zb - 2).extrude(plan.profile.maxHeight + bow + 4) as Shape3D;
+    // a piece standing on its end to print would otherwise have a square end as a roof over the
+    // hollow. A bowed side means a shell in one piece, upright, where a square end stands up, so
+    // there it stays square and keeps less of the hollow. Wider at the curve, each slope starts from the outer skin, which runs the piece's whole
+    // length. The slope runs only as deep as the hollow is there, from the square inside out to the curve.
+    const at = (a: number, out: number): Point2 => (across ? [a, out] : [out, a]);
+    for (const [a0, a1] of keeps) {
+      const deep = Math.max(bowAt(length, bow, a0), bowAt(length, bow, a1)) + 0.5;
+      const spread = across ? deep * 1.15 : 0;
+      const outIn = inside - outward;
+      const outOut = inside + outward * (deep + 1);
+      const keep = draw(at(a0, outIn)).lineTo(at(a1, outIn)).lineTo(at(a1 + spread, outOut)).lineTo(at(a0 - spread, outOut)).close().sketchOnPlane("XY", zb - 2).extrude(maxHeight + bow + 4) as Shape3D;
       pocket = pocket.cut(keep);
     }
     pockets.push(pocket);
   }
-  return pockets.length ? (pockets.length === 1 ? pockets[0]! : pockets[0]!.fuse(pockets[1]!)) : null;
+  return pockets.length ? pockets.reduce((all, pocket) => all.fuse(pocket)) : null;
 }
 
 function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
@@ -668,7 +696,7 @@ function tongueSolid(surface: Surface, joint: TopJoint, grow: number): Shape3D {
 function topBlank(plan: BuildPlan, forms: OuterForms, pieceIndex: number): Shape3D {
   const piece = plan.topPieces[pieceIndex]!;
   const slab = forms.slabs.get(piece.surface)!;
-  let solid = forms.body.intersect(slab).intersect(boxSolid([piece.xMin, piece.xMax], [-2 - bowReach(plan), plan.profile.depth + 2 + bowReach(plan)], [-1, plan.profile.maxHeight + 3 + bowReach(plan)]));
+  let solid = forms.body.intersect(slab).intersect(boxSolid(spanOut(plan, piece.xMin, piece.xMax), [-2 - bowReach(plan), plan.profile.depth + 2 + bowReach(plan)], [-1, plan.profile.maxHeight + 3 + bowReach(plan)]));
   // The opening comes out after, tongue and all, and the groove comes out last of all.
   const surface = findSurface(plan.profile, piece.surface)!;
   if (piece.tongue) solid = solid.fuse(forms.body.intersect(slab).intersect(tongueSolid(surface, piece.tongue, 0)));

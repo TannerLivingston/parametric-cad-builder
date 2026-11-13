@@ -16,7 +16,8 @@ Nothing open here for now: everything on it so far is in the done list below.
 
 ## Shape
 
-- [ ] Bowed side walls. The shell's pieces print standing on them, so a bow there needs a different way to print.
+- [ ] A split shell printed upright, so a side wall can bow on one. Upright, the seam's bolted tabs need a sloped underside
+  with their bolts moved up, and the pins and countersinks a shape that doesn't start in mid-air.
 
 ## Set aside
 
@@ -24,6 +25,10 @@ Nothing open here for now: everything on it so far is in the done list below.
 - Printers other than the Centauri Carbon 2. Not until this one is proven.
 
 ## Done
+
+- [x] **Bowed side walls,** on a shell in one piece, which prints upright. A split shell's end pieces print standing on them,
+  so a seam and a bowed side are refused together, saying why. Hollow like the front and rear, with square-ended solid
+  stretches at the screws, since it stands upright. Not yet sliced or printed.
 
 - [x] **Keys on the rear wall at the seam,** in place of the bolted rib there: a tab from the left piece over a block on the
   right one, screwed into an insert from the front, needing no support. Two where they fit, or one: the Desk Synth's rear rounds
