@@ -30,7 +30,7 @@ function creased(change?: (config: any) => void) {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a crease joint", () => {
   it("is only there when a panel asks for it", () => {

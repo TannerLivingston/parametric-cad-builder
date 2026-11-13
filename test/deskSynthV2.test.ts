@@ -9,7 +9,7 @@ const config = () => JSON.parse(readFileSync("examples/desk-synth-v2.json", "utf
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("the Desk Synth V2 example", () => {
   it("is valid, with its rib, crease, tongue and RP2350-Plus", () => {

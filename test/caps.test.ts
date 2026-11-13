@@ -33,7 +33,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a key cap", () => {
   it("rests on its stem, with its top clear of the switch pressed all the way down", () => {

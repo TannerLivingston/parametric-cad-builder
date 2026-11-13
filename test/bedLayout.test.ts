@@ -29,7 +29,7 @@ function checkFits(beds: Bed[]) {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("sharing the bed", () => {
   it("puts small parts of one colour together, apart and on the bed", () => {

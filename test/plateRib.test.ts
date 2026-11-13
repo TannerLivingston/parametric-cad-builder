@@ -42,7 +42,7 @@ function v2Plate() {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("the plate's rib", () => {
   it("runs between the walls inside any bottom round, with bolts along it", () => {

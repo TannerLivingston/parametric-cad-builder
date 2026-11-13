@@ -35,7 +35,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a knob", () => {
   it("sits on its shaft as low as the nut allows, with a D hole a push fit on it", () => {

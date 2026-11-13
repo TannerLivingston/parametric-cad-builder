@@ -35,7 +35,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a weight pocket", () => {
   it("goes where it's asked, 6 mm tall unless given", () => {

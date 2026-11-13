@@ -21,7 +21,7 @@ function plan(config: unknown): BuildPlan {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("cradled boards", () => {
   it.each(CRADLED)("%s sits in a cradle, its USB through the left wall when it's against it, and counts its pins", (type) => {

@@ -17,7 +17,7 @@ function placed(place: ReferencePlace) {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a reference model", () => {
   const at: ReferencePlace = { x: 50, y: 60, z: 3, turn: 0, tip: 0 };

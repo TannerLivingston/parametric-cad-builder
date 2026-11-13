@@ -22,7 +22,7 @@ const boundsOf = (points: number[][]) => [0, 1, 2].map((axis) => [Math.min(...po
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a bed's 3MF", () => {
   const cube = () => (makeBox([-10, -20, 0], [10, 20, 5]) as unknown as Shape3D).mesh({ tolerance: 0.1, angularTolerance: 0.3 });

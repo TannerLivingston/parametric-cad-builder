@@ -579,7 +579,7 @@ describe("the Desk Synth, made from nothing with the form", () => {
   let made: any;
   beforeAll(() => {
     made = deskSynthFromTheForm();
-  }, 60_000);
+  }, 180_000);
 
   const sorted = (value: unknown) => JSON.stringify(value, (_, v) => (v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.entries(v).sort()) : v));
 

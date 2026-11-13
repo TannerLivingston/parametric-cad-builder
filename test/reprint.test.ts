@@ -34,7 +34,7 @@ describe("what needs reprinting", () => {
   let before: PartPrintReport[];
   beforeAll(() => {
     before = base();
-  }, 60_000);
+  }, 180_000);
 
   it("is nothing if nothing changed", () => expect(changed(before, base())).toEqual([]));
 

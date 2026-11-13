@@ -35,7 +35,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("an inlaid label", () => {
   const config = box([

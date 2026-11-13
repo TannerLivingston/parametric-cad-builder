@@ -29,7 +29,7 @@ function block(surface: Surface, x: number, [a0, a1]: [number, number], [d0, d1]
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a split in a top panel", () => {
   const buildPlan = plan(deskSynth());

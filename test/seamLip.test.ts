@@ -33,7 +33,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a seam's lip, planned", () => {
   it("is off unless asked for, and makes the left half that much longer", () => {

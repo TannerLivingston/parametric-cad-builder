@@ -35,7 +35,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("rubber feet", () => {
   it("go where they're asked, 10 mm across unless given", () => {

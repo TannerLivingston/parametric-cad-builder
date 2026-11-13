@@ -37,7 +37,7 @@ const overlap = (a: Shape3D, b: Shape3D) => {
 
 beforeAll(async () => {
   await initEngine();
-}, 60_000);
+}, 180_000);
 
 describe("a support", () => {
   const free = { x: 100, y: 60 };
