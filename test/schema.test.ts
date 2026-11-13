@@ -17,7 +17,7 @@ describe("config schema", () => {
       buildVolume: { x: 256, y: 256, z: 256 },
       fit: { insertHole: 4, insertHoleSideways: 4, screwHole: 3.4, clipGap: 0.2, pinSocket: 4.3, partHoles: {}, knobHole: 0.1 },
     });
-    expect(parsed.seams[0]).toEqual({ x: 152.4, ribWidth: 9, ribHalfThickness: 5, lip: 0, tongue: 0 });
+    expect(parsed.seams[0]).toEqual({ x: 152.4, ribWidth: 9, ribHalfThickness: 5, lip: 0, tongue: 0, keys: false });
   });
 
   it("rejects a fit setting that couldn't work", () => {

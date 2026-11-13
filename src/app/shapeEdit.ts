@@ -205,14 +205,15 @@ export function addSeam(config: RawConfig): RawConfig {
   return { ...config, seams: [...seams, { x: tidy((bounds[widest]! + bounds[widest + 1]!) / 2) }] };
 }
 
-// A lip or tongue of 0 is the default, a flat joint, so it leaves the file.
-export function updateSeam(config: RawConfig, index: number, change: { x?: number; lip?: number; tongue?: number }): RawConfig {
+// A lip or tongue of 0 is the default, a flat joint, so it leaves the file, as do keys left off.
+export function updateSeam(config: RawConfig, index: number, change: { x?: number; lip?: number; tongue?: number; keys?: boolean }): RawConfig {
   const seams: RawConfig[] = config.seams ?? [];
   if (!seams[index]) return config;
-  const { lip: oldLip = 0, tongue: oldTongue = 0, ...seam }: RawConfig = { ...seams[index], ...(change.x !== undefined && { x: tidy(change.x) }) };
+  const { lip: oldLip = 0, tongue: oldTongue = 0, keys: oldKeys = false, ...seam }: RawConfig = { ...seams[index], ...(change.x !== undefined && { x: tidy(change.x) }) };
   const lip = change.lip ?? oldLip;
   const tongue = change.tongue ?? oldTongue;
-  const next = { ...seam, ...(lip > 0 && { lip: tidy(lip) }), ...(tongue > 0 && { tongue: tidy(tongue) }) };
+  const keys = change.keys ?? oldKeys;
+  const next = { ...seam, ...(lip > 0 && { lip: tidy(lip) }), ...(tongue > 0 && { tongue: tidy(tongue) }), ...(keys && { keys: true }) };
   return { ...config, seams: seams.map((old, i) => (i === index ? next : old)) };
 }
 

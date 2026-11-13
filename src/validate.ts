@@ -13,6 +13,7 @@ import { clearSpans, CREASE_BOSS_DIAMETER, CREASE_BOSS_LENGTH, CREASE_FLANGE_THI
 import { blocksTopDriver, tabGussetDepth, TOP_TAB_LENGTH, TOP_TAB_THICKNESS, MIN_TOP_SCREWS, MIN_TOP_SCREW_SPACING, TOP_POST_DIAMETER, postBottomAt, topScrewProblem, topTabExtent, type TopJoint, type TopObstacles, type TopPiece, type TopScrew, type TopScrewWall, GROOVE_DEPTH, MIN_TONGUE_ROOT, TONGUE_FIT, TONGUE_INSET, TONGUE_ROOT } from "./top.js";
 import { textOutline, unsupportedCharacters } from "./lettering.js";
 import { planPins, type PinBudget } from "./pins.js";
+import { KEY_GAP, KEY_SCREW, KEY_TAB_END, KEY_THICKNESS, KEY_HEIGHT, keyReach, planKeys, type SeamKey } from "./seamKeys.js";
 import { capFit, DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
 import { BARB_REACH, holderBlocks, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { panelWireRooms, floorWireRooms, wallWireRooms, wireRoomProblem, floorBlock, routeWire, WIRE_BUNDLE, type Point3, type WireObstacle, type WireRoom, type WireRoute } from "./wiring.js";
@@ -198,6 +199,8 @@ export interface PlannedSeam extends SeamFasteners {
   ribHalfThickness: number;
   lip: number;
   tongue: number;
+  keys: boolean;
+  rearKeys: SeamKey[]; // in place of the rear wall's rib, if `keys` is set
   pinLength: number;
 }
 
@@ -1586,19 +1589,21 @@ function tabHoldsOnToNothing(config: Config, profile: Profile) {
 }
 
 // Whether a part stops a tab going here. Tabs slope out past the rib's own thickness.
-function tabBlockers(seam: Config["seams"][number], placed: Placed[], cutouts: PlacedShape[], config: Config, minWeb: number) {
+function tabBlockers(seam: Config["seams"][number], placed: Placed[], cutouts: PlacedShape[], config: Config, minWeb: number, span?: [number, number]) {
   const reachX = seam.ribHalfThickness + seam.ribWidth;
+  const [xLow, xHigh] = span ?? [seam.x - reachX, seam.x + reachX];
+  const apart = (cx: number, hu: number) => Math.max(xLow - (cx + hu), cx - hu - xHigh);
   const floorTop = config.enclosure.floorThickness;
   const opening = config.opening;
   return (tab: SeamTab) => {
     const quad = tabSection(tab);
     // A tab under a top panel would have nothing on the shell to hang from.
     if (tab.surface && topPanelFor(config, tab.surface)) return true;
-    if (opening && seam.x + reachX > opening.xMin && seam.x - reachX < opening.xMax) {
+    if (opening && xHigh > opening.xMin && xLow < opening.xMax) {
       const ys = quad.map(([y]) => y);
       if (Math.min(...ys) < opening.yEnd) return true;
       for (const box of reservedBoxes(config)) {
-        if (seam.x + reachX <= box.xMin || seam.x - reachX >= box.xMax) continue;
+        if (xHigh <= box.xMin || xLow >= box.xMax) continue;
         const area: Point2[] = [[box.yMin, 0], [box.yMax, 0], [box.yMax, box.top], [box.yMin, box.top]];
         if (polygonsOverlap(quad, area)) return true;
       }
@@ -1606,7 +1611,7 @@ function tabBlockers(seam: Config["seams"][number], placed: Placed[], cutouts: P
     for (const item of placed) {
       const shape = item.shape("below");
       const [hu, hv] = halfExtents(shape);
-      if (Math.abs(shape.cx - seam.x) - hu - reachX >= PART_CLEARANCE) continue;
+      if (apart(shape.cx, hu) >= PART_CLEARANCE) continue;
       if (item.part.mount === "floor") {
         const top = floorTop + item.part.height;
         const box: Point2[] = [[shape.cy - hv, floorTop], [shape.cy + hv, floorTop], [shape.cy + hv, top], [shape.cy - hv, top]];
@@ -1622,7 +1627,7 @@ function tabBlockers(seam: Config["seams"][number], placed: Placed[], cutouts: P
     // A tab under a surface can't sit behind a hole in it.
     for (const { shape, surface } of cutouts) {
       const [hu, hv] = halfExtents(shape);
-      if (Math.abs(shape.cx - seam.x) - hu - reachX >= minWeb) continue;
+      if (apart(shape.cx, hu) >= minWeb) continue;
       const [yLow] = surfacePoint(surface, shape.cy - hv, 0);
       const [yHigh] = surfacePoint(surface, shape.cy + hv, 0);
       const ys = quad.map(([y]) => y);
@@ -1654,6 +1659,10 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       issues.error("GEOMETRY_IMPOSSIBLE", `Ribs of ${mm(seam.ribWidth)} fill the whole ${mm(profile.depth)} depth.`, `${path}.ribWidth`);
       return;
     }
+    // Keys take the rear wall's place in the rib, so it has no tab there.
+    const ribBase = config.plate.enabled ? e.floorThickness : 0;
+    const rearKeys = seam.keys ? planKeys(profile, ribBase, INSERT_HOLE_DEPTH, seam.ribHalfThickness + seam.ribWidth) : [];
+    const isKeyed = (tab: SeamTab) => seam.keys && tab.surface === null && tab.inward[0] < 0;
     let unheldEnds = 0;
     const fasteners = layoutSeamFasteners(
       profile.surfaces,
@@ -1661,12 +1670,13 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       {
         wall: e.wall,
         ribWidth: seam.ribWidth,
-        ribBase: config.plate.enabled ? e.floorThickness : 0,
+        ribBase,
         lower: Object.values(e.rounds).some((radius) => radius > 0) ? profile.lower : undefined,
         rearTangent: profile.rearTangent,
       },
       tabBlockers(seam, placed, cutouts, config, minWeb),
       (tab) => {
+        if (isKeyed(tab)) return true;
         const nothing = tabHoldsOnToNothing(config, profile)(tab);
         if (nothing) unheldEnds += 1;
         return nothing || wallGoneAtSeam(seam, config)(tab);
@@ -1706,6 +1716,7 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
         issues.error("SEAM_INVALID", `A tongue's groove takes ${mm(groove)} of the ${mm(thinnest)} skin, leaving ${mm(side)} either side of it, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(Math.ceil(needed * 10) / 10)}, or use a lip.`, `${path}.tongue`);
       }
     }
+    if (seam.keys) checkKeys(seam, path, rearKeys, config, profile, placed, cutouts, minWeb, issues);
     // The next seam to the left, whose rib and tabs reach into the same piece.
     const before = config.seams.filter((other) => other.x < seam.x).sort((a, b) => b.x - a.x)[0];
     const leftEnd = before ? before.x + before.ribHalfThickness + before.ribWidth : e.wall;
@@ -1719,9 +1730,40 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       const blocked = blocks.some((block) => block.xMax > xHigh - SEAM_DRIVER_ROOM && block.xMin < xHigh && block.yMin < y + DRIVER_DIAMETER / 2 && block.yMax > y - DRIVER_DIAMETER / 2 && z - DRIVER_DIAMETER / 2 < block.top);
       if (blocked) issues.error("SEAM_INVALID", `A screw block for the rail would stop a screwdriver reaching the seam bolt at y = ${mm(y)}, z = ${mm(z)}. Move the seam or the rail's screws.`, `${path}.x`);
     }
-    planned.push({ ...seam, ...fasteners, pinLength: seam.ribHalfThickness - PIN_ALLOWANCE });
+    planned.push({ ...seam, ...fasteners, rearKeys, pinLength: seam.ribHalfThickness - PIN_ALLOWANCE });
   });
   return planned.sort((a, b) => a.x - b.x);
+}
+
+// Keys need a square rear wall, room on it, and room in front of them to drive their screws.
+function checkKeys(seam: Config["seams"][number], path: string, keys: SeamKey[], config: Config, profile: Profile, placed: Placed[], cutouts: PlacedShape[], minWeb: number, issues: Issues) {
+  const e = config.enclosure;
+  if (e.bow.rear > 0) {
+    issues.error("SEAM_INVALID", "Keys sit flat on the rear wall, so they can't be had with it bowed. Straighten the rear wall, or leave the keys off.", `${path}.keys`);
+    return;
+  }
+  if (!keys.length) {
+    issues.error("SEAM_INVALID", `There's no room on the rear wall for a ${mm(KEY_HEIGHT)} tall key, between the floor and the top, where the wall behind it stays within the ${mm(seam.ribHalfThickness + seam.ribWidth)} kept clear round the seam. Make the rear taller or its rounds smaller, widen the rib, or leave the keys off.`, `${path}.keys`);
+    return;
+  }
+  for (const key of keys) {
+    const reach = keyReach(key);
+    const front = key.face - KEY_GAP - KEY_THICKNESS;
+    const where = `z = ${mm(key.z)}`;
+    const area = { start: [key.deepest, key.z - KEY_HEIGHT / 2] as Point2, end: [key.deepest, key.z + KEY_HEIGHT / 2] as Point2, inward: [-1, 0] as Point2, width: key.deepest - front + KEY_GAP, surface: null };
+    if (tabBlockers(seam, placed, cutouts, config, minWeb, [seam.x - reach, seam.x + reach])(area)) {
+      issues.error("SEAM_INVALID", `Something is in the way of the key on the rear wall at ${where}. Move it away from the seam, or leave the keys off.`, `${path}.keys`);
+      continue;
+    }
+    // The screw goes in from the front, so a screwdriver needs a clear run up to it.
+    const room = Math.min(SEAM_DRIVER_ROOM, front - e.wall);
+    if (room < SEAM_DRIVER_ROOM) {
+      issues.error("SEAM_INVALID", `The enclosure is too shallow to drive the screw in the key at ${where}, which needs ${mm(SEAM_DRIVER_ROOM)} in front of it for a stubby screwdriver. Leave the keys off.`, `${path}.keys`);
+      continue;
+    }
+    // Parts go in once the shell is joined, so only the shell's own bosses and screw tabs could be
+    // in the way, and those keep clear of it as they do of a seam bolt's.
+  }
 }
 
 function planPrintedParts(config: Config, profile: Profile, issues: Issues): PrintedPart[] {
@@ -1740,7 +1782,9 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
     const lip = seam && seam.lip > 0 ? seam.lip + Math.max(...skins) / 2 + Math.max(e.bow.front, e.bow.rear) : 0;
     // A tongue ends in a point, as far on again as it is thick each side of the middle.
     const tongue = seam && seam.tongue > 0 ? seam.tongue + seamTongueHalf(Math.min(...skins)) : 0;
-    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip, tongue) : 0;
+    // And a key's tab reaches past it, on the rear wall.
+    const keys = seam?.keys ? KEY_TAB_END : 0;
+    const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip, tongue, keys) : 0;
     // A bowed wall is furthest out at the middle, or at whichever end of this piece is nearest it.
     // Right of a lip, its skin starts past the step, further on the further out the wall is.
     const before = [...config.seams].sort((a, b) => a.x - b.x)[index - 1];
@@ -2104,11 +2148,18 @@ export function plateInput(config: Config, profile: Profile): PlatePlanInput {
   };
 }
 
-// A seam bolt's head is on the left half, so a driver reaches it from inside that half.
+// A seam bolt's head is on the left half, so a driver reaches it from inside that half. A key's
+// screw is driven from the front.
 function seamDriverPaths(seams: PlannedSeam[]): SeamDriverPath[] {
+  const r = DRIVER_DIAMETER / 2;
   return seams.flatMap((seam) => {
     const xHigh = seam.x - seam.ribHalfThickness;
-    return seam.bolts.map(([y, z]) => ({ xLow: xHigh - SEAM_DRIVER_ROOM, xHigh, y, z }));
+    const bolts = seam.bolts.map(([y, z]) => ({ xLow: xHigh - SEAM_DRIVER_ROOM, xHigh, yLow: y - r, yHigh: y + r, z }));
+    const keys = seam.rearKeys.map((key) => {
+      const front = key.face - KEY_GAP - KEY_THICKNESS;
+      return { xLow: seam.x + KEY_SCREW - r, xHigh: seam.x + KEY_SCREW + r, yLow: front - SEAM_DRIVER_ROOM, yHigh: front, z: key.z };
+    });
+    return [...bolts, ...keys];
   });
 }
 
@@ -2545,6 +2596,11 @@ function listHardware(config: Config, profile: Profile, seams: PlannedSeam[], pl
   if (seamBolts) {
     items.push({ name: "M3 brass heat-set insert, for the seam", count: seamBolts });
     items.push({ name: `M3 x ${Math.ceil(Math.max(...seams.map((s) => s.ribHalfThickness)) + 5)} flat-head screw, for the seam`, count: seamBolts });
+  }
+  const keys = seams.reduce((sum, seam) => sum + seam.rearKeys.length, 0);
+  if (keys) {
+    items.push({ name: "M3 brass heat-set insert, for the seam's keys", count: keys });
+    items.push({ name: "M3 x 8 screw, for the seam's keys", count: keys });
   }
   if (topScrews.length) {
     items.push({ name: "M3 brass heat-set insert, for the top panels", count: topScrews.length });

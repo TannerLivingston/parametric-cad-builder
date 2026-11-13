@@ -17,7 +17,6 @@ Nothing open here for now: everything on it so far is in the done list below.
 ## Shape
 
 - [ ] Bowed side walls. The shell's pieces print standing on them, so a bow there needs a different way to print.
-- [ ] Keys on the rear wall at the seam, as the real Desk Synth's tongue has.
 
 ## Set aside
 
@@ -26,8 +25,11 @@ Nothing open here for now: everything on it so far is in the done list below.
 
 ## Done
 
+- [x] **Keys on the rear wall at the seam,** in place of the bolted rib there: a tab from the left piece over a block on the
+  right one, screwed into an insert from the front, needing no support. Two where they fit, or one: the Desk Synth's rear rounds
+  leave room for one, where the real one has two. Not yet sliced or printed.
 - [x] **A tongue and groove along the seam,** the middle third of a skin of about 4.2 mm or more, pointed at its end so the pieces
-  print without support. The real one's keys aren't made. Not yet sliced or printed.
+  print without support. Not yet sliced or printed.
 - [x] **A hollow bowed wall,** as thick as the others with the inside following its curve, solid only where things are fixed to
   it, and needing no support. About half the plastic of a solid one. Not yet sliced or printed.
 - [x] **Lettering placed on a curve by itself,** on a flat of its own let into the curve, checked as a part's flat is.

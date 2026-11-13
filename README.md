@@ -244,8 +244,18 @@ the right one, with 0.2 mm to spare each side. Its end and the groove's come to 
 faces, so that a groove's end is never a flat roof, and a piece between two seams stands on its grooved end without support. It's
 the same thickness all round, a third of the thinnest skin. It has to be at least 1 mm, stay inside the room kept clear round the
 seam, and leave the material's minimum web either side of its groove, which takes a skin of about 4.2 mm in PETG. It can't be had
-with a lip, or with a bowed wall. **Tongue past it** in the Shape tab sets it. The real one also has two keys on the rear wall,
-which aren't made.
+with a lip, or with a bowed wall. **Tongue past it** in the Shape tab sets it.
+
+A seam's `keys` swaps the bolted rib on the rear wall for the real Desk Synth's keys. Each is a 4 mm thick, 13 mm tall tab from
+the left piece, reaching 10 mm past the seam, in front of a block on the right piece's rear wall with 0.2 mm between them. An M3
+x 8 screw goes through the tab from the front, into a heat-set insert in the block, and the left piece has a block of its own
+behind the tab's root. Both blocks slope back to the wall at 45 degrees at their far ends, and both holes have a point on top, so
+the pieces print without support with the seam up. There are two keys if they fit, as far apart as they'll go, or else one where
+the wall behind it is flattest, and none is an error. A key has to stay inside the room kept clear round the seam, so the curve
+of a rear round behind it is limited: the Desk Synth's rounds leave room for one, where the real one has two. A screwdriver needs
+60 mm clear in front of each, which the plate's bosses and the top's screw tabs keep out of, and parts go in after the shell is
+joined, so they aren't counted. Keys can't be had with a bowed rear wall. **Keys on the rear wall** in the Shape tab sets them.
+They can go with a lip or a tongue. The front wall keeps its rib.
 
 ### Rounds on the side profile
 
@@ -554,8 +564,8 @@ because compared with the real build:
 - The deck and panel aren't joined at the crease, where the real one uses dowels. The Desk Synth V2 example screws them together.
 - The seam is a plain butt joint. The real one has a tongue along its back and round its rear, 2.5 mm long and 2 mm thick in the
   middle of a wall about 6 mm thick there, in a groove with 0.2 mm each side, and two 4 x 13 mm keys on the rear wall reaching
-  12 mm across. The Desk Synth V2 example has a lip instead. A seam's `tongue` makes one like it, without the keys, but the
-  example's 3.25 mm wall is too thin for its groove.
+  12 mm across. The Desk Synth V2 example has a lip instead. A seam's `tongue` makes one like it, but the example's 3.25 mm
+  wall is too thin for its groove. Its `keys` make one key between the example's rear rounds, not two.
 - The ridge behind the panel is simplified.
 - The plate has 8 screws, where the real one has 11, because the perfboard takes the row at the rear of the plate. So its joint
   is at x = 140 rather than 127, where both pieces can be screwed down beside it at the front, and only the rear corners are held.
@@ -902,8 +912,8 @@ Both are in the Shape tab: **Curve** on each surface, and **Front wall bow** and
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.
 - Parts can block every tab under the surfaces, leaving a seam bolted only at the front and rear. That gives a
   `SEAM_UNBRACED` warning.
-- Not describable yet, both in the real Desk Synth: a tongue and keys along the seam, where a lip stands in, and edge lips round a
-  board.
+- Not describable yet, in the real Desk Synth: edge lips round a board. Its seam's tongue and keys are, though the example
+  keeps its lip.
 
 ## Development
 

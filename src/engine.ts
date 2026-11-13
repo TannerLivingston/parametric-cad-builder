@@ -17,6 +17,7 @@ import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT, seamTon
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
 import { flatStart, type CurveFlat } from "./flats.js";
+import { KEY_BLOCK_END, KEY_GAP, KEY_HEIGHT, KEY_LEFT_BLOCK, KEY_SCREW, KEY_TAB_END, KEY_THICKNESS } from "./seamKeys.js";
 import { bowAt, bowedOuterPath, bowRise, hasBow, planOutline } from "./bow.js";
 import { findSurface, buildProfile, offsetChain, ownThickness, surfacePoint, type Inset, type PathStep, type Point2, type SeamTab, type Surface } from "./profile.js";
 
@@ -991,9 +992,59 @@ function tongueAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: Bu
   return [left.fuse(tongue), right.cut(groove)];
 }
 
+// A hole along y, with a teardrop's point towards `up` along x, since it lies down as the piece prints.
+function holeAlongY(x: number, z: number, diameter: number, y0: number, y1: number, up: 1 | -1): Shape3D {
+  const r = diameter / 2;
+  const round = makeCylinder(r, y1 - y0, [x, y0, z], [0, 1, 0]);
+  const c = r * Math.SQRT1_2;
+  const point = draw([x + up * c, z - c])
+    .lineTo([x + up * r * Math.SQRT2, z])
+    .lineTo([x + up * c, z + c])
+    .close()
+    .sketchOnPlane(new Plane([0, y1, 0], [1, 0, 0], [0, -1, 0]))
+    .extrude(y1 - y0) as Shape3D;
+  return round.fuse(point);
+}
+
+// Keys on the rear wall, in place of the rib there: see seamKeys.ts. The blocks reach into the
+// middle of the wall, and slope back to it at 45 degrees at their far ends.
+function keysAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
+  const e = plan.config.enclosure;
+  const fit = plan.config.fabrication.fit;
+  const x = seam.x;
+  const back = plan.profile.depth + 1;
+  const inside = (from: number, to: number) => cavityOutline(plan, e.wall / 2, (surface) => surface.thickness / 2, from).extrude(to - from) as Shape3D;
+  const leftAdds: Shape3D[] = [];
+  const rightAdds: Shape3D[] = [];
+  const leftCuts: Shape3D[] = [];
+  const rightCuts: Shape3D[] = [];
+  for (const key of seam.rearKeys) {
+    const z0 = key.z - KEY_HEIGHT / 2;
+    const tabBack = key.face - KEY_GAP;
+    const tabFront = tabBack - KEY_THICKNESS;
+    const prism = (points: Point2[]) => {
+      let pen = draw(points[0]!);
+      for (const point of points.slice(1)) pen = pen.lineTo(point);
+      return pen.close().sketchOnPlane("XY", z0).extrude(KEY_HEIGHT) as Shape3D;
+    };
+    const rightBlock = prism([[x, key.face], [x + KEY_BLOCK_END, key.face], [x + KEY_BLOCK_END + back - key.face, back], [x, back]]);
+    const leftBlock = prism([[x, tabFront], [x, back], [x - KEY_LEFT_BLOCK - (back - tabFront), back], [x - KEY_LEFT_BLOCK, tabFront]]);
+    const tab = makeBox([x - 1, tabFront, z0], [x + KEY_TAB_END, tabBack, z0 + KEY_HEIGHT]) as Shape3D;
+    rightAdds.push(rightBlock.intersect(inside(x, x + KEY_TAB_END + back)));
+    leftAdds.push(leftBlock.intersect(inside(x - KEY_TAB_END - back, x)).fuse(tab));
+    const screw = x + KEY_SCREW;
+    rightCuts.push(holeAlongY(screw, key.z, fit.insertHoleSideways, key.face - 0.5, key.face + INSERT_HOLE_DEPTH, upAlongX(plan, x + 0.01)));
+    leftCuts.push(holeAlongY(screw, key.z, fit.screwHole, tabFront - 1, tabBack + 0.1, upAlongX(plan, x - 0.01)));
+  }
+  const all = (shapes: Shape3D[]) => compoundShapes(shapes) as Shape3D;
+  return [left.fuse(all(leftAdds)).cut(all(leftCuts)), right.fuse(all(rightAdds)).cut(all(rightCuts))];
+}
+
 // Seam inserts print upright, because a shell half prints with its seam facing up.
 function joinAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
   const fit = plan.config.fabrication.fit;
+  // Before a lip or a tongue, which are cut through the blocks where they reach the wall.
+  if (seam.rearKeys.length) [left, right] = keysAtSeam(left, right, seam, plan);
   if (seam.lip > 0) [left, right] = lipAtSeam(left, right, seam, plan);
   if (seam.tongue > 0) [left, right] = tongueAtSeam(left, right, seam, plan);
   let l = left.cut(compoundShapes(seam.bolts.map((point) => seamBoltLeftHole(seam, point, fit.screwHole))) as Shape3D);

@@ -32,11 +32,12 @@ export const SEAM_DRIVER_ROOM = 60;
 const DRIVER_RADIUS = DRIVER_DIAMETER / 2;
 const GUSSET_TOUCH_MARGIN = 0.3;
 
-// The line a driver takes to a seam bolt, along x.
+// The way a driver takes to a seam bolt, along x, or to a key's screw, along y, at a height.
 export interface SeamDriverPath {
   xLow: number;
   xHigh: number;
-  y: number;
+  yLow: number;
+  yHigh: number;
   z: number;
 }
 
@@ -311,7 +312,7 @@ function bossProblemWith(input: PlatePlanInput, profile: Profile, obstacles: Bos
     if (blocks(screw.x - DRIVER_RADIUS, screw.x + DRIVER_RADIUS, screw.y - DRIVER_RADIUS, screw.y + DRIVER_RADIUS)) return "it would block the screwdriver for a top screw";
   }
   for (const path of obstacles.seamPaths ?? []) {
-    if (path.z - DRIVER_RADIUS < top && blocks(path.xLow, path.xHigh, path.y - DRIVER_RADIUS, path.y + DRIVER_RADIUS)) return "it would block the screwdriver for a seam bolt";
+    if (path.z - DRIVER_RADIUS < top && blocks(path.xLow, path.xHigh, path.yLow, path.yHigh)) return "it would block the screwdriver for a seam bolt";
   }
   const column: Point2[] = [[y - r, input.floorThickness], [y + r, input.floorThickness], [y + r, top], [y - r, top]];
   for (const body of obstacles.bodies) {

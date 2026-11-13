@@ -200,7 +200,7 @@ function driverProblem(obstacles: TopObstacles, screw: Pick<TopScrew, "x" | "y">
     if (block.xLow < x + d && block.xHigh > x - d && block.yLow < y + d && block.yHigh > y - d) return "a screw block for the rail would block its screwdriver";
   }
   for (const seam of obstacles.seamPaths ?? []) {
-    if (tab.xHigh + tab.spread > seam.xLow && tab.xLow - tab.spread < seam.xHigh && tab.yLow < seam.y + d && tab.yHigh > seam.y - d && tab.zLow < seam.z + d && tab.zHigh > seam.z - d) {
+    if (tab.xHigh + tab.spread > seam.xLow && tab.xLow - tab.spread < seam.xHigh && tab.yLow < seam.yHigh && tab.yHigh > seam.yLow && tab.zLow < seam.z + d && tab.zHigh > seam.z - d) {
       return "its tab would block the screwdriver for a seam bolt";
     }
   }
