@@ -321,6 +321,26 @@ can't come through. Posts get the same checks as a cradle, and the plate's screw
 `pi-zero`, `arduino-uno`, `perfboard-7x9` and `ads7830` have them. The perfboard's come from the Desk Synth V2, which assumes corner
 holes 2.5 mm in from each edge, and the ADS7830's holes are from Adafruit's board file. Its posts leave room for M2 x 4 screws.
 
+### Edge lips
+
+A board on the floor can have `lips`: short walls on the plate along its edges, to locate it, like those round the real Desk
+Synth's perfboard. Each is along one `side` of the board, before rotating, and turns with it, `at` along that edge from its middle
+and `length` long:
+
+```json
+{ "id": "mainboard", "type": "perfboard-7x9", "x": 108, "y": 133,
+  "lips": { "edges": [{ "side": "left", "length": 54 }, { "side": "front", "at": -28, "length": 10 }] } }
+```
+
+They're 1.6 mm thick, 0.25 mm from the board, and stand 1 mm over its top, as the Desk Synth V2's do, unless `thickness`, `gap` or
+`above` say otherwise, for all of them or on one lip. The board's top is where its cradle or standoffs hold it, or 1.6 mm up for a
+board straight on the plate. They stand straight up from the plate, which prints base down, so they need no support.
+
+A lip has to stay within its edge, out of the way of the board's connector and its own clips and stop, and gets the checks a cradle
+gets. Ticking an edge under **Edge lips** on the Layout tab puts a lip along it, 8 mm short of each end, or half a short edge,
+where its length, and the gap, thickness and height they share, can be changed. The edges there are named by the wall they face
+as the board is turned now. Where several lips share an edge, and a lip's own sizes, are set in the config.
+
 ### Weight pockets
 
 `plate.weights` puts a walled pocket on the plate, `width` by `depth` inside and `height` tall, 6 mm unless given, to glue a weight
@@ -574,7 +594,8 @@ because compared with the real build:
 - The RP2040-Plus is 0.3 mm further from the wall, because the generated wall is 3.25 mm there, and the real one is 3 mm.
 - The shell doesn't have the real one's short guides beside the USB hole. The cradle is on the plate alone.
 - The RP2040-Plus cradle's pads are down the middle rather than in the corners, which hasn't been tried against a real board.
-- The perfboard and ADC boards stand on posts, but the real ones sit on the plate loose.
+- The perfboard and ADC boards stand on posts. The real perfboard sits on four corner pads, held by two pairs of clips, and the
+  real ADC boards on foam tape. The perfboard's two short edge lips are the real ones, measured from its exported mesh.
 
 These parts haven't been opened in Fusion. An earlier two-part version's STEP files imported into Fusion 2705.1.30 as one
 solid per part, with volumes matching the engine to within 1 mm³, so the format is tested but this design isn't.
@@ -594,7 +615,8 @@ solid per part, with volumes matching the engine to within 1 mm³, so the format
 - The board is the RP2350-Plus, in the same cradle.
 - Its three supports stand between the buttons, under the middle of the deck.
 
-Edge lips round the perfboard and snap-off support fins aren't describable.
+The edge lips round the perfboard are the real V2's, measured from its exported mesh: a long one on the left and two short ones
+front and rear. Snap-off support fins aren't describable.
 
 ### The Dial deck example
 
@@ -632,8 +654,8 @@ produce wrong geometry with no error.
 | `FASTENER_CHANGE_UNUSED` | Warning: a removal in the config that no longer matches any screw |
 | `WALL_HOLE_INVALID` | A hole too near a corner, the plate or the top, on a seam, opening or rail block, or too close to another |
 | `PORT_UNREACHED` | Warning: a board too far from the wall its connector faces, so it gets no hole |
-| `BOARD_HOLDER_INVALID` | A cradle off the plate, across its joint, or in the way of a pin, hole, part, board, seam tab or other cradle |
-| `BOARD_HOLDER_SKIPPED` | Warning: a board with a cradle when the plate is turned off |
+| `BOARD_HOLDER_INVALID` | A cradle, standoff or edge lip off the plate, across its joint, or in the way of a pin, hole, part, board, seam tab or other cradle, or a lip past its edge's end, in front of its board's connector or too thin |
+| `BOARD_HOLDER_SKIPPED` | Warning: a board with a cradle, standoffs or edge lips when the plate is turned off |
 | `OPENING_INVALID` | An opening outside the walls, contents that won't fit under the top, rail screws in the opening, or a part or board in reserved space |
 | `PART_TOO_LARGE` | A printed part that won't fit the build volume, with how many seams it needs |
 | `SMALL_HOLE`, `UNVERIFIED_PART` | Warnings: a hole that may print badly, a part that hasn't been measured |
@@ -919,8 +941,6 @@ Both are in the Shape tab: **Curve** on each surface, and a bow for each wall un
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.
 - Parts can block every tab under the surfaces, leaving a seam bolted only at the front and rear. That gives a
   `SEAM_UNBRACED` warning.
-- Not describable yet, in the real Desk Synth: edge lips round a board. Its seam's tongue and keys are, though the example
-  keeps its lip.
 
 ## Development
 

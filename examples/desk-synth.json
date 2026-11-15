@@ -70,7 +70,19 @@
     { "id": "encoders-right", "type": "encoder-board-5752", "surface": "panel", "u": 279, "v": 35 },
     { "id": "display", "type": "oled-242-ssd1309", "surface": "panel", "u": 151, "v": 25 },
     { "id": "mcu", "type": "rp2040-plus", "x": 28.9, "y": 118.5 },
-    { "id": "mainboard", "type": "perfboard-7x9", "x": 108, "y": 133 },
+    {
+      "id": "mainboard",
+      "type": "perfboard-7x9",
+      "x": 108,
+      "y": 133,
+      "lips": {
+        "edges": [
+          { "side": "left", "at": -2, "length": 6, "thickness": 2.4, "above": 2.4 },
+          { "side": "right", "length": 6, "thickness": 2.2 }
+        ],
+        "gap": 0.2
+      }
+    },
     { "id": "adc-a", "type": "ads7830", "x": 165.85, "y": 103.25 },
     { "id": "adc-b", "type": "ads7830", "x": 165.85, "y": 150 }
   ]

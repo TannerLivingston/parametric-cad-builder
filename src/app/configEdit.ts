@@ -68,6 +68,33 @@ export function setCap(config: RawConfig, id: string, patch: RawComponent | null
   };
 }
 
+// A board's edge lips. `setLipSide` puts one lip, centred, along an edge (before rotating), sets
+// the length of every lip on it, or takes them off with null. With none left, the lips go.
+export function setLipSide(config: RawConfig, id: string, side: string, length: number | null): RawConfig {
+  return {
+    ...config,
+    components: (config.components ?? []).map((c: RawComponent) => {
+      if (c.id !== id) return c;
+      const { lips, ...rest } = c;
+      const edges: RawComponent[] = lips?.edges ?? [];
+      const others = edges.filter((edge) => edge.side !== side);
+      const mine = edges.filter((edge) => edge.side === side);
+      const next = length === null ? others : [...others, ...(mine.length ? mine.map((edge) => ({ ...edge, length: tidy(length) })) : [{ side, length: tidy(length) }])];
+      return next.length ? { ...rest, lips: { ...lips, edges: next } } : rest;
+    }),
+  };
+}
+
+// The gap, thickness and height shared by a board's lips.
+export function setLips(config: RawConfig, id: string, patch: RawComponent): RawConfig {
+  return {
+    ...config,
+    components: (config.components ?? []).map((c: RawComponent) =>
+      c.id === id && c.lips ? { ...c, lips: { ...c.lips, ...Object.fromEntries(Object.entries(patch).map(([k, v]) => [k, typeof v === "number" ? tidy(v) : v])) } } : c,
+    ),
+  };
+}
+
 export function removeComponent(config: RawConfig, id: string): RawConfig {
   const { labels = [], ...rest } = config;
   const kept = labels.filter((label: RawConfig) => label.component !== id);

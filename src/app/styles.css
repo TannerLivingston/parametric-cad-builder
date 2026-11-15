@@ -325,6 +325,15 @@ fieldset.fields legend {
   font-weight: 600;
 }
 
+.fields.lips {
+  grid-template-columns: 1fr 1fr;
+  align-items: end;
+}
+
+.fields.lips .lip-edge {
+  display: contents;
+}
+
 .fields.single {
   grid-template-columns: minmax(0, 1fr);
 }

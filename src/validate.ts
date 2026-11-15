@@ -2,7 +2,7 @@
 // only accepts a BuildPlan, so nothing can reach the geometry without passing here.
 // That matters: overlapping cutouts crash the engine, and exact tangents or seam
 // crossings produce wrong geometry with no error at all.
-import { configSchema, type Config, type Cutout, type FloorPart, type PanelPart, type Part } from "./schema.js";
+import { configSchema, type Config, type Cutout, type FloorPart, type Lips, type PanelPart, type Part } from "./schema.js";
 import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
 import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
@@ -15,7 +15,7 @@ import { textOutline, unsupportedCharacters } from "./lettering.js";
 import { planPins, type PinBudget } from "./pins.js";
 import { KEY_GAP, KEY_SCREW, KEY_TAB_END, KEY_THICKNESS, KEY_HEIGHT, keyReach, planKeys, type SeamKey } from "./seamKeys.js";
 import { capFit, DEFAULT_KNOB_COLOR, knobFit, type PlannedKnob } from "./knob.js";
-import { BARB_REACH, holderBlocks, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
+import { BARB_REACH, boardLevel, edgeLength, holderBlocks, lipSize, STANDOFF_HOLE_FLOOR, portTarget, TIE_BRIDGE, tieExtent, ventSlots, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { panelWireRooms, floorWireRooms, wallWireRooms, wireRoomProblem, floorBlock, routeWire, WIRE_BUNDLE, type Point3, type WireObstacle, type WireRoom, type WireRoute } from "./wiring.js";
 import { BOSS_DIAMETER, bossProblem, chosenBossLift, shortBossTop, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, choosePlateJoints, samePlatePiece, DRIVER_DIAMETER, isShortBoss, layoutPlateScrews, MIN_SCREW_SPACING, plateRows, SEAM_DRIVER_ROOM, SHORT_BOSS_HEIGHT, supportProblem, supportTop, footProblem, type PlannedFoot, weightOutline, weightProblem, type PlannedWeight, surfaceSpan, layoutPlateRibBolts, plateRibBoltProblem, plateRibSpan, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, type BossObstacles, type PlannedSupport, type PlateRib, type PlatePlanInput, type RibObstacle, type SeamDriverPath } from "./plate.js";
 
@@ -898,20 +898,23 @@ function planLabels(config: Config, profile: Profile, placed: Placed[], cutouts:
 
 function planHolders(config: Config, placed: Placed[], issues: Issues): HolderBlock[] {
   return placed.flatMap((item) => {
-    if (item.part.mount !== "floor" || (!item.part.holder && !item.part.standoffs?.length)) return [];
+    const component = config.components[item.index]!;
+    const lips = "lips" in component ? component.lips : undefined;
+    if (item.part.mount !== "floor" || (!item.part.holder && !item.part.standoffs?.length && !lips)) return [];
     const path = `components[${item.index}]`;
+    const rotation = component.rotationDeg as Rotation;
     if (!config.plate.enabled) {
-      issues.warn("BOARD_HOLDER_SKIPPED", `"${item.id}" has a ${item.part.holder ? "cradle" : "set of standoffs"}, but it goes on the plate, and the plate is turned off.`, path, [item.id]);
+      const what = item.part.holder ? "cradle" : item.part.standoffs?.length ? "set of standoffs" : "set of edge lips";
+      issues.warn("BOARD_HOLDER_SKIPPED", `"${item.id}" has a ${what}, but it goes on the plate, and the plate is turned off.`, path, [item.id]);
       return [];
     }
     for (const standoff of item.part.standoffs ?? []) {
       if (standoff.height > item.part.height) issues.error("BOARD_HOLDER_INVALID", `"${item.id}" is ${mm(item.part.height)} tall, less than its ${mm(standoff.height)} standoffs.`, path, [item.id]);
       if ((standoff.diameter - standoff.holeDiameter) / 2 < MIN_STANDOFF_WALL) issues.error("BOARD_HOLDER_INVALID", `A standoff for "${item.id}" would have under ${mm(MIN_STANDOFF_WALL)} of wall around its hole. Make it wider, or the hole smaller.`, path, [item.id]);
     }
-    if (!item.part.holder) {
-      const shape = item.shape("below");
-      return holderBlocks(item.id, item.part, shape.cx, shape.cy, config.components[item.index]!.rotationDeg as Rotation, config.fabrication.fit.clipGap);
-    }
+    if (lips && !checkLips(item, item.part, lips, path, issues)) return [];
+    const shape = item.shape("below");
+    if (!item.part.holder) return holderBlocks(item.id, item.part, shape.cx, shape.cy, rotation, config.fabrication.fit.clipGap, lips);
     if (item.part.footprint.shape !== "rect") {
       issues.error("BOARD_HOLDER_INVALID", `"${item.id}" has a cradle, which only works on a rectangular board.`, path, [item.id]);
       return [];
@@ -922,9 +925,40 @@ function planHolders(config: Config, placed: Placed[], issues: Issues): HolderBl
     if (item.part.holder.clips.length > 0 && config.fabrication.fit.clipGap >= BARB_REACH) {
       issues.error("BOARD_HOLDER_INVALID", `A clip gap of ${mm(config.fabrication.fit.clipGap)} is wider than the ${mm(BARB_REACH)} its barbs reach, so the clips on "${item.id}" wouldn't hold the board.`, "fabrication.fit.clipGap", [item.id]);
     }
-    const shape = item.shape("below");
-    return holderBlocks(item.id, item.part, shape.cx, shape.cy, config.components[item.index]!.rotationDeg as Rotation, config.fabrication.fit.clipGap);
+    const blocks = holderBlocks(item.id, item.part, shape.cx, shape.cy, rotation, config.fabrication.fit.clipGap, lips);
+    // A lip can't share the edge with the board's own clips or stop.
+    const own = blocks.filter((block) => block.kind !== "lip" && block.kind !== "standoff");
+    if (blocks.some((lip) => lip.kind === "lip" && own.some((block) => lip.xLow < block.xHigh && lip.xHigh > block.xLow && lip.yLow < block.yHigh && lip.yHigh > block.yLow))) {
+      issues.error("BOARD_HOLDER_INVALID", `An edge lip for "${item.id}" runs into its own cradle. Move it along its edge, or shorten it.`, `${path}.lips`, [item.id]);
+    }
+    return blocks;
   });
+}
+
+// What a board's edge lips need of the board, before they're placed: false when they can't be.
+function checkLips(item: Placed, part: FloorPart, lips: Lips, path: string, issues: Issues): boolean {
+  if (part.footprint.shape !== "rect") {
+    issues.error("BOARD_HOLDER_INVALID", `"${item.id}" has edge lips, which only work on a rectangular board.`, `${path}.lips`, [item.id]);
+    return false;
+  }
+  // One problem shared by several lips is enough to say once.
+  const said = new Set<string>();
+  const fail = (message: string, at: string) => {
+    if (!said.has(message)) issues.error("BOARD_HOLDER_INVALID", message, `${path}.lips${at}`, [item.id]);
+    said.add(message);
+  };
+  lips.edges.forEach((lip, i) => {
+    const { thickness, above } = lipSize(lips, lip);
+    if (thickness < MIN_STANDOFF_WALL) fail(`An edge lip for "${item.id}" is under ${mm(MIN_STANDOFF_WALL)} thick, too thin to print well.`, `.edges[${i}]`);
+    if (boardLevel(part).top + above > part.height + 1e-6) fail(`An edge lip for "${item.id}" stands over the top of its ${mm(part.height)} body.`, `.edges[${i}]`);
+    const half = edgeLength(part, lip.side) / 2;
+    if (Math.abs(lip.at) + lip.length / 2 > half + 1e-6) fail(`An edge lip for "${item.id}" runs past the end of its ${lip.side} edge, which is ${mm(half * 2)} long.`, `.edges[${i}]`);
+    const port = part.port;
+    if (port && port.side === lip.side && Math.abs(lip.at - port.at) < lip.length / 2 + port.width / 2) {
+      fail(`An edge lip for "${item.id}" is in front of its connector, on its ${lip.side} edge.`, `.edges[${i}]`);
+    }
+  });
+  return said.size === 0;
 }
 
 function checkHolders(blocks: HolderBlock[], config: Config, profile: Profile, seams: PlannedSeam[], placed: Placed[], plate: PlatePlan | null, issues: Issues) {
@@ -941,7 +975,7 @@ function checkHolders(blocks: HolderBlock[], config: Config, profile: Profile, s
       if (!reported.has(message)) issues.error("BOARD_HOLDER_INVALID", message, `components[${owner.index}]`, [block.componentId]);
       reported.add(message);
     };
-    const name = block.kind === "standoff" ? `A standoff for "${block.componentId}"` : `The cradle for "${block.componentId}"`;
+    const name = block.kind === "standoff" ? `A standoff for "${block.componentId}"` : block.kind === "lip" ? `An edge lip for "${block.componentId}"` : `The cradle for "${block.componentId}"`;
     const top = e.floorThickness + block.top;
     if (block.xLow < inset || block.xHigh > e.width - inset || block.yLow < profile.plateFront + plate.clearance || block.yHigh > profile.plateRear - plate.clearance) fail(`${name} runs off the edge of the plate.`);
     const joint = plate.joints.find((x) => block.xLow < x && block.xHigh > x);

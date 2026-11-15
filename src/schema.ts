@@ -2,7 +2,7 @@
 // typo fails loudly. All lengths are millimetres. Positions on a surface use (u, v):
 // u is measured from the left edge, v from the surface's front edge along its slope.
 import { z } from "zod";
-import { CLIP_GAP } from "./fixtures.js";
+import { CLIP_GAP, EDGE_LIP } from "./fixtures.js";
 import { INSERT_HOLE_DIAMETER, PIN_DIAMETER, PIN_SOCKET_DIAMETER, SCREW_CLEARANCE_DIAMETER } from "./plate.js";
 
 const length = z.number().positive();
@@ -172,9 +172,31 @@ export const knobSchema = z.strictObject({ diameter: length.default(14), height:
 // round the stem.
 export const capSchema = z.strictObject({ width: length.default(15), depth: length.default(15), thickness: length.default(2.4), color: z.string().min(1).optional() });
 
+// Short walls on the plate along a board's edges, to locate it, like the Desk Synth's round its
+// perfboard. Each is along one edge of the board's footprint before rotating, centred `at` along
+// that edge from its middle, as a port is. `gap` is between the board and a lip, and `above` is how
+// far a lip stands over the board's top. One lip can have its own of those, and its own thickness.
+export const lipsSchema = z.strictObject({
+  edges: z
+    .array(
+      z.strictObject({
+        side: z.enum(["left", "right", "front", "rear"]),
+        at: offset.default(0),
+        length,
+        gap: z.number().nonnegative().max(2).optional(),
+        thickness: length.optional(),
+        above: z.number().nonnegative().optional(),
+      }),
+    )
+    .min(1),
+  gap: z.number().nonnegative().max(2).default(EDGE_LIP.gap),
+  thickness: length.default(EDGE_LIP.thickness),
+  above: z.number().nonnegative().default(EDGE_LIP.above),
+});
+
 export const componentSchema = z.union([
   z.strictObject({ ...componentBase, surface: z.string().min(1).optional(), u: offset, v: offset, knob: knobSchema.optional(), cap: capSchema.optional() }),
-  z.strictObject({ ...componentBase, x: offset, y: offset }),
+  z.strictObject({ ...componentBase, x: offset, y: offset, lips: lipsSchema.optional() }),
   z.strictObject({ ...componentBase, wall: wallSchema, at: offset, z: length }),
 ]);
 
@@ -408,6 +430,7 @@ export type ConfigInput = z.input<typeof configSchema>;
 export type Material = z.infer<typeof materialSchema>;
 export type Fit = z.infer<typeof fitSchema>;
 export type Label = z.infer<typeof labelSchema>;
+export type Lips = z.infer<typeof lipsSchema>;
 
 // For editors, and for an LLM front end whose output has to pass the same schema.
 export function configJsonSchema() {

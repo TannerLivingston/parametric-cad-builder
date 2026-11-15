@@ -15,6 +15,7 @@ import { FitTestPanel } from "./FitTestPanel.js";
 import { labelOfComponent, setComponentLabel, type LabelSide } from "./labelEdit.js";
 import { NumberField, TextField } from "./fields.js";
 import { LayoutTools } from "./LayoutTools.js";
+import { LipsFields } from "./LipsFields.js";
 import { PartForm } from "./PartForm.js";
 import { PrintCost } from "./PrintCost.js";
 import { loadPrinted, markPrinted, reprintStatus, savePrinted, type PrintedRecord } from "./reprint.js";
@@ -1462,6 +1463,9 @@ export function App() {
                       </>
                     ) : null}
                   </div>
+                ) : null}
+                {selectedPart.mount === "floor" && "x" in selectedComponent ? (
+                  <LipsFields config={config} component={selectedComponent} part={selectedPart} onChange={(next) => applyConfig(next)} />
                 ) : null}
                 {neighbour ? <p className="muted note">{neighbour.gap.toFixed(1)} mm to {neighbour.id}</p> : null}
                 {selectedPart.notes ? <p className="muted note">{selectedPart.notes}</p> : null}
