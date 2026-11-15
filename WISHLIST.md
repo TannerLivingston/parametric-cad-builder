@@ -26,6 +26,10 @@ Nothing open here for now: everything on it so far is in the done list below.
 
 ## Done
 
+- [x] **The walls thickened round the seam,** so that a tongue fits in a thin skin, full near it and sloping back at 45 degrees,
+  starting behind whatever's in its way. The Desk Synth example has the real one's tongue and a key on it now, in place of its
+  plain butt joint. Not yet sliced or printed.
+
 - [x] **Bowed side walls,** on a shell in one piece, which prints upright. A split shell's end pieces print standing on them,
   so a seam and a bowed side are refused together, saying why. Hollow like the front and rear, with square-ended solid
   stretches at the screws, since it stands upright. Not yet sliced or printed.

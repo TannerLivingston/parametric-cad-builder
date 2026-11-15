@@ -42,7 +42,9 @@ describe("the Desk Synth example", () => {
     const half = seam.ribHalfThickness;
     // Past the countersink, and past the 45 degree roof over its bore's teardrop point.
     const coneEnd = Math.max(seam.x - half + COUNTERSINK_DEPTH + 0.2, seam.x - half + (COUNTERSINK_DIAMETER / 2) * Math.SQRT1_2 + 0.1);
-    expect(seam.bolts.length).toBeGreaterThanOrEqual(2);
+    // One bolt at the front, and a key on the rear wall in place of the bolt there, as on the real one.
+    expect(seam.bolts.length).toBeGreaterThanOrEqual(1);
+    expect(seam.rearKeys).toHaveLength(1);
     for (const bolt of seam.bolts) {
       const leftRing = ring(BOLT_DIAMETER / 2, coneEnd, seam.x - coneEnd, bolt);
       const rightRing = ring(INSERT_HOLE_DIAMETER / 2, seam.x, half, bolt);

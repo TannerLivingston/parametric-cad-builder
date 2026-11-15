@@ -53,6 +53,7 @@ export const FIELD_NOTES: Record<string, string> = {
   "Right wall bow": "How far the right wall bows out at its middle, seen from above, in mm. 0 is straight. Only on a shell in one piece, which prints upright.",
   "Lip past it": "How far the left piece's outer skin reaches over the seam, onto a step in the right piece, in mm. 0 is a flat joint.",
   "Tongue past it": "How far the middle third of the left piece's skin reaches past the seam, into a groove in the right piece, in mm. 0 is none.",
+  "Thicken round it": "How much thicker the walls, and the top where there's no top panel, are made inward near the seam, so a tongue fits a thin skin, in mm. It slopes back at 45 degrees, and starts behind anything in its way. 0 is none.",
   "Split at x": "Where the shell is split into pieces that each fit the printer's bed, from the left, in mm.",
   "Split the plate at x": "Where the base plate is split, from the left, in mm. Several are separated by commas. Empty chooses for you.",
   Depth: "How far back from the front the surface ends, in mm. The last one's is the enclosure's depth.",

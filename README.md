@@ -243,8 +243,20 @@ of the skin, all the way round the wall and the top where there's no top panel, 
 the right one, with 0.2 mm to spare each side. Its end and the groove's come to a point, sloping in at 45 degrees from both
 faces, so that a groove's end is never a flat roof, and a piece between two seams stands on its grooved end without support. It's
 the same thickness all round, a third of the thinnest skin. It has to be at least 1 mm, stay inside the room kept clear round the
-seam, and leave the material's minimum web either side of its groove, which takes a skin of about 4.2 mm in PETG. It can't be had
-with a lip, or with a bowed wall. **Tongue past it** in the Shape tab sets it.
+seam, and leave the material's minimum web either side of its groove, which takes a skin of about 4.2 mm in PETG, or a `band`.
+It can't be had with a lip, or with a bowed wall. **Tongue past it** in the Shape tab sets it.
+
+A seam's `band` lets a tongue go in a thinner skin, the way the real Desk Synth's shell is thickened round its seam. It's how many
+mm the walls, and the skin under the top where there's no top panel, are thickened inward: full for 1.5 mm left of the seam and
+for 1.5 mm past the groove's point on the right, then sloping back to the skin at 45 degrees over as many mm again, so that
+neither piece needs support with its seam up. The tongue is then a third of the thickened skin, in its middle, so a 3 mm skin with
+a 3 mm band takes the real one's 2 mm tongue. The band, tongue and groove start behind anything they'd run into: an opening near
+the seam, the room kept for what it holds, a rail's screw block, or the body of a part, as the real band starts on the back, behind
+the keybed and display. Where a wall comes straight down to the plate, with no round at the bottom, they stop at the plate's top.
+A band needs a tongue, and is refused if it would reach past the rib on the left, where a screwdriver goes to the seam's bolts
+(3.5 mm with the default rib), past the room kept clear round the seam on the right, or past a bottom round. Cutouts in the skin
+keep the material's minimum web clear of it, cradles and wires keep out of it, and a top panel's screw keeps it clear of its post
+and screwdriver. **Thicken round it** in the Shape tab sets it.
 
 A seam's `keys` swaps the bolted rib on the rear wall for the real Desk Synth's keys. Each is a 4 mm thick, 13 mm tall tab from
 the left piece, reaching 10 mm past the seam, in front of a block on the right piece's rear wall with 0.2 mm between them. An M3
@@ -255,7 +267,7 @@ the wall behind it is flattest, and none is an error. A key has to stay inside t
 of a rear round behind it is limited: the Desk Synth's rounds leave room for one, where the real one has two. A screwdriver needs
 60 mm clear in front of each, which the plate's bosses and the top's screw tabs keep out of, and parts go in after the shell is
 joined, so they aren't counted. Keys can't be had with a bowed rear wall. **Keys on the rear wall** in the Shape tab sets them.
-They can go with a lip or a tongue. The front wall keeps its rib.
+They can go with a lip or a tongue, and stand off a band where there is one. The front wall keeps its rib.
 
 ### Rounds on the side profile
 
@@ -547,7 +559,7 @@ the same way as the Fusion model. It builds 9 printed parts:
 
 | Part | Colour | Size in mm |
 | --- | --- | --- |
-| Shell 1, Shell 2 | Beige | 190 x 197 x 54, 165 x 197 x 54 |
+| Shell 1, Shell 2 | Beige | 196 x 197 x 54, 165 x 197 x 54 |
 | Deck 1, Deck 2 | Black | 186 x 77 x 3, 15 x 77 x 3, plus posts |
 | Panel 1, Panel 2 | Black | 214 x 51 x 28, 137 x 51 x 28, plus posts |
 | Plate 1, Plate 2 | Beige | 137 x 161 x 13, including the board's cradle, and 208 x 161 x 8, including the tray's pins |
@@ -562,10 +574,11 @@ because compared with the real build:
 
 - Key travel isn't checked. The fit is only tested with the keys at rest.
 - The deck and panel aren't joined at the crease, where the real one uses dowels. The Desk Synth V2 example screws them together.
-- The seam is a plain butt joint. The real one has a tongue along its back and round its rear, 2.5 mm long and 2 mm thick in the
-  middle of a wall about 6 mm thick there, in a groove with 0.2 mm each side, and two 4 x 13 mm keys on the rear wall reaching
-  12 mm across. The Desk Synth V2 example has a lip instead. A seam's `tongue` makes one like it, but the example's 3.25 mm
-  wall is too thin for its groove. Its `keys` make one key between the example's rear rounds, not two.
+- The seam's tongue is 2.5 mm long and 2 mm thick in a 3 mm band, as the real one's is, but starts at y = 126.9, on the back just
+  behind the ridge, by itself, where the real one starts at 127. Its band reaches 4.5 mm left of the seam and 8.2 mm right,
+  where the real one's reaches about 4.5 and 6.5: the real groove's end is square, and this one's comes to a point. It has one
+  key on the rear wall, where the real one has two, since the example's rear rounds only leave room for one. The Desk Synth V2
+  example has a lip instead.
 - The ridge behind the panel is simplified.
 - The plate has 8 screws, where the real one has 11, because the perfboard takes the row at the rear of the plate. So its joint
   is at x = 140 rather than 127, where both pieces can be screwed down beside it at the front, and only the rear corners are held.

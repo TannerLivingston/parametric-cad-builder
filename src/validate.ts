@@ -3,7 +3,7 @@
 // That matters: overlapping cutouts crash the engine, and exact tangents or seam
 // crossings produce wrong geometry with no error at all.
 import { configSchema, type Config, type Cutout, type FloorPart, type PanelPart, type Part } from "./schema.js";
-import { footprintShape, gap, halfExtents, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
+import { footprintShape, gap, halfExtents, pointInPolygon, polygonCrossesChain, polygonInside, polygonsOverlap, rotateOffset, type Rotation, type Shape } from "./geometry.js";
 import { findSurface, highestFloor, rearTangentLength, buildProfile, buildSurfaces, layoutSeamFasteners, lowestHeight, surfacePoint, tabSection, type Point2, type Profile, type SeamFasteners, type SeamTab, type Surface } from "./profile.js";
 import { library, materials } from "./library.js";
 import { curveFlat, flatFor, LABEL_GAP, curveLength, flatId, flatStart, MAX_FLAT_SINK, partReach, type CurveFlat } from "./flats.js";
@@ -32,6 +32,29 @@ export const TONGUE_GAP = 0.2; // each side of a seam's tongue, in its groove
 // A seam's tongue is this much of the skin's thickness, in its middle.
 export const SEAM_TONGUE_SHARE = 1 / 3;
 export const seamTongueHalf = (thinnest: number) => (thinnest * SEAM_TONGUE_SHARE) / 2;
+// A seam's band is full thickness for this far either side of the seam, and of its groove on the
+// right, then slopes back to the skin at 45 degrees, as the real Desk Synth's does.
+export const BAND_FULL = 1.5;
+
+// The thinnest skin a seam's tongue goes in: the walls, and the top where there's no top panel,
+// with any band thickening them.
+export function seamSkin(config: Config, surfaces: Surface[], band = 0): number {
+  return Math.min(config.enclosure.wall, ...surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness)) + band;
+}
+
+// How far a seam's band reaches left and right of it, slopes and all.
+export function bandReach(seam: { tongue: number; band: number }, skin: number): [number, number] {
+  if (!(seam.band > 0)) return [0, 0];
+  const groove = seam.tongue + seamTongueHalf(skin) + TONGUE_GAP;
+  return [BAND_FULL + seam.band, groove + BAND_FULL + seam.band];
+}
+
+// The shape inside the shell as it is round a seam's band: the walls, and the top where there's no
+// top panel, that much thicker.
+export function bandProfile(config: Config, profile: Profile, band: number): Profile | null {
+  const e = config.enclosure;
+  return buildProfile(profile.surfaces, { wall: e.wall + band, panelThickness: (surface) => surface.thickness + (topPanelFor(config, surface.id) ? 0 : band), floorThickness: e.floorThickness, rounds: e.rounds });
+}
 export const MIN_LABEL_SIZE = 3.5;
 const MIN_STANDOFF_WALL = 0.8; // two lines from a 0.4 mm nozzle
 const LABEL_CLEAR = 0.6; // from any hole, or another label
@@ -199,6 +222,13 @@ export interface PlannedSeam extends SeamFasteners {
   ribHalfThickness: number;
   lip: number;
   tongue: number;
+  band: number;
+  // Where there's a band: how far it reaches left and right of the seam, the y it starts from,
+  // behind anything at the front in its way, and pieces of it across the shell, for checking what's
+  // near. The tongue and groove start there too.
+  bandReach: [number, number];
+  bandFrom: number;
+  bandSections: Point2[][];
   keys: boolean;
   rearKeys: SeamKey[]; // in place of the rear wall's rib, if `keys` is set
   pinLength: number;
@@ -348,7 +378,7 @@ export function validateConfig(input: unknown, { wiring: withWiring = true }: { 
   checkFitTestParts(config, parts, limits, issues);
   checkCutoutSpacing(cutouts, limits.minWeb, issues);
   checkCutoutsOnSurfaces(cutouts, config, profile, limits.minWeb, issues);
-  checkCutoutsAgainstSeams(cutouts, config, topPieces, limits.minWeb, issues);
+  checkCutoutsAgainstSeams(cutouts, config, profile, topPieces, limits.minWeb, issues);
   checkBodies(placed, config, profile, seams, flats, issues);
   const labels = planLabels(config, profile, placed, cutouts, wallHoles, shellParts, topPieces, partFor, limits, issues);
   checkWallParts(placed, config, profile, seams, holderBlockList, issues);
@@ -457,6 +487,7 @@ function wiringObstacles(config: Config, profile: Profile, placed: Placed[], sea
   for (const seam of seams) {
     const reach = seam.ribHalfThickness + seam.ribWidth;
     for (const tab of seam.tabs) obstacles.push({ name: "a tab across the seam", xLow: seam.x - reach, xHigh: seam.x + reach, section: tabSection(tab) });
+    for (const section of seam.bandSections) obstacles.push({ name: "the band round the seam", xLow: seam.x - seam.bandReach[0], xHigh: seam.x + seam.bandReach[1], section });
   }
   for (const block of blocks) obstacles.push(box(`the cradle for "${block.componentId}"`, [block.xLow, block.xHigh], [block.yLow, block.yHigh], [floor, floor + block.top], block.componentId));
   for (const kept of reservedBoxes(config)) obstacles.push(box("the room kept for the opening", [kept.xMin, kept.xMax], [kept.yMin, kept.yMax], [0, kept.top]));
@@ -975,6 +1006,7 @@ function checkHolders(blocks: HolderBlock[], config: Config, profile: Profile, s
     for (const seam of seams) {
       const reach = seam.ribHalfThickness + seam.ribWidth;
       if (block.xLow < seam.x + reach && block.xHigh > seam.x - reach && seam.tabs.some((tab) => polygonsOverlap(column, tabSection(tab)))) fail(`${name} runs into a seam tab at x = ${mm(seam.x)}.`);
+      if (hitsBand(seam, block.xLow, block.xHigh, column)) fail(`${name} runs into the band round the seam at x = ${mm(seam.x)}.`);
     }
     for (const item of placed) {
       if (item.part.mount !== "panel" || !item.surface || item.part.below.depth === 0) continue;
@@ -1148,6 +1180,7 @@ function planTopScrews(config: Config, profile: Profile, pieces: TopPiece[], sea
     opening: config.opening ?? null,
     blockedBoxes: [...reservedBoxes(config), ...fixtures.holeBoxes].map((box) => ({ xLow: box.xMin, xHigh: box.xMax, yLow: box.yMin, yHigh: box.yMax, zTop: box.top })),
     seamTabs: seams.flatMap((seam) => seam.tabs.map((tab) => ({ xLow: seam.x - seam.ribHalfThickness - seam.ribWidth, xHigh: seam.x + seam.ribHalfThickness + seam.ribWidth, section: tabSection(tab) }))),
+    seamBands: seams.flatMap((seam) => seam.bandSections.map((section) => ({ xLow: seam.x - seam.bandReach[0], xHigh: seam.x + seam.bandReach[1], section }))),
     minWeb: limits.minWeb,
     partClearance: PART_CLEARANCE,
     openBase: { yLow: profile.plateFront, yHigh: profile.plateRear },
@@ -1681,7 +1714,9 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
     }
     // Keys take the rear wall's place in the rib, so it has no tab there.
     const ribBase = config.plate.enabled ? e.floorThickness : 0;
-    const rearKeys = seam.keys ? planKeys(profile, ribBase, INSERT_HOLE_DEPTH, seam.ribHalfThickness + seam.ribWidth) : [];
+    // A band thickens the rear wall the keys stand off, and is what their inserts go into.
+    const thick = seam.band > 0 ? bandProfile(config, profile, seam.band) : null;
+    const rearKeys = seam.keys ? planKeys(thick ?? profile, ribBase, INSERT_HOLE_DEPTH, seam.ribHalfThickness + seam.ribWidth) : [];
     const isKeyed = (tab: SeamTab) => seam.keys && tab.surface === null && tab.inward[0] < 0;
     let unheldEnds = 0;
     const fasteners = layoutSeamFasteners(
@@ -1729,12 +1764,31 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       if (seam.tongue < MIN_TONGUE) issues.error("SEAM_INVALID", `A tongue of ${mm(seam.tongue)} is too short to line the pieces up. Make it at least ${mm(MIN_TONGUE)}, or 0 for none.`, `${path}.tongue`);
       if (seam.tongue > reach) issues.error("SEAM_INVALID", `A tongue of ${mm(seam.tongue)} reaches past the room kept clear round the seam, ${mm(reach)} either side. Make it shorter.`, `${path}.tongue`);
       // The groove takes the middle third of the skin and a gap each side, and what's left either side has to hold.
-      const thinnest = Math.min(e.wall, ...profile.surfaces.filter((surface) => !topPanelFor(config, surface.id)).map((surface) => surface.thickness));
+      const thinnest = seamSkin(config, profile.surfaces, seam.band);
       const groove = 2 * seamTongueHalf(thinnest) + 2 * TONGUE_GAP;
       const side = (thinnest - groove) / 2;
       if (side < minWeb) {
+        const tenths = (length: number) => Math.ceil(length * 10 - 1e-6) / 10;
         const needed = (2 * minWeb + 2 * TONGUE_GAP) / (1 - SEAM_TONGUE_SHARE);
-        issues.error("SEAM_INVALID", `A tongue's groove takes ${mm(groove)} of the ${mm(thinnest)} skin, leaving ${mm(side)} either side of it, which needs ${mm(minWeb)}. Make the walls and panel at least ${mm(Math.ceil(needed * 10) / 10)}, or use a lip.`, `${path}.tongue`);
+        const band = tenths(needed - seamSkin(config, profile.surfaces));
+        issues.error("SEAM_INVALID", `A tongue's groove takes ${mm(groove)} of the ${mm(thinnest)} skin, leaving ${mm(side)} either side of it, which needs ${mm(minWeb)}. Thicken the skin round the seam with a band of ${mm(band)}, make the walls and panel at least ${mm(tenths(needed))}, or use a lip.`, `${path}.tongue`);
+      }
+    }
+    let band: Pick<PlannedSeam, "bandReach" | "bandFrom" | "bandSections"> = { bandReach: [0, 0], bandFrom: 0, bandSections: [] };
+    if (seam.band > 0) {
+      const reach = bandReach(seam, seamSkin(config, profile.surfaces, seam.band));
+      const room = seam.ribHalfThickness + seam.ribWidth;
+      const rounds = Object.values(e.rounds).filter((radius) => radius > 0);
+      if (seam.tongue === 0) {
+        issues.error("SEAM_INVALID", "A band thickens the skin round the seam for a tongue to go in, so it needs one. Give the seam a tongue, or set the band to 0.", `${path}.band`);
+      } else if (reach[0] > seam.ribHalfThickness) {
+        issues.error("SEAM_INVALID", `A band of ${mm(seam.band)} reaches ${mm(reach[0])} left of the seam, past its rib, where a screwdriver goes to the seam's bolts. Make it at most ${mm(seam.ribHalfThickness - BAND_FULL)}, or the rib thicker.`, `${path}.band`);
+      } else if (reach[1] > room) {
+        issues.error("SEAM_INVALID", `A band of ${mm(seam.band)} reaches ${mm(reach[1])} right of the seam, with the tongue's groove, past the room kept clear round it, ${mm(room)} either side. Make the band or the tongue shorter.`, `${path}.band`);
+      } else if (!thick || rounds.some((radius) => radius <= e.wall + seam.band)) {
+        issues.error("SEAM_INVALID", `A band of ${mm(seam.band)} makes the skin round the seam thicker than the enclosure's rounds allow. Make it thinner, or the rounds bigger.`, `${path}.band`);
+      } else {
+        band = planBand(config, profile, thick, seam, reach, placed, path, issues);
       }
     }
     if (seam.keys) checkKeys(seam, path, rearKeys, config, profile, placed, cutouts, minWeb, issues);
@@ -1751,9 +1805,75 @@ function planSeams(config: Config, profile: Profile, placed: Placed[], cutouts: 
       const blocked = blocks.some((block) => block.xMax > xHigh - SEAM_DRIVER_ROOM && block.xMin < xHigh && block.yMin < y + DRIVER_DIAMETER / 2 && block.yMax > y - DRIVER_DIAMETER / 2 && z - DRIVER_DIAMETER / 2 < block.top);
       if (blocked) issues.error("SEAM_INVALID", `A screw block for the rail would stop a screwdriver reaching the seam bolt at y = ${mm(y)}, z = ${mm(z)}. Move the seam or the rail's screws.`, `${path}.x`);
     }
-    planned.push({ ...seam, ...fasteners, rearKeys, pinLength: seam.ribHalfThickness - PIN_ALLOWANCE });
+    planned.push({ ...seam, ...fasteners, ...band, rearKeys, pinLength: seam.ribHalfThickness - PIN_ALLOWANCE });
   });
   return planned.sort((a, b) => a.x - b.x);
+}
+
+// A seam's band, as pieces across the shell, a quad on each stretch of the skin it thickens. It starts
+// behind anything that it would run into: an opening, the room kept for what it holds, a rail's screw
+// block, or the body of a part, as the real Desk Synth's starts on its back, behind the keybed and
+// the display. The tongue and groove start there too, since there's no room for them in the skin
+// without it.
+function planBand(config: Config, profile: Profile, thick: Profile, seam: Config["seams"][number], reach: [number, number], placed: Placed[], path: string, issues: Issues): Pick<PlannedSeam, "bandReach" | "bandFrom" | "bandSections"> {
+  const cavity = profile.cavity;
+  const quads: Point2[][] = [];
+  cavity.forEach(([y0, z0], k) => {
+    const [y1, z1] = cavity[(k + 1) % cavity.length]!;
+    const length = Math.hypot(y1 - y0, z1 - z0);
+    if (length < 1e-6) return;
+    // Inward, since the outline runs anticlockwise.
+    const [ny, nz] = [(-(z1 - z0) / length) * seam.band, ((y1 - y0) / length) * seam.band];
+    // Not thickened under a top panel, or across the open base.
+    if (pointInPolygon([(y0 + y1 + ny) / 2, (z0 + z1 + nz) / 2], thick.cavity)) return;
+    quads.push([[y0, z0], [y1, z1], [y1 + ny, z1 + nz], [y0 + ny, z0 + nz]]);
+  });
+  const [xLow, xHigh] = [seam.x - reach[0], seam.x + reach[1]];
+  const blockers: { yMax: number; area: Point2[] }[] = [];
+  const area = (yMin: number, yMax: number, zMin: number, zMax: number): Point2[] => [[yMin, zMin], [yMax, zMin], [yMax, zMax], [yMin, zMax]];
+  for (const box of reservedBoxes(config)) {
+    if (box.xMax > xLow && box.xMin < xHigh) blockers.push({ yMax: box.yMax, area: area(box.yMin, box.yMax, -1, box.top) });
+  }
+  const opening = config.opening;
+  if (opening && opening.xMax > xLow && opening.xMin < xHigh) blockers.push({ yMax: opening.yEnd, area: area(-1, opening.yEnd, opening.sill, profile.maxHeight + 1) });
+  const c = PART_CLEARANCE;
+  for (const item of placed) {
+    const shape = item.shape("below");
+    const [hu, hv] = halfExtents(shape);
+    if (shape.cx + hu + c <= xLow || shape.cx - hu - c >= xHigh) continue;
+    if (item.part.mount === "floor") {
+      const floor = config.enclosure.floorThickness;
+      blockers.push({ yMax: shape.cy + hv + c, area: area(shape.cy - hv - c, shape.cy + hv + c, floor, floor + item.part.height + c) });
+    } else if (item.part.mount === "panel" && item.surface && item.part.below.depth > 0) {
+      const t = item.surface.thickness;
+      const body = [surfacePoint(item.surface, shape.cy - hv - c, -t), surfacePoint(item.surface, shape.cy + hv + c, -t), surfacePoint(item.surface, shape.cy + hv + c, -t - item.part.below.depth - c), surfacePoint(item.surface, shape.cy - hv - c, -t - item.part.below.depth - c)];
+      blockers.push({ yMax: Math.max(...body.map(([y]) => y)), area: body });
+    }
+  }
+  let bandFrom = 0;
+  for (const blocker of blockers) {
+    if (quads.some((quad) => polygonsOverlap(quad, blocker.area))) bandFrom = Math.max(bandFrom, blocker.yMax);
+  }
+  const bandSections = quads.map((quad) => behind(quad, bandFrom)).filter((quad) => quad.length > 2);
+  if (!bandSections.length) issues.error("SEAM_INVALID", `What's at the front near the seam reaches back to y = ${mm(bandFrom)}, and the band and tongue start behind it, which leaves nothing for them. Move the seam, or leave the band and tongue off.`, `${path}.band`);
+  return { bandReach: reach, bandFrom, bandSections };
+}
+
+// What of a convex polygon is behind y.
+function behind(polygon: Point2[], y: number): Point2[] {
+  const out: Point2[] = [];
+  polygon.forEach((a, k) => {
+    const b = polygon[(k + 1) % polygon.length]!;
+    if (a[0] >= y) out.push(a);
+    if (a[0] >= y !== b[0] >= y) out.push([y, a[1] + ((y - a[0]) * (b[1] - a[1])) / (b[0] - a[0])]);
+  });
+  return out;
+}
+
+// Whether a section across the shell, between xLow and xHigh, runs into a seam's band.
+function hitsBand(seam: PlannedSeam, xLow: number, xHigh: number, section: Point2[]): boolean {
+  if (!seam.bandSections.length || xHigh <= seam.x - seam.bandReach[0] || xLow >= seam.x + seam.bandReach[1]) return false;
+  return seam.bandSections.some((quad) => polygonsOverlap(quad, section));
 }
 
 // Keys need a square rear wall, room on it, and room in front of them to drive their screws.
@@ -1802,7 +1922,7 @@ function planPrintedParts(config: Config, profile: Profile, issues: Issues): Pri
     // And where a wall bows, on through all of that as well.
     const lip = seam && seam.lip > 0 ? seam.lip + Math.max(...skins) / 2 + Math.max(e.bow.front, e.bow.rear) : 0;
     // A tongue ends in a point, as far on again as it is thick each side of the middle.
-    const tongue = seam && seam.tongue > 0 ? seam.tongue + seamTongueHalf(Math.min(...skins)) : 0;
+    const tongue = seam && seam.tongue > 0 ? seam.tongue + seamTongueHalf(Math.min(...skins) + seam.band) : 0;
     // And a key's tab reaches past it, on the rear wall.
     const keys = seam?.keys ? KEY_TAB_END : 0;
     const pins = seam ? Math.max(seam.ribHalfThickness - PIN_ALLOWANCE, lip, tongue, keys) : 0;
@@ -1860,7 +1980,7 @@ function planFlats(config: Config, parts: Record<string, Part>, profile: Profile
       return fail(`is too near a wall. Its flat let into "${curve}" needs ${mm(side)} to the sides and ${mm(e.wall + minWeb + t)} to the front and rear.`);
     }
     for (const seam of config.seams) {
-      const needs = Math.max(seam.lip, seam.tongue, seam.ribHalfThickness) + t + minWeb;
+      const needs = Math.max(seam.lip, seam.tongue, seam.ribHalfThickness, ...bandReach(seam, seamSkin(config, profile.surfaces, seam.band))) + t + minWeb;
       if (flat.uLow - t < seam.x + needs && flat.uHigh + t > seam.x - needs) return fail(`is too near the seam at x = ${mm(seam.x)}. Its flat let into "${curve}" has to stay ${mm(needs + t)} from it.`);
     }
     const other = flats.find((o) => o.curve === curve && o.uLow - t < flat.uHigh + t + minWeb && o.uHigh + t > flat.uLow - t - minWeb && o.vLow < flat.vHigh + minWeb && o.vHigh > flat.vLow - minWeb);
@@ -2942,7 +3062,7 @@ function checkCutoutsOnSurfaces(cutouts: PlacedShape[], config: Config, profile:
   }
 }
 
-function checkCutoutsAgainstSeams(cutouts: PlacedShape[], config: Config, topPieces: TopPiece[], minWeb: number, issues: Issues) {
+function checkCutoutsAgainstSeams(cutouts: PlacedShape[], config: Config, profile: Profile, topPieces: TopPiece[], minWeb: number, issues: Issues) {
   const opening = config.opening;
   for (const { cutout, shape, surface, index } of cutouts) {
     const [hu, hv] = halfExtents(shape);
@@ -2967,6 +3087,10 @@ function checkCutoutsAgainstSeams(cutouts: PlacedShape[], config: Config, topPie
           issues.error("CUTOUT_CROSSES_SEAM", `"${id}" has a cutout crossing the seam at x = ${mm(seam.x)}. Move it at least ${mm(seam.ribHalfThickness + minWeb - distance)} sideways.`, path, [id]);
         } else if (distance < seam.ribHalfThickness + minWeb) {
           issues.error("CUTOUT_HITS_RIB", `"${id}" has a cutout ${mm(distance)} from the seam, which cuts into or crowds its rib. It needs ${mm(seam.ribHalfThickness + minWeb)}.`, path, [id]);
+        } else if (seam.tongue > 0 && seam.band > 0) {
+          // A band under the skin would close the hole from below, wherever it starts.
+          const band = bandReach(seam, seamSkin(config, profile.surfaces, seam.band))[shape.cx < seam.x ? 0 : 1];
+          if (distance < band + minWeb) issues.error("CUTOUT_HITS_RIB", `"${id}" has a cutout ${mm(distance)} from the seam, which cuts into or crowds the band thickening the skin round it. It needs ${mm(band + minWeb)}.`, path, [id]);
         }
       }
     }
@@ -3075,7 +3199,8 @@ function checkBodies(placed: Placed[], config: Config, profile: Profile, seams: 
         break;
       }
     }
-    // Only the tabs on the walls are fixed. Tabs under surfaces already moved out of the way.
+    // Only the tabs on the walls are fixed. Tabs under surfaces already moved out of the way, and a
+    // band starts behind what's in its way.
     for (const seam of seams) {
       const reachX = seam.ribHalfThickness + seam.ribWidth;
       if (Math.abs(shape.cx - seam.x) - hu >= reachX) continue;

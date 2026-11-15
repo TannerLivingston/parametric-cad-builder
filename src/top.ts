@@ -65,6 +65,8 @@ export interface TopObstacles {
   opening?: { xMin: number; xMax: number; yEnd: number } | null;
   blockedBoxes: { xLow: number; xHigh: number; yLow: number; yHigh: number; zTop: number }[];
   seamTabs: { xLow: number; xHigh: number; section: Point2[] }[];
+  // A seam's band, which a tab can join, but not where its screw goes, or the screwdriver for it.
+  seamBands?: { xLow: number; xHigh: number; section: Point2[] }[];
   minWeb: number;
   partClearance: number;
   // A screw is driven up from below with the plate off, through the open base between any bottom
@@ -158,6 +160,10 @@ export function topScrewProblem(
   for (const body of obstacles.seamTabs) {
     if (Math.max(body.xLow - xHigh, xLow - body.xHigh) < obstacles.partClearance && polygonsOverlap(body.section, column)) return "a seam tab is in the way";
   }
+  const hole: Point2[] = [[screw.y - POST_RADIUS, tab.zLow], [screw.y + POST_RADIUS, tab.zLow], [screw.y + POST_RADIUS, zTop], [screw.y - POST_RADIUS, zTop]];
+  for (const band of obstacles.seamBands ?? []) {
+    if (Math.max(band.xLow - screw.x - POST_RADIUS, screw.x - POST_RADIUS - band.xHigh) < obstacles.partClearance && polygonsOverlap(band.section, hole)) return "the band round a seam is in the way of its screw";
+  }
   for (const part of obstacles.floorParts) {
     const [hx, hy] = halfExtents(part);
     const dx = Math.max(part.cx - hx - xHigh, xLow - (part.cx + hx));
@@ -196,6 +202,7 @@ function driverProblem(obstacles: TopObstacles, screw: Pick<TopScrew, "x" | "y">
   const inPath = (body: { xLow: number; xHigh: number; section: Point2[] }) => body.xLow < x + d && body.xHigh > x - d && polygonsOverlap(body.section, path);
   if (obstacles.bodies.some(inPath)) return "the body of a part would block its screwdriver";
   if (obstacles.seamTabs.some(inPath)) return "a seam tab would block its screwdriver";
+  if ((obstacles.seamBands ?? []).some(inPath)) return "the band round a seam would block its screwdriver";
   for (const block of obstacles.railBlocks ?? []) {
     if (block.xLow < x + d && block.xHigh > x - d && block.yLow < y + d && block.yHigh > y - d) return "a screw block for the rail would block its screwdriver";
   }

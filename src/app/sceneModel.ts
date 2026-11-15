@@ -377,10 +377,12 @@ export function fieldSpot(path: string, config: RawConfig, model: SceneModel): I
     const own = model.surfaces.filter((s) => s.id === id || s.curveOf === id).at(-1);
     return own ? { min: [0, own.y1 - 1, own.z1 - 1], max: [width, own.y1 + 1, own.z1 + 1] } : null;
   }
-  const lip = at(/^seams\[(\d+)\]\.(?:lip|tongue)$/);
+  const lip = at(/^seams\[(\d+)\]\.(?:lip|tongue|band)$/);
   if (lip !== null) {
     const seam = config.seams?.[lip];
     if (!seam) return null;
+    // A band reaches either side of the seam: roughly, since its right end depends on the tongue.
+    if (path.endsWith("band")) return { min: [seam.x - 1.5 - Number(seam.band ?? 0), 0, 0], max: [seam.x + Number(seam.tongue ?? 0) + 3 + Number(seam.band ?? 0), depth, top] };
     const reach = path.endsWith("tongue") ? seam.tongue : seam.lip;
     return { min: [seam.x, 0, 0], max: [seam.x + Math.max(Number(reach ?? 0), 1), depth, top] };
   }
