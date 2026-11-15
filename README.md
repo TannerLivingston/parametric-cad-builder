@@ -912,8 +912,8 @@ Both are in the Shape tab: **Curve** on each surface, and a bow for each wall un
 ## Limits for now
 
 - Seams run straight across the width.
-- A curved surface is short flats, not a true arc, and carries parts and their labels but no other lettering. A bowed wall is solid, with a square
-  inside, and a side wall can only bow on a shell in one piece.
+- A curved surface's outside is a true arc, but the inside under it follows short flats, within 0.05 mm. Parts and lettering
+  on a curve sit on flats let into it. A side wall can only bow on a shell in one piece.
 - Rotation in quarter turns only.
 - A top edge fillet only on a single surface.
 - Bodies are single boxes or cylinders, and rounded corners count as square. Both err towards reporting less room.
