@@ -458,7 +458,11 @@ export function findLayerGaps(welded: Welded, report: Pick<OrientationReport, "m
         continue;
       }
       const cut: number[] = [];
-      for (const [p, q] of [[i, j], [j, k], [k, i]] as const) {
+      // Each edge is cut from its lower-numbered end, so the two triangles that share it get the very
+      // same point. Cut from opposite ends, they could land a hair either side of a row's centre, and
+      // both count it, which fills the row wrongly to the next crossing: a strip that looks to start in
+      // mid-air where there's nothing at all.
+      for (const [p, q] of [[Math.min(i, j), Math.max(i, j)], [Math.min(j, k), Math.max(j, k)], [Math.min(k, i), Math.max(k, i)]] as const) {
         const dp = pz[p]! - z;
         const dq = pz[q]! - z;
         if (dp < 0 !== dq < 0) {
