@@ -6,7 +6,7 @@ export { describeEstimate, orientationsFor, planPrint, printGuide, totalEstimate
 export type { LayerGap, Matrix, Orientation, OrientationReport, OverhangPatch, PartPrintReport, PrintEstimate } from "./printing.js";
 export { writeZip } from "./zip.js";
 export { fitStepSize, fitTestPieces, planFitTest } from "./fitTest.js";
-export type { FitRow, FitSetting, FitStep, FitTestPlan, FitWallHole, FitWallSection } from "./fitTest.js";
+export type { FitRow, FitSeamCoupon, FitSetting, FitStep, FitTestPlan, FitWallHole, FitWallSection } from "./fitTest.js";
 export { buildFitTest, buildWallSection } from "./fitTestBuild.js";
 export type { FitTestPart } from "./fitTestBuild.js";
 export type { BuiltPart, Enclosure } from "./engine.js";

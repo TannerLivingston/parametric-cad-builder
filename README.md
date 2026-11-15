@@ -829,7 +829,7 @@ its size. Each row says what to try, and picking the size that fits writes it in
 ```
 
 `insertHole` is for holes that print upright: top posts, seam inserts, and the bosses of a shell with no seam.
-`insertHoleSideways` is for the bosses and rail blocks of a seamed shell, which lie down as it prints. `partHoles` adds to every
+`insertHoleSideways` is for the bosses and rail blocks of a seamed shell, and a seam's keys, which lie down as it prints. `partHoles` adds to every
 hole of that part, including the hole for a board's connector, and the validator's checks use the result. The plate's row sets
 `plate.clearance`. A seamed design also gets a row of sockets and a loose pin, which set `pinSocket`.
 
@@ -845,9 +845,17 @@ To try a part the design doesn't use, so it's ready for later, list it. Its row 
 The **Wall section** is a corner of the real shell, cut from it and printed the same way up, to see how its walls and rounds come
 out. There's nothing to pick from it. It's made from the shell as it stands, so it's exported with the rest of the fit test.
 
-A seamed design also gets the **Seam joint**: a slice from each half around one tab, with its pin, socket, insert hole and bolt
-hole, printed the same way up. Bolting the two together shows whether the real joint comes together. On the Desk Synth they take about
+A seamed design also gets the **Seam joint**: a slice from each half around one tab, with its pin, socket, insert hole, bolt
+hole and any tongue, printed the same way up. Bolting the two together shows whether the real joint comes together. On the Desk Synth they take about
 30 minutes and 5 g each in ElegooSlicer.
+
+A seam with a `tongue` or `keys` also gets the **Seam coupon**: a short length of skin either side of it, about 20 mm each way,
+cut from the real pieces and printed seam up as they are, so it needs no support. With keys it's the rear wall round the lowest
+key, with its tab, the 0.2 mm gap, the insert hole and the screw hole, and the tongue and groove in the wall if there's a tongue.
+With only a tongue, the walls are all rib, so it's the longest stretch of the top between the seam's tabs. Under top panels there's
+none, and the seam joint has the tongue. It's a few minutes and a few grams each, so it's the one to try the joint with first.
+Keys need an M3 x 8 screw for it, and add the row for inserts lying down, since theirs lies down as the shell prints. The gaps
+round a tongue and a key have no setting yet.
 
 A row's sizes stay put when you pick one, so a print you've already made can still be read. To test further than a row goes,
 set a value past it in the config, and the row moves to centre on that.

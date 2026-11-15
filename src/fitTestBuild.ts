@@ -4,7 +4,7 @@
 import { compoundShapes, draw, drawRectangle, drawRoundedRectangle, makeCylinder, measureVolume, Plane, type Shape3D } from "replicad";
 import { boxSolid, cutoutTool, holderSolid, placedOnBed, plateScrewHole, withPosts } from "./engine.js";
 import { holderBlocks } from "./fixtures.js";
-import { FIT_HOLE_PAD, KNOB_FIT_DEPTH, FIT_MARGIN, FIT_PIN_NAME, FIT_PIP_BAND, FIT_PLUG_NAME, FIT_SEAM_NAMES, FIT_SECTION_NAME, fitTestPieceName, FIT_PLUG_DEPTH, FIT_PLUG_WIDTH, FIT_WALL_DEPTH, FIT_WALL_FRONT, FIT_WALL_HEIGHT, partHoleBounds, type FitRow, type FitTestPlan, type FitWallSection } from "./fitTest.js";
+import { FIT_HOLE_PAD, KNOB_FIT_DEPTH, FIT_MARGIN, FIT_PIN_NAME, FIT_PIP_BAND, FIT_PLUG_NAME, FIT_SEAM_NAMES, FIT_SEAM_COUPON_NAMES, FIT_SECTION_NAME, fitTestPieceName, FIT_PLUG_DEPTH, FIT_PLUG_WIDTH, FIT_WALL_DEPTH, FIT_WALL_FRONT, FIT_WALL_HEIGHT, partHoleBounds, type FitRow, type FitTestPlan, type FitWallSection } from "./fitTest.js";
 import { BOSS_DIAMETER, INSERT_HOLE_DEPTH, SHORT_BOSS_HEIGHT } from "./plate.js";
 import type { Surface } from "./profile.js";
 import type { FloorPart, PanelPart } from "./schema.js";
@@ -196,6 +196,7 @@ export function buildFitTest(plan: FitTestPlan, designParts?: Shape3D[]): FitTes
   if (designParts) {
     if (plan.wallSection) parts.push({ name: FIT_SECTION_NAME, shape: buildWallSection(plan.wallSection, designParts[plan.wallSection.part]!) });
     plan.seamJoint?.forEach((section, i) => parts.push({ name: FIT_SEAM_NAMES[i]!, shape: buildWallSection(section, designParts[section.part]!) }));
+    plan.seamCoupon?.sections.forEach((section, i) => parts.push({ name: FIT_SEAM_COUPON_NAMES[i]!, shape: buildWallSection(section, designParts[section.part]!) }));
   }
   return parts;
 }

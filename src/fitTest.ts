@@ -9,9 +9,10 @@ import { BARB_REACH, CLIP_GAP, CLIP_THICKNESS } from "./fixtures.js";
 import { library } from "./library.js";
 import { BOSS_DIAMETER, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PIN_SOCKET_DIAMETER, SCREW_CLEARANCE_DIAMETER } from "./plate.js";
 import { orientationsFor, type Matrix } from "./printing.js";
-import { findSurface, tabSection } from "./profile.js";
+import { chainHeight, findSurface, tabSection } from "./profile.js";
 import type { FloorPart, PanelPart, WallPart } from "./schema.js";
-import type { BuildPlan } from "./validate.js";
+import { KEY_GAP, KEY_HEIGHT, KEY_THICKNESS, rearInside } from "./seamKeys.js";
+import type { BuildPlan, PlannedSeam } from "./validate.js";
 
 export type FitSetting = "insertHole" | "insertHoleSideways" | "screwHole" | "clipGap" | "pinSocket" | "plateClearance" | "partHoles" | "wallHole" | "knobHole";
 export type FitRowKind = "insert" | "insertSideways" | "screw" | "plate" | "seamPin" | "clip" | "part" | "wallHole" | "knob";
@@ -64,6 +65,15 @@ export interface FitWallSection {
   wall: number;
 }
 
+// A short length of skin either side of a seam, with one of its keys if it has them, and its tongue
+// and groove if it has those: a quicker print than the seam joint, for trying them.
+export interface FitSeamCoupon {
+  sections: [FitWallSection, FitWallSection];
+  on: "rear wall" | "top";
+  key: boolean;
+  tongue: boolean;
+}
+
 export interface FitTestPlan {
   rows: FitRow[];
   coupons: number;
@@ -71,6 +81,7 @@ export interface FitTestPlan {
   pin: { diameter: number; length: number; width: number; thickness: number } | null;
   wallSection: FitWallSection | null;
   seamJoint: [FitWallSection, FitWallSection] | null; // both sides of one tab, to bolt together
+  seamCoupon: FitSeamCoupon | null;
   floorThickness: number;
   panelThickness: number;
   hardware: string[];
@@ -118,6 +129,7 @@ export const FIT_PLUG_NAME = "Fit test plug";
 export const FIT_PIN_NAME = "Fit test pin";
 export const FIT_SECTION_NAME = "Wall section";
 export const FIT_SEAM_NAMES = ["Seam joint, left", "Seam joint, right"] as const;
+export const FIT_SEAM_COUPON_NAMES = ["Seam coupon, left", "Seam coupon, right"] as const;
 export const fitTestPieceName = (plan: Pick<FitTestPlan, "coupons">, coupon: number) => (plan.coupons > 1 ? `Fit test ${coupon + 1}` : "Fit test");
 
 // In the order they're built and exported.
@@ -128,6 +140,7 @@ export function fitTestPieces(plan: FitTestPlan): string[] {
     ...(plan.pin ? [FIT_PIN_NAME] : []),
     ...(plan.wallSection ? [FIT_SECTION_NAME] : []),
     ...(plan.seamJoint ? FIT_SEAM_NAMES : []),
+    ...(plan.seamCoupon ? FIT_SEAM_COUPON_NAMES : []),
   ];
 }
 
@@ -169,6 +182,9 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
   const shellInserts = plan.plate !== null && plan.plate.screws.length > 0;
   const seamed = plan.seams.length > 0;
   const onSide = plan.shellOnSide;
+  // A seam's keys have an insert lying down, whatever else the shell has.
+  const keyed = plan.seams.some((seam) => seam.rearKeys.length > 0);
+  const sidewaysInserts = (shellInserts && onSide) || keyed;
   const uprightInserts = plan.topScrews.length > 0 || seamed || (shellInserts && !onSide);
   const screws = plan.topScrews.length > 0 || seamed || shellInserts || config.opening?.rail !== undefined;
 
@@ -189,11 +205,11 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
       part: null,
     });
   }
-  if (shellInserts && onSide) {
+  if (sidewaysInserts) {
     drafts.push({
       kind: "insertSideways",
       title: "Insert holes, printed lying down",
-      how: "These are for the shell, which prints on its side. Press in an insert the same way. Pick the smallest hole it goes into straight and flush.",
+      how: `These are for the ${shellInserts && onSide ? "shell, which prints on its side" : "seam's keys, which lie down as the shell prints"}. Press in an insert the same way. Pick the smallest hole it goes into straight and flush.`,
       setting: "insertHoleSideways",
       parts: [],
       current: fit.insertHoleSideways,
@@ -425,8 +441,9 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
   });
 
   const hardware = [
-    ...(uprightInserts || (shellInserts && onSide) ? ["M3 brass heat-set inserts, and a soldering iron with an insert tip"] : []),
+    ...(uprightInserts || sidewaysInserts ? ["M3 brass heat-set inserts, and a soldering iron with an insert tip"] : []),
     ...(screws ? ["An M3 flat-head screw"] : []),
+    ...(keyed ? ["An M3 x 8 screw, for the seam's key"] : []),
     ...[...used, ...testOnly].map(({ part }) => part).filter((part, i, all) => all.indexOf(part) === i && drafts.some((d) => d.part === part)).map((part) => `One ${part.name}`),
   ];
   return {
@@ -436,6 +453,7 @@ export function planFitTest(plan: BuildPlan): FitTestPlan {
     pin: seamed ? { diameter: PIN_DIAMETER, length: plan.seams[0]!.pinLength, width: FIT_PIN_TAB, thickness: floorThickness } : null,
     wallSection: rows.length ? planWallSection(plan) : null,
     seamJoint: planSeamJoint(plan),
+    seamCoupon: planSeamCoupon(plan),
     floorThickness,
     panelThickness,
     hardware,
@@ -473,9 +491,85 @@ function planSeamJoint(plan: BuildPlan): [FitWallSection, FitWallSection] | null
   const onRear = !tab.surface && tab.inward[0] < 0;
   const y: [number, number] = [Math.min(...ys) - (onFront ? wall + 1 : SECTION_PAD), Math.max(...ys) + (onRear ? wall + 1 : SECTION_PAD)];
   const z: [number, number] = [Math.min(...zs) - SECTION_PAD, Math.max(...zs) + SECTION_PAD + (tab.surface ? panelThickness : 0)];
-  const planned = (part: number) => orientationsFor(plan, plan.printedParts[part]!).find((option) => option.planned)!.matrix;
+  // Nothing of the left half's is past the seam but what joins it, so it takes all of that, a tongue included.
   return [
-    { part: 0, x: [seam.x - SECTION_REACH, seam.x + seam.pinLength + 1], y, z, matrix: planned(0), wall },
-    { part: 1, x: [seam.x - 1, seam.x + SECTION_REACH], y, z, matrix: planned(1), wall },
+    { part: 0, x: [seam.x - SECTION_REACH, seam.x + seamReach(seam)], y, z, matrix: plannedMatrix(plan, 0), wall },
+    { part: 1, x: [seam.x - 1, seam.x + SECTION_REACH], y, z, matrix: plannedMatrix(plan, 1), wall },
   ];
+}
+
+const plannedMatrix = (plan: BuildPlan, part: number) => orientationsFor(plan, plan.printedParts[part]!).find((option) => option.planned)!.matrix;
+
+// How far a slice reaches either side of a seam: past the room kept clear round it, which is what
+// the joint can take up.
+const seamReach = (seam: PlannedSeam) => Math.max(SECTION_REACH, seam.ribHalfThickness + seam.ribWidth + SECTION_PAD);
+
+const COUPON_LENGTH = KEY_HEIGHT + 2 * SECTION_PAD; // along the wall or top, at most
+const COUPON_SHORTEST = 10; // of plain top, below which a slice tells little
+const SAMPLE = 0.5;
+
+// A short length of skin either side of the first seam with a tongue or keys, cut from the real
+// pieces. Round its lowest key, on the rear wall, if it has them. Otherwise the tongue's on its own,
+// and the walls are all rib, so it's the longest stretch of the top between its tabs.
+function planSeamCoupon(plan: BuildPlan): FitSeamCoupon | null {
+  const index = plan.seams.findIndex((seam) => seam.tongue > 0 || seam.rearKeys.length > 0);
+  const seam = plan.seams[index];
+  if (!seam) return null;
+  const { depth, cavity, inner, maxHeight } = plan.profile;
+  const key = seam.rearKeys[0];
+  let y: [number, number];
+  let z: [number, number];
+  if (key) {
+    z = [key.z - COUPON_LENGTH / 2, key.z + COUPON_LENGTH / 2];
+    // As far forward as the inside of the wall comes, or the front of the key's tab and its gap.
+    const insides: number[] = [];
+    for (let h = Math.max(z[0], 0); h <= z[1]; h += SAMPLE) {
+      const inside = rearInside(cavity, h);
+      if (inside !== null) insides.push(inside);
+    }
+    y = [Math.min(...insides, key.face - KEY_GAP - KEY_THICKNESS - KEY_GAP) - SECTION_PAD, depth + 1];
+  } else {
+    const stretch = plainTop(plan, seam);
+    if (!stretch) return null;
+    y = stretch;
+    let lowest = Infinity;
+    for (let at = y[0]; at <= y[1] + 1e-9; at += SAMPLE) lowest = Math.min(lowest, chainHeight(inner, at));
+    z = [lowest - SECTION_PAD, maxHeight + 1];
+  }
+  const reach = seamReach(seam);
+  const { wall } = plan.config.enclosure;
+  return {
+    sections: [
+      { part: index, x: [seam.x - reach, seam.x + reach], y, z, matrix: plannedMatrix(plan, index), wall },
+      { part: index + 1, x: [seam.x - 1, seam.x + reach], y, z, matrix: plannedMatrix(plan, index + 1), wall },
+    ],
+    on: key ? "rear wall" : "top",
+    key: Boolean(key),
+    tongue: seam.tongue > 0,
+  };
+}
+
+// The longest stretch of the shell's own top, front to back, clear of the seam's tabs with room
+// round them, as long as a coupon at most and centred in it. Not where a top panel is, because the
+// tongue doesn't go there.
+function plainTop(plan: BuildPlan, seam: PlannedSeam): [number, number] | null {
+  const { depth, surfaces } = plan.profile;
+  const capped = surfaces.filter((surface) => plan.config.topPanels.some((panel) => panel.surface === surface.id));
+  const blocked: [number, number][] = [
+    ...seam.tabs.map((tab): [number, number] => {
+      const ys = tabSection(tab).map(([y]) => y);
+      return [Math.min(...ys) - SECTION_PAD, Math.max(...ys) + SECTION_PAD];
+    }),
+    ...capped.map((surface): [number, number] => [Math.min(surface.y0, surface.y1) - SECTION_PAD, Math.max(surface.y0, surface.y1) + SECTION_PAD]),
+  ].sort((a, b) => a[0] - b[0]);
+  let best: [number, number] | null = null;
+  let from = 0;
+  for (const [low, high] of [...blocked, [depth, depth] as [number, number]]) {
+    if (low - from > (best ? best[1] - best[0] : 0)) best = [from, low];
+    from = Math.max(from, high);
+  }
+  if (!best || best[1] - best[0] < COUPON_SHORTEST) return null;
+  const middle = (best[0] + best[1]) / 2;
+  const half = Math.min(best[1] - best[0], COUPON_LENGTH) / 2;
+  return [middle - half, middle + half];
 }
