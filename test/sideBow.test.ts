@@ -14,8 +14,7 @@ import { WALLS_PATH } from "../src/app/pickThing.js";
 import { buildSceneModel, fieldSpot } from "../src/app/sceneModel.js";
 
 // The bowed wall test's deck and panel, narrow enough for one piece, with both side walls bowed and
-// the top in panels, as an upright shell wants. Square corners, since an upright shell's plate bosses
-// leave a sliver in mid-air in a rounded one, bowed or not.
+// the top in panels, as an upright shell wants. Square corners here; rounded ones are tried below.
 const sided = (more: Record<string, unknown> = {}, bow: Record<string, number> = { left: 10, right: 6 }): any => ({
   schemaVersion: 1,
   name: "sided",

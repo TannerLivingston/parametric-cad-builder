@@ -457,6 +457,33 @@ function underBoss(plan: BuildPlan, x: number, y: number, lift: number): Shape3D
   return tools.reduce((all, tool) => all.intersect(tool));
 }
 
+// A boss's slope crosses its insert hole, and on the hole's far side the two would meet in a curve
+// that levels off at the top, where the boss would close over the hole in mid-air. So that side of
+// the hole comes to a point, which the slope closes over a little at a time, up to just past where
+// the slope passes the point, so the insert still has a round hole above. In a corner, the slopes
+// from two walls meet over the hole in a ridge, which needs nothing. It's null for a boss with a
+// flat underside, or on a shell printing on its side, whose holes all have points already.
+function holeTip(plan: BuildPlan, x: number, y: number, lift: number, diameter: number): Shape3D | null {
+  if (lift === 0 || plan.shellOnSide) return null;
+  const feet = bossFeet(plateInput(plan.config, plan.profile), x, y);
+  if (feet.length !== 1) return null;
+  const { axis, at, inward } = feet[0]!;
+  const r = diameter / 2;
+  const c = r * Math.SQRT1_2;
+  // A wide hole's point would break through the boss, so it's cut off short of that.
+  const apex = Math.min(r * Math.SQRT2, BOSS_DIAMETER / 2 - 0.8);
+  const half = r * Math.SQRT2 - apex;
+  // Out from the middle along the slope, and across it.
+  const local: Point2[] = half > 0.05 ? [[c, c], [apex, half], [apex, -half], [c, -c]] : [[c, c], [apex, 0], [c, -c]];
+  const [first, ...rest] = local.map(([along, across]): Point2 => (axis === "x" ? [x + inward * along, y + across] : [x + across, y + inward * along]));
+  let pen = draw(first!);
+  for (const point of rest) pen = pen.lineTo(point);
+  const z0 = plan.config.enclosure.floorThickness;
+  const under = Math.max(inward * ((axis === "x" ? x : y) - at), 0);
+  const top = z0 + under + apex + 0.2;
+  return pen.close().sketchOnPlane("XY", z0 - 1).extrude(top - (z0 - 1)) as Shape3D;
+}
+
 // Behind a bowed wall, the inside follows its curve, so the wall is as thick as the others rather
 // than solid out to it. Everything in the enclosure is still placed against the square inside, so
 // the hollow is only the band between that and the curve. A band along the bottom stays, so it's
@@ -594,7 +621,13 @@ function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
     });
     if (columns.length) shell = shell.fuse(envelope.intersect(compoundShapes(columns) as Shape3D));
     const holes = compoundShapes(
-      plan.plate.screws.map(([x, y], i) => shellHole(plan, x, y, shellInsertDiameter(plan), INSERT_HOLE_DEPTH + 1 + plan.plate!.lifts[i]!, floorTop - 1)),
+      plan.plate.screws.map(([x, y], i) => {
+        const lift = plan.plate!.lifts[i]!;
+        const hole = shellHole(plan, x, y, shellInsertDiameter(plan), INSERT_HOLE_DEPTH + 1 + lift, floorTop - 1);
+        const tip = holeTip(plan, x, y, lift, shellInsertDiameter(plan));
+        // One solid each, since overlapping ones in a compound don't cut.
+        return tip ? hole.fuse(tip) : hole;
+      }),
     );
     shell = shell.cut(holes as Shape3D);
   }
