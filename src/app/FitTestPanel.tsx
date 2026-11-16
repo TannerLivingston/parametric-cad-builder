@@ -114,6 +114,17 @@ export function FitTestPanel({ config, plan, showing, onShow, onExport, onChange
           <p className="hint">Slices of the real seam, one from each half, printed the same way up. Press in the insert, bolt them together with the real bolt, and see that they line up flush and the driver reaches. If the pin is the trouble, the row above sets its socket.</p>
         </div>
       ) : null}
+      {test.seamCoupon ? (
+        <div className="fit-row">
+          <h3>Seam coupon</h3>
+          <p className="hint">
+            A short length of the real {test.seamCoupon.on} either side of the seam, one from each piece, printed seam up as the shell is. It's quicker than the seam joint, so start with it.
+            {test.seamCoupon.tongue ? " Push them together: the tongue should slide into its groove by hand, with the faces flush and no rocking." : ""}
+            {test.seamCoupon.key ? " Press the insert into the block, slip the tab in front of it, and drive the M3 x 8 screw through the tab from the front. The tab should go in without forcing and not rattle. If the insert or the screw is the trouble, the rows above set their holes." : ""}
+            {" "}The gaps round the {[test.seamCoupon.tongue ? "tongue" : "", test.seamCoupon.key ? "key" : ""].filter(Boolean).join(" and ")} have no setting yet, so this shows whether they need one.
+          </p>
+        </div>
+      ) : null}
       <p className="hint">Not covered yet: pins on the plate, and the holes in a board's standoffs.</p>
     </section>
   );

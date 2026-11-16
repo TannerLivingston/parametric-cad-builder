@@ -26,6 +26,8 @@ Nothing open here for now: everything on it so far is in the done list below.
 
 ## Done
 
+- [x] **A seam coupon in the fit test,** for a seam with a tongue or keys: a short length of the real rear wall round a key, or of
+  the top for a tongue on its own, from both pieces, printed seam up without support. Not yet sliced or printed.
 - [x] **Bowed side walls,** on a shell in one piece, which prints upright. A split shell's end pieces print standing on them,
   so a seam and a bowed side are refused together, saying why. Hollow like the front and rear, with square-ended solid
   stretches at the screws, since it stands upright. Not yet sliced or printed.
