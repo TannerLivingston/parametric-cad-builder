@@ -553,7 +553,10 @@ describe("estimating a print", () => {
   };
 
   it("comes close to the slicer for the Desk Synth as a whole, and on filament for each part", () => {
-    const { reports } = parts(deskSynth());
+    // As it was sliced, before it had the real perfboard's edge lips.
+    const config = deskSynth();
+    delete config.components.find((part: any) => part.id === "mainboard").lips;
+    const { reports } = parts(config);
     expect(reports.map((r) => r.name).sort()).toEqual(Object.keys(SLICED).sort());
     const total = totalEstimate(reports);
     expect(Math.abs(total.grams - 435.4) / 435.4).toBeLessThan(0.05);

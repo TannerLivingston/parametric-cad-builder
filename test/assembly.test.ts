@@ -55,7 +55,7 @@ describe("planning the assembly", () => {
   it("plans a plate's height to include its pins", () => {
     const height = (name: string) => printedParts.find((p) => p.name === name)!.size[2];
     expect(height("Plate 1")).toBeCloseTo(13.15); // the board's clips
-    expect(height("Plate 2")).toBeCloseTo(9); // the perfboard's standoffs, taller than the tray's pins
+    expect(height("Plate 2")).toBeCloseTo(11.6); // the perfboard's right edge lip, taller than its standoffs and the tray's pins
   });
 
   it("holds every top piece with at least two screws", () => {

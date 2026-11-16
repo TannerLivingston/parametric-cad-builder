@@ -37,6 +37,9 @@ function v2Plate() {
   const config = deskSynth();
   config.plate = { ...config.plate, seamX: 176, joint: "rib" };
   for (const part of config.components) if (part.type === "ads7830") part.x = 163.85;
+  // The V2 has no lip on the perfboard's right, where the converter boards moved up to it.
+  const mainboard = config.components.find((part: any) => part.id === "mainboard");
+  mainboard.lips.edges = mainboard.lips.edges.filter((edge: any) => edge.side !== "right");
   return config;
 }
 
