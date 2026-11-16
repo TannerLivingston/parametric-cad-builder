@@ -326,6 +326,36 @@ describe("reading a mesh", () => {
       for (let i = 1; i < 12; i++) stair = stair.fuse(box([0, 0, i * 0.4], [10 + i * 0.4, 20, (i + 1) * 0.4]));
       expect(gaps(stair)).toEqual([]);
     });
+
+    // Laid on its left side as the left piece of a 480 wide box split in three is, a slab's outer face
+    // is two triangles whose shared edge crosses a row's centre exactly, at one layer. Each triangle
+    // used to cut that edge from its own end, and land a hair either side of the centre, so the row
+    // was filled from the slab to the block below it: a strip in mid-air where there's nothing.
+    it("doesn't see a strip in mid-air where two triangles meet on a row", () => {
+      const points: number[] = [];
+      const triangles: number[] = [];
+      const cuboid = ([x0, y0, z0]: number[], [x1, y1, z1]: number[]) => {
+        const base = points.length / 3;
+        for (const [x, y, z] of [[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]]) points.push(x!, y!, z!);
+        for (const [a, b, c, d] of [[0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4], [2, 3, 7, 6], [1, 2, 6, 5], [0, 4, 7, 3]]) triangles.push(base + a!, base + b!, base + c!, base + a!, base + c!, base + d!);
+      };
+      cuboid([0, 0, 45], [6, 140, 50]);
+      cuboid([6, 0, 45], [160, 140, 50]);
+      cuboid([0, 0, 3], [20, 10, 11]);
+      const leftDown: Matrix = [0, 0, -1, 0, 1, 0, 1, 0, 0];
+      expect(findLayerGaps({ points: Float64Array.from(points), triangles: Uint32Array.from(triangles) }, { matrix: leftDown })).toEqual([]);
+    });
+
+    it("finds nothing to hold up on any piece of a plain box split in three", () => {
+      const { built, reports } = parts({
+        schemaVersion: 1,
+        name: "three",
+        enclosure: { width: 480, frontHeight: 50, surfaces: [{ id: "top", y: 140, z: 50 }], wall: 5, panelThickness: 5 },
+        seams: [{ x: 160 }, { x: 320 }],
+        components: [],
+      });
+      for (const part of built.printedParts) expect(reports[part.index]!.needsSupport, `${part.name}: ${reports[part.index]!.notes.join(" ")}`).toBe(false);
+    }, 120_000);
   });
 });
 

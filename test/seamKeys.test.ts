@@ -124,13 +124,12 @@ describe("keys on the rear wall, built", () => {
     }
   }, 240_000);
 
-  it("prints a piece between two keyed seams standing on its end, and the right one, without support", async () => {
+  it("prints every piece of a shell split twice, the middle one standing on its end, without support", async () => {
     const three = plan(box({ seams: [{ x: 160, keys: true }, { x: 320, keys: true }] }, { width: 480 }));
     const enclosure = buildEnclosure(three);
     expect(await buildProblems(three, enclosure)).toEqual([]);
     const reports = planPrint(three, enclosure.parts.map((part) => part.shape.mesh({ tolerance: 0.1, angularTolerance: 0.3 })));
-    // The left one has a little that needs support at this width with or without keys, away from them.
-    for (const part of three.printedParts.filter((p) => p.kind === "shell").slice(1)) {
+    for (const part of three.printedParts.filter((p) => p.kind === "shell")) {
       expect(reports[part.index]!.needsSupport, `${part.name}: ${reports[part.index]!.notes.join(" ")}`).toBe(false);
     }
   }, 300_000);
