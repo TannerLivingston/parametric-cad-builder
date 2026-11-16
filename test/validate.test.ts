@@ -14,7 +14,8 @@ describe("the Desk Synth example", () => {
   it("splits its shell into two parts that fit the build volume", () => {
     if (!result.ok) throw new Error("expected valid");
     const [left, right] = result.plan.printedParts;
-    expect(left?.size[0]).toBeCloseTo(189.5);
+    // The left piece carries the rear key's tab, 10 mm past the seam.
+    expect(left?.size[0]).toBeCloseTo(196);
     expect(right?.size[0]).toBeCloseTo(165.4);
   });
 

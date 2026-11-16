@@ -31,6 +31,9 @@ Nothing open here for now: everything on it so far is in the done list below.
 - [x] **Edge lips round a board,** short walls on the plate along chosen edges, a gap from it, standing straight up so they need no
   support. The Desk Synth examples have the real ones round their perfboard, measured from the exported meshes: the V2's long one
   and four short ones, and the V1's two at its ends. Set on the Layout tab. Not yet sliced or printed.
+- [x] **The walls thickened round the seam,** so that a tongue fits in a thin skin, full near it and sloping back at 45 degrees,
+  starting behind whatever's in its way. The Desk Synth example has the real one's tongue and a key on it now, in place of its
+  plain butt joint. Not yet sliced or printed.
 - [x] **Bowed side walls,** on a shell in one piece, which prints upright. A split shell's end pieces print standing on them,
   so a seam and a bowed side are refused together, saying why. Hollow like the front and rear, with square-ended solid
   stretches at the screws, since it stands upright. Not yet sliced or printed.

@@ -13,7 +13,7 @@ import type { BuildPlan, PlacedCutout, PlacedLabel, PlacedNotch, PlacedPost, Pla
 import { LIP_GAP, POST_ROOT_DEPTH, TOOL_OVERSHOOT_ABOVE, TOOL_OVERSHOOT_BELOW } from "./validate.js";
 import { CAP_COLLAR, KNOB_GRIP_COUNT, KNOB_POINTER, type PlannedCap, type PlannedKnob } from "./knob.js";
 import { tabGussetDepth, TONGUE_FIT, TOP_POST_DIAMETER, TOP_TAB_THICKNESS, topTabExtent, type TopJoint, type TopScrew } from "./top.js";
-import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT, seamTongueHalf, TONGUE_GAP } from "./validate.js";
+import { plateInput, plateNotchFor, RAIL_FOOT_MARGIN, RAIL_BLOCK_HEIGHT, seamSkin, seamTongueHalf, TONGUE_GAP } from "./validate.js";
 import { BARB_HEIGHT, BARB_REACH, STANDOFF_HOLE_FLOOR, TIE_BRIDGE, tieExtent, type HolderBlock, type PlannedWallHole } from "./fixtures.js";
 import { BOSS_DIAMETER, bossFeet, bossSlope, shortBossTop, FOOT_RECESS, weightOutline, DRIVER_DIAMETER, COUNTERSINK_DEPTH, COUNTERSINK_DIAMETER, INSERT_HOLE_DEPTH, INSERT_HOLE_DIAMETER, PIN_DIAMETER, PLATE_RIB_BOLT_Z, PLATE_RIB_BOSS, PLATE_RIB_END, PLATE_RIB_FIT, PLATE_RIB_HEIGHT, PLATE_RIB_LEFT, PLATE_RIB_RIGHT, PLATE_RIB_TONGUE, PLATE_RIB_TONGUE_Z, SCREW_CLEARANCE_DIAMETER, SHORT_BOSS_HEIGHT, type PlateRib } from "./plate.js";
 import { flatStart, type CurveFlat } from "./flats.js";
@@ -581,6 +581,10 @@ function shellBlank(plan: BuildPlan, forms: OuterForms): Shape3D {
   let shell = envelope.cut(withFlatsInside(cavity, plan));
   const hollows = bowHollows(plan);
   if (hollows) shell = shell.cut(hollows);
+  // Before anything's cut through the skin, which goes through the band as well.
+  for (const seam of plan.seams) {
+    if (seam.bandSections.length) shell = shell.fuse(envelope.intersect(bandAtSeam(plan, seam)));
+  }
 
   for (const seam of plan.seams) {
     for (const tab of seam.tabs) shell = shell.fuse(envelope.intersect(seamTabSolid(tab, seam)));
@@ -1028,17 +1032,63 @@ function lipAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: Build
   return [left.fuse(lip), right.cut(step)];
 }
 
+// Where a seam's band, tongue and groove go: behind anything in the band's way (see planBand), and
+// above the plate where a wall comes straight down to it, with no round at the bottom to stand on.
+// `grow` keeps a tongue that far inside its groove's ends. Null where there's no band, and they go
+// all the way round.
+function bandZone(plan: BuildPlan, seam: PlannedSeam, grow: number): Shape3D | null {
+  if (!seam.bandSections.length) return null;
+  const e = plan.config.enclosure;
+  const { depth, maxHeight } = plan.profile;
+  const x0 = seam.x - seam.bandReach[0] - 2;
+  const x1 = seam.x + seam.bandReach[1] + 2;
+  const front = seam.bandFrom > 0 ? seam.bandFrom + grow : -2;
+  let zone = makeBox([x0, front, -2], [x1, depth + 2, maxHeight + 2]) as Shape3D;
+  const reach = e.wall + seam.band + 1;
+  const floor = e.floorThickness + grow;
+  if (e.rounds.frontBottom === 0) zone = zone.cut(makeBox([x0 - 1, -3, -3], [x1 + 1, reach, floor]) as Shape3D);
+  if (e.rounds.rearBottom === 0) zone = zone.cut(makeBox([x0 - 1, depth - reach, -3], [x1 + 1, depth + 3, floor]) as Shape3D);
+  return zone;
+}
+
+// A seam's band: the walls, and the skin under the top where there's no top panel, thickened inward
+// round the seam, so that a tongue fits in a thin skin, as on the real Desk Synth. It's full thickness
+// for BAND_FULL either side of the seam, and of the groove on the right, then slopes back to the skin
+// at 45 degrees, so that it never overhangs as a piece prints with its seam up.
+function bandAtSeam(plan: BuildPlan, seam: PlannedSeam): Shape3D {
+  const e = plan.config.enclosure;
+  const capped = (surface: Surface) => plan.config.topPanels.some((panel) => panel.surface === surface.id);
+  // The space inside, with the skin this much thicker, where there's no top panel. Under one, it
+  // reaches a little up into the panel's own space, so that nothing is left there, and no faces meet.
+  const inside = (more: number, x: number) => cavityOutline(plan, e.wall + more, (surface) => surface.thickness + (capped(surface) ? -0.5 : more), x);
+  const band = seam.band;
+  const x0 = seam.x - seam.bandReach[0];
+  const x1 = seam.x + seam.bandReach[1];
+  // From a little into the skin, which it joins.
+  const outer = cavityOutline(plan, e.wall - 0.5, (surface) => surface.thickness - (capped(surface) ? 0 : 0.5), x0).extrude(x1 - x0) as Shape3D;
+  // The slopes start a millimetre outside the skin, so their faces don't meet the skin's.
+  const fullFrom = x0 + band;
+  const fullTo = x1 - band;
+  const space = inside(-1, x0 - 1)
+    .loftWith(inside(band, fullFrom), { ruled: true })
+    .fuse(inside(band, fullFrom).extrude(fullTo - fullFrom) as Shape3D)
+    .fuse(inside(band, fullTo).loftWith(inside(-1, x1 + 1), { ruled: true }));
+  return outer.cut(space).intersect(bandZone(plan, seam, 0)!);
+}
+
 // A seam's tongue: for its length past the seam, the left half keeps the middle third of the skin,
 // all the way round the wall and top, and the right half has a groove for it with a gap each side.
 // Each ends in a point, its sides sloping in at 45 degrees from both faces, so that whichever way a
 // piece prints, the end of a groove is never a flat roof. It's the same thickness all round, a third
-// of the thinnest skin, in the middle of each.
+// of the thinnest skin, in the middle of each. With a band, it's a third of the skin as thickened,
+// in its middle, and only where the band is.
 function tongueAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: BuildPlan): [Shape3D, Shape3D] {
   const e = plan.config.enclosure;
-  const skins = [e.wall, ...plan.profile.surfaces.filter((surface) => !plan.config.topPanels.some((panel) => panel.surface === surface.id)).map((surface) => surface.thickness)];
-  const half = seamTongueHalf(Math.min(...skins));
+  const band = seam.bandSections.length ? seam.band : 0;
+  const half = seamTongueHalf(seamSkin(plan.config, plan.profile.surfaces, band));
+  const capped = (surface: Surface) => plan.config.topPanels.some((panel) => panel.surface === surface.id);
   // The outline of what's deeper into the skin than its middle and `more`, at x.
-  const outline = (more: number, x: number) => cavityOutline(plan, e.wall / 2 + more, (surface) => surface.thickness / 2 + more, x);
+  const outline = (more: number, x: number) => cavityOutline(plan, (e.wall + band) / 2 + more, (surface) => (surface.thickness + (capped(surface) ? 0 : band)) / 2 + more, x);
   // The middle of the skin, `more` either side of it, from `from` to `to` and then to a point.
   const layer = (more: number, from: number, to: number) => {
     const straight = outline(-more, from).extrude(to - from).cut(outline(more, from - 1).extrude(to - from + 2)) as Shape3D;
@@ -1047,9 +1097,15 @@ function tongueAtSeam(left: Shape3D, right: Shape3D, seam: PlannedSeam, plan: Bu
     const inner = outline(more, to).loftWith(outline(0, to + more), { ruled: true });
     return straight.fuse(outer.cut(inner));
   };
-  const tongue = right.intersect(layer(half, seam.x, seam.x + seam.tongue));
+  let tongue = right.intersect(layer(half, seam.x, seam.x + seam.tongue));
   // The groove is the gap bigger all round, its point too.
-  const groove = layer(half + TONGUE_GAP, seam.x - 1, seam.x + seam.tongue);
+  let groove = layer(half + TONGUE_GAP, seam.x - 1, seam.x + seam.tongue);
+  // Where the band stops, so do they, the tongue clear of the groove's end.
+  const zone = bandZone(plan, seam, 0);
+  if (zone) {
+    tongue = tongue.intersect(bandZone(plan, seam, TONGUE_GAP)!);
+    groove = groove.intersect(zone);
+  }
   return [left.fuse(tongue), right.cut(groove)];
 }
 

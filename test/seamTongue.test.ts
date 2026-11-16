@@ -49,7 +49,7 @@ describe("a seam's tongue, planned", () => {
     expect(tongueErrors(box(2.5, { seams: [{ x: 150, tongue: 2.5, lip: 2 }] }))).toContain("not both");
     const thin = box(2.5);
     thin.enclosure = { ...thin.enclosure, wall: 3, panelThickness: 3 };
-    expect(tongueErrors(thin)).toContain("Make the walls and panel at least");
+    expect(tongueErrors(thin)).toContain("make the walls and panel at least");
     expect(tongueErrors(box(2.5, { enclosure: { ...box(0).enclosure, bow: { front: 4 } } }))).toContain("bowed");
     expect(tongueErrors(box(2.5))).toBe("");
   });

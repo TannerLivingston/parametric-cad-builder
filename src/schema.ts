@@ -255,6 +255,8 @@ export const openingSchema = z.strictObject({
 // `tongue` is the other way to line them up, as the real Desk Synth's seam does: the middle third of
 // the skin reaches this far past the seam from the left half, into a groove in the right one. It
 // needs a thicker skin than a lip, and the two can't both be had.
+// `band` thickens the skin inward by this much round the seam, so that a tongue fits a thin one,
+// as the real Desk Synth's shell is thickened there. It slopes back to the skin at 45 degrees.
 // `keys` swaps the bolted rib on the rear wall for the real Desk Synth's keys: tabs from the left
 // half lying over blocks on the right half's rear wall, each held by a screw from the front.
 export const seamSchema = z.strictObject({
@@ -263,6 +265,7 @@ export const seamSchema = z.strictObject({
   ribHalfThickness: length.default(5),
   lip: z.number().nonnegative().default(0),
   tongue: z.number().nonnegative().default(0),
+  band: z.number().nonnegative().default(0),
   keys: z.boolean().default(false),
 });
 

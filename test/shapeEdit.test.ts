@@ -31,6 +31,7 @@ import {
   setRound,
   setSeam,
   setTopPanel,
+  updateSeam,
   shapeValues,
   updateCustomPart,
   updateEnclosure,
@@ -550,6 +551,7 @@ function deskSynthFromTheForm() {
   config = setTopPanel(config, "deck", { color: "#1b1c1f" });
   config = setTopPanel(config, "panel", { color: "#1b1c1f", splits: [214] });
   config = setSeam(config, real.seams[0].x);
+  config = updateSeam(config, 0, { tongue: real.seams[0].tongue, band: real.seams[0].band, keys: real.seams[0].keys });
   config = setOpening(config, true);
   const { xMin, xMax, yEnd, sill, rail, keepOut } = real.opening;
   config = updateOpening(config, { xMin, xMax, yEnd, sill });
